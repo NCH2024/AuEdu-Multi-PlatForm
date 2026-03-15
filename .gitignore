@@ -1,0 +1,11 @@
+# Bỏ qua các file test
+*test*.py
+
+# Bỏ qua môi trường python
+__pycache__/
+*.pyc
+
+# Bỏ qua môi trường venv
+venv/
+
+
