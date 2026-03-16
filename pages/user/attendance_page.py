@@ -7,7 +7,7 @@ from components.options.custom_dropdown import CustomDropdown
 from components.options.loading_data import LoadingOverlay
 from components.options.camera_view import CameraView
 from core.theme import get_glass_container, PRIMARY_COLOR
-from core.config import get_supabase
+from core.config import *
 
 class AttendancePage(ft.Container):
     def __init__(self, page: ft.Page):
@@ -104,9 +104,19 @@ class AttendancePage(ft.Container):
         ], horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         nang_cao_tile = ft.ExpansionTile(title=ft.Text("Chức năng nâng cao", weight=ft.FontWeight.BOLD, size=13), controls=[nang_cao_content], collapsed_text_color=PRIMARY_COLOR, text_color=PRIMARY_COLOR)
 
+        # Gán biến self.rg_mode để lấy giá trị sau này (mặc định chọn value="1")
+        self.rg_mode = ft.RadioGroup(
+            value="1", 
+            content=ft.Column([ft.Radio(value="1", label="Từng sinh viên"), ft.Radio(value="all", label="Cả lớp")])
+        )
+        
         diem_danh_content = ft.Column([
-            ft.RadioGroup(content=ft.Column([ft.Radio(value="1", label="Từng sinh viên"), ft.Radio(value="all", label="Cả lớp")])), 
-            ft.Button(content=ft.Text("Điểm danh ngay", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), bgcolor=ft.Colors.BLUE_600)
+            self.rg_mode, 
+            ft.Button(
+                content=ft.Text("Điểm danh ngay", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), 
+                bgcolor=ft.Colors.BLUE_600,
+                on_click=self.handle_start_session # Gán sự kiện click
+            )
         ], horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         
         # Thay thế initially_expanded bằng expanded theo API mới của Flet
@@ -157,41 +167,64 @@ class AttendancePage(ft.Container):
         return BaseDashboard(page=self.app_page, active_route="/user/attendance", main_content=framed_layout)
 
     async def load_dropdowns(self):
-        """Tải dữ liệu phân công giảng dạy và điền vào dropdown."""
-        supabase = await get_supabase()
+        """Tải dữ liệu phân công giảng dạy bằng httpx."""
         if self.gv_id == "N/A": return
-        tkb_res = await supabase.table("thoikhoabieu").select("id, lop_id, hocphan_id, lop(tenlop), hocphan(tenhocphan)").eq("giangvien_id", self.gv_id).execute()
-        if not tkb_res.data: return
-        self.tkb_data = tkb_res.data
-
-        today = datetime.datetime.now()
-        thu_today = today.weekday() + 2 
-
-        tkb_ids = [str(item['id']) for item in self.tkb_data]
-        tiet_res = await supabase.table("tkb_tiet").select("tkb_id, thu").in_("tkb_id", tkb_ids).execute()
         
-        default_lop_id = None
-        default_hp_id = None
+        try:
+            async with await get_supabase_client() as client:
+                # 1. Truy vấn Thời khóa biểu (Join với lớp và học phần)
+                params_tkb = {
+                    "select": "id,lop_id,hocphan_id,lop(tenlop),hocphan(tenhocphan)",
+                    "giangvien_id": f"eq.{self.gv_id}"
+                }
+                res_tkb = await client.get("/thoikhoabieu", params=params_tkb)
+                res_tkb.raise_for_status()
+                self.tkb_data = res_tkb.json()
 
-        if tiet_res.data:
-            for t in tiet_res.data:
-                if t["thu"] == thu_today:
-                    for tkb in self.tkb_data:
-                        if tkb["id"] == t["tkb_id"]:
-                            default_lop_id = tkb["lop_id"]
-                            default_hp_id = tkb["hocphan_id"]
-                            break
-                    if default_lop_id: break
+                if not self.tkb_data: return
 
-        lops = {row["lop_id"]: row["lop"]["tenlop"] for row in self.tkb_data}
-        self.dd_lop.options = [ft.dropdown.Option(key=k, text=v) for k, v in lops.items()]
+                # 2. Truy vấn Tiết học để xác định lớp mặc định của ngày hôm nay
+                today = datetime.datetime.now()
+                thu_today = today.weekday() + 2 
+                tkb_ids = [str(item['id']) for item in self.tkb_data]
+                
+                # Filter IN trong PostgREST: column=in.(val1,val2,...)
+                params_tiet = {
+                    "select": "tkb_id,thu",
+                    "tkb_id": f"in.({','.join(tkb_ids)})"
+                }
+                res_tiet = await client.get("/tkb_tiet", params=params_tiet)
+                res_tiet.raise_for_status()
+                tiet_data = res_tiet.json()
 
-        if default_lop_id and default_lop_id in lops:
-            self.dd_lop.value = default_lop_id
-        else:
-            self.dd_lop.value = list(lops.keys())[0]
+                default_lop_id = None
+                default_hp_id = None
 
-        await self.handle_lop_change(None, auto_hp_id=default_hp_id)
+                if tiet_data:
+                    for t in tiet_data:
+                        if t["thu"] == thu_today:
+                            for tkb in self.tkb_data:
+                                if tkb["id"] == t["tkb_id"]:
+                                    default_lop_id = tkb["lop_id"]
+                                    default_hp_id = tkb["hocphan_id"]
+                                    break
+                            if default_lop_id: break
+
+                # 3. Cập nhật giao diện Dropdown
+                lops = {row["lop_id"]: row["lop"]["tenlop"] for row in self.tkb_data}
+                self.dd_lop.options = [ft.dropdown.Option(key=k, text=v) for k, v in lops.items()]
+
+                if default_lop_id and default_lop_id in lops:
+                    self.dd_lop.value = default_lop_id
+                else:
+                    self.dd_lop.value = list(lops.keys())[0]
+
+                await self.handle_lop_change(None, auto_hp_id=default_hp_id)
+
+        except Exception as e:
+            print(f"Lỗi load_dropdowns (HTTPX): {e}")
+            if getattr(self, "page", None):
+                self._show_error_snackbar(f"Lỗi tải dữ liệu lớp: {e}")
 
     async def handle_lop_change(self, e, auto_hp_id=None):
         """Cập nhật dropdown học phần khi thay đổi lớp."""
@@ -245,57 +278,81 @@ class AttendancePage(ft.Container):
         self.btn_load_more.visible = self.current_limit < len(self.all_students_data)
 
     async def handle_load_students(self, e):
-        """Xử lý sự kiện truy xuất danh sách sinh viên."""
+        """Truy xuất danh sách sinh viên bằng httpx."""
         lop_id = self.dd_lop.value
         if not lop_id: return
 
         try:
+            # Hiện loading trên nút
             e.control.content = ft.ProgressRing(width=16, height=16, color=ft.Colors.WHITE, stroke_width=2)
             e.control.disabled = True
-            self.update()
+            if getattr(self, "page", None): self.update()
 
-            supabase = await get_supabase()
-            sv_res = await supabase.table("sinhvien").select("*").eq("class_id", lop_id).order("id").execute()
-            
-            self.current_limit = int(self.dd_row_limit.value)
-            self.all_students_data = sv_res.data if sv_res.data else []
-            self.render_table()
+            async with await get_supabase_client() as client:
+                # Query: .select("*").eq("class_id", lop_id).order("id")
+                params = {
+                    "select": "*",
+                    "class_id": f"eq.{lop_id}",
+                    "order": "id.asc"
+                }
+                res = await client.get("/sinhvien", params=params)
+                res.raise_for_status()
+                
+                if not self.page: return # Chống lỗi bóng ma
+
+                self.all_students_data = res.json()
+                self.current_limit = int(self.dd_row_limit.value)
+                self.render_table()
 
         except Exception as ex:
-            self._show_error_snackbar(f"Lỗi truy xuất dữ liệu: {ex}")
+            print(f"Lỗi handle_load_students (HTTPX): {ex}")
+            if getattr(self, "page", None):
+                self._show_error_snackbar(f"Lỗi truy xuất dữ liệu: {ex}")
         finally:
-            e.control.content = ft.Text("Truy xuất danh sách", color=ft.Colors.WHITE, weight=ft.FontWeight.W_600)
-            e.control.disabled = False
-            self.update()
+            if getattr(self, "page", None):
+                e.control.content = ft.Text("Truy xuất danh sách", color=ft.Colors.WHITE, weight=ft.FontWeight.W_600)
+                e.control.disabled = False
+                self.update()
+            
+    async def handle_start_session(self, e):
+        """Chuyển trang ngay lập tức và CẮT ĐỨT mọi tác vụ cũ."""
+        if not self.page: return
+        
+        e.control.disabled = True
+        e.control.update()
+
+        # Lưu mode
+        mode = self.rg_mode.value if hasattr(self, 'rg_mode') else "1"
+        self.app_page.session.store.set("attendance_mode", mode)
+
+        # CỰC KỲ QUAN TRỌNG: Dọn dẹp camera trước khi chuyển trang để nhả ID
+        await self.camera_view.stop_camera()
+        
+        # Chuyển trang
+        await self.app_page.push_route("/user/attendance/session")
 
     async def handle_test_camera(self, e):
-        """Xử lý sự kiện kiểm tra phần cứng thiết bị ngầm."""
+        """Vẫn giữ nguyên logic cũ vì nó không liên quan đến Supabase."""
+        if not self.page: return
+        
         self.test_progress.visible = True
-        self.test_status_text.value = "Đang trích xuất dữ liệu cảm biến..."
-        self.test_status_text.color = ft.Colors.BLUE_600
+        self.test_status_text.value = "Đang kết nối cảm biến..."
         self.test_status_text.visible = True
         self.update()
 
-        try:
-            is_sensor_ok = await self.camera_view.test_sensor()
-            
-            self.test_progress.visible = False
-            if is_sensor_ok:
-                self.test_status_text.value = "Hoạt động bình thường."
-                self.test_status_text.color = ft.Colors.GREEN_700
-                self.app_page.overlay.append(ft.SnackBar(content=ft.Text("Thiết bị sẵn sàng."), bgcolor=ft.Colors.GREEN_700, open=True))
-            else:
-                self.test_status_text.value = "Không nhận được tín hiệu."
-                self.test_status_text.color = ft.Colors.RED_700
-                self.app_page.overlay.append(ft.SnackBar(content=ft.Text("Kiểm tra thiết bị thất bại."), bgcolor=ft.Colors.RED_700, open=True))
-            self.update()
+        async def run_test():
+            is_ok = await self.camera_view.test_sensor()
+            if not self.page: return
 
-        except Exception as ex:
             self.test_progress.visible = False
-            self.test_status_text.value = "Phát sinh lỗi hệ thống."
-            self.test_status_text.color = ft.Colors.RED_700
-            self._show_error_snackbar(f"Lỗi: {ex}")
-            self.update()
+            self.test_status_text.value = "Sẵn sàng" if is_ok else "Lỗi kết nối"
+            self.test_status_text.color = ft.Colors.GREEN if is_ok else ft.Colors.RED
+            try:
+                self.update()
+            except:
+                pass
+
+        self.app_page.run_task(run_test)
 
     def _show_error_snackbar(self, message: str):
         """Hỗ trợ hiển thị thông báo lỗi."""

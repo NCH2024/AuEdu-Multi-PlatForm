@@ -5,6 +5,7 @@ from pages.user.login_page import LoginPage
 from pages.user.settings_page import SettingsPage
 from pages.user.schedule_page import SchedulePage
 from pages.user.stats_page import StatsPage
+from pages.user.attendance_session_page import AttendanceSessionPage
 from core.theme import PRIMARY_COLOR
 
 async def main(page: ft.Page):
@@ -63,7 +64,11 @@ async def main(page: ft.Page):
                     page.views.append(ft.View(route="/user/schedule", controls=[SchedulePage(page)], padding=0))
                     
                 elif current_route == "/user/stats":
-                    page.views.append(ft.View(route="/user/stats", controls=[StatsPage(page)], padding=0))         
+                    page.views.append(ft.View(route="/user/stats", controls=[StatsPage(page)], padding=0)) 
+                    
+                elif current_route == "/user/attendance/session":
+                    # Trả về ft.View (không lót BaseDashboard) để Camera chiếm Full màn hình
+                    page.views.append(ft.View(route="/user/attendance/session", controls=[AttendanceSessionPage(page)], padding=0))        
          
 
             page.update()

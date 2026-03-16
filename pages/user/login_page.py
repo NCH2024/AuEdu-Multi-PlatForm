@@ -1,4 +1,7 @@
 import flet as ft
+import httpx
+import asyncio
+from core.config import get_supabase_client, SUPABASE_URL, SUPABASE_KEY
 
 class LoginPage(ft.Container):
     def __init__(self, page: ft.Page):
@@ -101,11 +104,7 @@ class LoginPage(ft.Container):
             self.content.content = self.desktop_layout
         self.update()
 
-    # Nhớ thêm dòng import này ở đầu file nhé:
-    # from core.config import get_supabase
-
     async def handle_login(self, e):
-        # Trên Supabase, tên đăng nhập mặc định là Email
         email = self.tf_username.value 
         password = self.tf_password.value
         
@@ -125,57 +124,68 @@ class LoginPage(ft.Container):
             self.btn_login.disabled = True
             self.update()
 
-            # 2. Xử lý Backend
-            from core.config import get_supabase
-            supabase = await get_supabase()
-            
-            response = await supabase.auth.sign_in_with_password({
-                "email": email, 
-                "password": password
-            })
-            
-            user_id = response.user.id 
-            gv_response = await supabase.table("giangvien").select("*").eq("auth_id", user_id).execute()
-            
-            if gv_response.data:
-                # ==========================================
-                # ĐĂNG NHẬP THÀNH CÔNG -> Chuyển trang luôn, 
-                # TUYỆT ĐỐI KHÔNG GỌI self.update() NỮA!
-                # ==========================================
-                giangvien = gv_response.data[0]
-                ho_ten = f"{giangvien.get('hodem', '')} {giangvien.get('ten', '')}".strip()
+            # 2. Xử lý Backend bằng HTTPX (Gửi yêu cầu tới Supabase Auth)
+            # API Auth: POST /auth/v1/token?grant_type=password
+            async with httpx.AsyncClient() as auth_client:
+                auth_url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+                auth_headers = {
+                    "apikey": SUPABASE_KEY,
+                    "Content-Type": "application/json"
+                }
+                auth_body = {
+                    "email": email,
+                    "password": password
+                }
                 
-                self.app_page.session.store.set("user_session", {
-                    "role": giangvien.get("vai_tro", "giangvien"), 
-                    "name": ho_ten, 
-                    "id": giangvien.get("id"),
-                    "auth_id": user_id
-                })
-                show_snackbar(f"Xin chào {ho_ten}!", ft.Colors.GREEN_700)
-                await self.app_page.push_route("/user/home")
+                auth_resp = await auth_client.post(auth_url, headers=auth_headers, json=auth_body)
                 
-            else:
-                # ==========================================
-                # TÀI KHOẢN HỢP LỆ NHƯNG KHÔNG CÓ TRONG BẢNG GIẢNG VIÊN
-                # Khôi phục nút bấm để nhập lại
-                # ==========================================
-                show_snackbar("Tài khoản chưa được liên kết với Giảng viên nào!", ft.Colors.ORANGE_700)
-                await supabase.auth.sign_out()
+                # Kiểm tra nếu đăng nhập thất bại (Sai pass, sai mail)
+                if auth_resp.status_code != 200:
+                    error_data = auth_resp.json()
+                    error_msg = error_data.get("error_description", "Email hoặc mật khẩu không đúng!")
+                    show_snackbar(error_msg, ft.Colors.RED_700)
+                    self.reset_login_button()
+                    return
+
+                auth_data = auth_resp.json()
+                user_id = auth_data["user"]["id"]
+
+            # 3. Lấy thông tin Giảng viên bằng get_supabase_client (REST API)
+            async with await get_supabase_client() as db_client:
+                # Query: /giangvien?auth_id=eq.{user_id}&select=*
+                params_gv = {
+                    "select": "*",
+                    "auth_id": f"eq.{user_id}"
+                }
+                res_gv = await db_client.get("/giangvien", params=params_gv)
+                res_gv.raise_for_status()
+                gv_data = res_gv.json()
                 
-                self.btn_login.content = ft.Text("Đăng nhập", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD)
-                self.btn_login.disabled = False
-                self.update()
-                
+                if gv_data:
+                    # ĐĂNG NHẬP THÀNH CÔNG
+                    giangvien = gv_data[0]
+                    ho_ten = f"{giangvien.get('hodem', '')} {giangvien.get('ten', '')}".strip()
+                    
+                    self.app_page.session.store.set("user_session", {
+                        "role": giangvien.get("vai_tro", "giangvien"), 
+                        "name": ho_ten, 
+                        "id": giangvien.get("id"),
+                        "auth_id": user_id
+                    })
+                    
+                    await self.app_page.push_route("/user/home")
+                else:
+                    show_snackbar("Tài khoản chưa được liên kết với Giảng viên nào!", ft.Colors.ORANGE_700)
+                    self.reset_login_button()
+                    
         except Exception as ex:
-            # ==========================================
-            # SAI PASS HOẶC LỖI MẠNG -> Báo lỗi & Khôi phục nút bấm
-            # ==========================================
-            error_msg = str(ex)
-            if "Invalid login credentials" in error_msg:
-                show_snackbar("Email hoặc mật khẩu không đúng!", ft.Colors.RED_700)
-            else:
-                show_snackbar(f"Lỗi Server: {error_msg}", ft.Colors.RED_700)
-                
-            self.btn_login.content = ft.Text("Đăng nhập", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD)
-            self.btn_login.disabled = False
+            print(f"Lỗi Đăng nhập (HTTPX): {ex}")
+            show_snackbar(f"Lỗi kết nối Server: {str(ex)}", ft.Colors.RED_700)
+            self.reset_login_button()
+
+    def reset_login_button(self):
+        """Khôi phục trạng thái nút bấm khi có lỗi."""
+        self.btn_login.content = ft.Text("Đăng nhập", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD)
+        self.btn_login.disabled = False
+        if getattr(self, "page", None):
             self.update()

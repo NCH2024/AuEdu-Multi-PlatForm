@@ -9,7 +9,7 @@ from components.pages.page_frame import PageFrame
 from components.options.loading_data import LoadingOverlay
 from components.options.schedule_list import ScheduleDetailList
 from core.theme import PRIMARY_COLOR
-from core.config import get_supabase
+from core.config import *
 
 
 class SchedulePage(ft.Container):
@@ -71,74 +71,103 @@ class SchedulePage(ft.Container):
             self.update()
 
     async def fetch_tuan_hoc_data(self):
-        supabase = await get_supabase()
-        res = await supabase.table("tuan_hoc").select("*").order("id").execute()
-        if res.data:
-            self.tuan_hoc_data = res.data
-
+        """Lấy danh sách tuần học bằng httpx client."""
+        try:
+            async with await get_supabase_client() as client:
+                # Query: .select("*").order("id")
+                params = {
+                    "select": "*",
+                    "order": "id.asc"
+                }
+                res = await client.get("/tuan_hoc", params=params)
+                res.raise_for_status()
+                self.tuan_hoc_data = res.json()
+        except Exception as e:
+            print(f"Lỗi fetch_tuan_hoc_data (HTTPX): {e}")
+            
     async def fetch_schedule_data(self):
+        """Lấy dữ liệu thời khóa biểu chi tiết bằng httpx client."""
         if self.gv_id == "N/A":
             return
-        supabase = await get_supabase()
-
-        # -----------------------------------------------------------------
-        # Lấy danh sách khung giờ giảng viên
-        # -----------------------------------------------------------------
-        tkb_res = await supabase.table("thoikhoabieu").select(
-            "id, hocphan(tenhocphan), lop(tenlop)"
-        ).eq("giangvien_id", self.gv_id).execute()
-        if not tkb_res.data:
-            return
-
-        tkb_dict = {
-            row["id"]: {
-                "hocphan": row["hocphan"]["tenhocphan"]
-                if row.get("hocphan")
-                else "N/A",
-                "lop": row["lop"]["tenlop"]
-                if row.get("lop")
-                else "N/A",
-            }
-            for row in tkb_res.data
-        }
-
-        # -----------------------------------------------------------------
-        # Lấy các tiết học cho từng khung giờ
-        # -----------------------------------------------------------------
-        tkb_tiet_res = await supabase.table("tkb_tiet").select(
-            "tkb_id, tiet_id, thu, phong_hoc"
-        ).in_("tkb_id", list(tkb_dict.keys())).execute()
-        if not tkb_tiet_res.data:
-            return
-
-        # Gom nhóm theo (tkb_id, thu, phòng)
-        grouped = {}
-        for item in tkb_tiet_res.data:
-            key = (item["tkb_id"], item["thu"], item["phong_hoc"])
-            grouped.setdefault(key, []).append(item["tiet_id"])
-
-        self.raw_schedule_data.clear()
-        for (tkb_id, thu, phong), tiets in grouped.items():
-            tiets.sort()
-            tiet_str = (
-                f"{tiets[0]} - {tiets[-1]}" if len(tiets) > 1 else str(tiets[0])
-            )
-            ten_mon = tkb_dict[tkb_id]["hocphan"]
-            card_color = (
-                "#FFC107"
-                if any(k in ten_mon.lower() for k in ["thi", "bảo vệ"])
-                else "#00A884"
-            )
-            self.raw_schedule_data.append(
-                {
-                    "thu": thu,
-                    "subject": ten_mon,
-                    "time": tiet_str,
-                    "room": phong if phong else "N/A",
-                    "class_name": tkb_dict[tkb_id]["lop"],
-                    "type_color": card_color,
+            
+        try:
+            async with await get_supabase_client() as client:
+                # -----------------------------------------------------------------
+                # 1. Lấy danh sách khung giờ giảng viên (Join hocphan & lop)
+                # Query: .select("id, hocphan(tenhocphan), lop(tenlop)").eq("giangvien_id", gv_id)
+                # -----------------------------------------------------------------
+                params_tkb = {
+                    "select": "id,hocphan(tenhocphan),lop(tenlop)",
+                    "giangvien_id": f"eq.{self.gv_id}"
                 }
-            )
+                res_tkb = await client.get("/thoikhoabieu", params=params_tkb)
+                res_tkb.raise_for_status()
+                tkb_list = res_tkb.json()
+
+                if not tkb_list:
+                    return
+
+                tkb_dict = {
+                    row["id"]: {
+                        "hocphan": row["hocphan"]["tenhocphan"] if row.get("hocphan") else "N/A",
+                        "lop": row["lop"]["tenlop"] if row.get("lop") else "N/A",
+                    }
+                    for row in tkb_list
+                }
+
+                # -----------------------------------------------------------------
+                # 2. Lấy các tiết học chi tiết (Dùng lọc 'in')
+                # Query: .select("tkb_id, tiet_id, thu, phong_hoc").in_("tkb_id", keys)
+                # -----------------------------------------------------------------
+                tkb_ids_str = ",".join(map(str, tkb_dict.keys()))
+                params_tiet = {
+                    "select": "tkb_id,tiet_id,thu,phong_hoc",
+                    "tkb_id": f"in.({tkb_ids_str})"
+                }
+                res_tiet = await client.get("/tkb_tiet", params=params_tiet)
+                res_tiet.raise_for_status()
+                tkb_tiet_data = res_tiet.json()
+
+                if not tkb_tiet_data:
+                    return
+
+                # -----------------------------------------------------------------
+                # 3. Gom nhóm dữ liệu để hiển thị lên Card
+                # -----------------------------------------------------------------
+                grouped = {}
+                for item in tkb_tiet_data:
+                    key = (item["tkb_id"], item["thu"], item["phong_hoc"])
+                    grouped.setdefault(key, []).append(item["tiet_id"])
+
+                self.raw_schedule_data.clear()
+                for (tkb_id, thu, phong), tiets in grouped.items():
+                    tiets.sort()
+                    tiet_str = (
+                        f"{tiets[0]} - {tiets[-1]}" if len(tiets) > 1 else str(tiets[0])
+                    )
+                    ten_mon = tkb_dict[tkb_id]["hocphan"]
+                    
+                    # Logic màu sắc: Thi/Bảo vệ thì màu vàng cam, còn lại màu xanh
+                    card_color = (
+                        "#FFC107"
+                        if any(k in ten_mon.lower() for k in ["thi", "bảo vệ"])
+                        else "#00A884"
+                    )
+                    
+                    self.raw_schedule_data.append(
+                        {
+                            "thu": thu,
+                            "subject": ten_mon,
+                            "time": tiet_str,
+                            "room": phong if phong else "N/A",
+                            "class_name": tkb_dict[tkb_id]["lop"],
+                            "type_color": card_color,
+                        }
+                    )
+        except Exception as e:
+            print(f"Lỗi fetch_schedule_data (HTTPX): {e}")
+            if getattr(self, "page", None):
+                self._show_error_snackbar(f"Lỗi đồng bộ lịch: {e}")
 
     # -----------------------------------------------------------------
     # Re‑build UI – chỉ một lần gọi page.update()

@@ -8,4 +8,6 @@ __pycache__/
 # Bỏ qua môi trường venv
 venv/
 
+# Bỏ qua thư mục build app 
+build/
 
