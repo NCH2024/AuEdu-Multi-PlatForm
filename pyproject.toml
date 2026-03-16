@@ -5,7 +5,6 @@ project_name = "auedu"
 product_name = "AuEdu"
 # File chạy chính
 main_module = "main"
-# Thư mục chứa tài nguyên (icon, splash)
 assets_dir = "assets"
 
 [tool.flet.android]

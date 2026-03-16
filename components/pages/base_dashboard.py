@@ -44,19 +44,25 @@ class BaseDashboard(ft.Container):
         )
 
         self.sidebar = get_glass_container(
-            width=250,
+            width=200,
             content=ft.Column(
                 controls=[
                     ft.Container(
                         content=ft.Column([
-                            ft.Text("AuEdu", size=32, weight=ft.FontWeight.BOLD, color=PRIMARY_COLOR),
+                            ft.Image(
+                            src="splash.png", 
+                            width=120,          
+                            height=120,         
+                            fit=ft.BoxFit.CONTAIN 
+                            ),
+                            
                             btn_logout
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         padding=ft.Padding(left=0, top=10, right=0, bottom=20),
                         alignment=ft.Alignment(0, 0)
                     )
                 ] + [self._create_sidebar_item(item) for item in self.menu_items],
-                spacing=5
+                spacing=5,
             )
         )
 
@@ -100,6 +106,11 @@ class BaseDashboard(ft.Container):
         is_active = self.active_route == item["route"]
         
         async def on_nav_click(e): 
+            if is_active: return # Tránh load lại trang hiện tại
+            # Bật hiệu ứng loading để báo người dùng biết máy đang xử lý
+            e.control.bgcolor = ft.Colors.BLACK_12
+            e.control.disabled = True
+            e.control.update()
             await self.app_page.push_route(item["route"])
             
         return ft.Container(
@@ -119,6 +130,11 @@ class BaseDashboard(ft.Container):
         is_active = self.active_route == item["route"]
         
         async def on_nav_click(e): 
+            if is_active: return
+            # Bật hiệu ứng chớp nền báo hiệu đang tải
+            e.control.bgcolor = ft.Colors.BLACK_12
+            e.control.disabled = True
+            e.control.update()
             await self.app_page.push_route(item["route"])
             
         return ft.Container(
