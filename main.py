@@ -11,15 +11,16 @@ from core.theme import PRIMARY_COLOR
 async def main(page: ft.Page):
     page.title = "AuEdu Multi-Platform"
     
+    # ĐÃ SỬA: BẬT TÍNH NĂNG TRÀN VIỀN (EDGE-TO-EDGE)
     page.theme = ft.Theme(
         system_overlay_style=ft.SystemOverlayStyle(
-            # Nhuộm màu nền thanh trạng thái thành màu xanh chủ đạo
-            status_bar_color= PRIMARY_COLOR, 
+            # Xóa màu xanh, để thanh trạng thái trong suốt hoàn toàn
+            status_bar_color=ft.Colors.TRANSPARENT, 
             
-            # Ép các icon (pin, wifi, giờ) thành màu sáng (Trắng) để nổi bật trên nền xanh
-            status_bar_icon_brightness=ft.Brightness.LIGHT, 
+            # Ép icon (pin, wifi, giờ) thành màu tối để nổi bật trên nền ảnh sáng
+            status_bar_icon_brightness=ft.Brightness.DARK, 
             
-            # (Tùy chọn) Nhuộm luôn thanh điều hướng vuốt hất lên ở dưới đáy màn hình
+            # Thanh điều hướng vuốt dưới đáy cũng trong suốt
             system_navigation_bar_color=ft.Colors.TRANSPARENT,
             system_navigation_bar_icon_brightness=ft.Brightness.DARK
         )
@@ -67,10 +68,8 @@ async def main(page: ft.Page):
                     page.views.append(ft.View(route="/user/stats", controls=[StatsPage(page)], padding=0)) 
                     
                 elif current_route == "/user/attendance/session":
-                    # Trả về ft.View (không lót BaseDashboard) để Camera chiếm Full màn hình
                     page.views.append(ft.View(route="/user/attendance/session", controls=[AttendanceSessionPage(page)], padding=0))        
          
-
             page.update()
             
         except Exception as ex:

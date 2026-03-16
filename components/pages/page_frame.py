@@ -3,7 +3,7 @@ from core.theme import PRIMARY_COLOR
 
 class PageFrame(ft.Container):
     """
-    Header tĩnh, cứng cáp, 1 hàng siêu gọn và chuyên nghiệp.
+    Header tĩnh, nổi (floating), 1 hàng siêu gọn và chuyên nghiệp có menu 3 chấm.
     """
     def __init__(self,
                  page: ft.Page,
@@ -22,41 +22,51 @@ class PageFrame(ft.Container):
         async def go_to_settings(e):
             await self.app_page.push_route("/user/settings")
 
-        # ---------------- HEADER 1 HÀNG CHUYÊN NGHIỆP ----------------
+        async def handle_logout(e):
+            """Xử lý sự kiện đăng xuất ngay trên Menu 3 chấm"""
+            self.app_page.session.store.remove("user_session")
+            await self.app_page.push_route("/login")
+
+        # ---------------- HEADER NỔI 1 HÀNG CHUYÊN NGHIỆP ----------------
         self.header = ft.Container(
-            top=0, left=0, right=0,
+            top=15, left=15, right=15, # Tạo hiệu ứng nổi lơ lửng cách viền
             bgcolor=PRIMARY_COLOR,
-            padding=ft.Padding(left=15, top=10, right=5, bottom=10),
-            # Giữ lại bóng đổ nhẹ để tạo chiều sâu cho khung
-            shadow=ft.BoxShadow(spread_radius=1, blur_radius=8, color=ft.Colors.BLACK_26, offset=ft.Offset(0, 2)),
+            padding=ft.Padding(left=8, top=8, right=5, bottom=8),
+            border_radius=15, # Bo góc thẻ nổi
+            shadow=ft.BoxShadow(spread_radius=1, blur_radius=8, color=ft.Colors.BLACK_26, offset=ft.Offset(0, 4)),
             content=ft.Row(
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 controls=[
-                    # --- CụM TRÁI: Avatar và Tên ---
-                    ft.Row(
-                        spacing=10,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        expand=True, # Chiếm hết không gian còn lại
-                        controls=[
-                            ft.CircleAvatar(
-                                content=ft.Icon(ft.Icons.PERSON, color=PRIMARY_COLOR, size=16),
-                                bgcolor=ft.Colors.WHITE,
-                                radius=16,
-                            ),
-                            ft.Text(
-                                user_name,
-                                size=15,
-                                weight=ft.FontWeight.BOLD,
-                                color=ft.Colors.WHITE,
-                                max_lines=1,
-                                overflow=ft.TextOverflow.ELLIPSIS,
-                                expand=True, # Ép tên dài phải có dấu ... chứ không làm vỡ khung
-                            ),
-                        ]
+                    # --- CỤM TRÁI: Avatar và Tên bọc trong thẻ nền ---
+                    ft.Container(
+                        padding=ft.Padding(left=4, top=4, right=12, bottom=4),
+                        bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.WHITE),
+                        border_radius=20, # Bo tròn dạng viên thuốc
+                        expand=True, # Cho phép co dãn nếu tên quá dài
+                        content=ft.Row(
+                            spacing=8,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            controls=[
+                                ft.CircleAvatar(
+                                    content=ft.Icon(ft.Icons.PERSON, color=PRIMARY_COLOR, size=14),
+                                    bgcolor=ft.Colors.WHITE,
+                                    radius=14,
+                                ),
+                                ft.Text(
+                                    user_name,
+                                    size=12, # Chữ nhỏ lại theo ý em
+                                    weight=ft.FontWeight.BOLD,
+                                    color=ft.Colors.WHITE,
+                                    max_lines=1,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                    expand=True,
+                                ),
+                            ]
+                        )
                     ),
                     
-                    # --- CỤM PHẢI: Badge Tiêu đề + Nút Cài đặt ---
+                    # --- CỤM PHẢI: Badge Tiêu đề + Nút 3 chấm ---
                     ft.Row(
                         spacing=0,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -65,6 +75,7 @@ class PageFrame(ft.Container):
                                 padding=ft.Padding(10, 4, 10, 4),
                                 bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.WHITE),
                                 border_radius=12,
+                                margin=ft.Margin(left=10, top=0, right=0, bottom=0),
                                 content=ft.Text(
                                     page_title.upper(),
                                     size=10,
@@ -72,11 +83,16 @@ class PageFrame(ft.Container):
                                     color=ft.Colors.WHITE,
                                 )
                             ),
-                            ft.IconButton(
-                                icon=ft.Icons.SETTINGS_OUTLINED,
+                            # Nút 3 chấm thần thánh của Mobile App
+                            ft.PopupMenuButton(
+                                icon=ft.Icons.MORE_VERT,
                                 icon_color=ft.Colors.WHITE,
-                                icon_size=22,
-                                on_click=go_to_settings,
+                                icon_size=20,
+                                tooltip="Tùy chọn",
+                                items=[
+                                    ft.PopupMenuItem(content=ft.Text("Cài đặt"), icon=ft.Icons.SETTINGS_OUTLINED, on_click=go_to_settings),
+                                    ft.PopupMenuItem(content=ft.Text("Đăng xuất"), icon=ft.Icons.LOGOUT, on_click=handle_logout),
+                                ]
                             ),
                         ]
                     )
@@ -91,8 +107,8 @@ class PageFrame(ft.Container):
             
         self.scroll_area = ft.Column(**col_kwargs)
 
-        # Spacer nhường chỗ cho Header tĩnh (60px là vừa khít đẹp)
-        self.scroll_area.controls.append(ft.Container(height=60))
+        # Spacer nhường chỗ cho Header nổi (tăng lên 80px để nội dung không bị Header đè lên)
+        self.scroll_area.controls.append(ft.Container(height=80))
 
         # Nội dung trang thực tế
         self.scroll_area.controls.append(
@@ -105,7 +121,7 @@ class PageFrame(ft.Container):
         )
 
         # Spacer chân trang nhường chỗ cho Bottom Navigation
-        self.scroll_area.controls.append(ft.Container(height=80))
+        self.scroll_area.controls.append(ft.Container(height=100))
 
         self.content = ft.Stack(
             expand=True,

@@ -32,7 +32,6 @@ class BaseDashboard(ft.Container):
         """Khởi tạo bố cục khung sườn cho Dashboard."""
         
         async def handle_logout(e):
-            """Xử lý sự kiện đăng xuất người dùng."""
             self.app_page.session.store.remove("user_session") 
             await self.app_page.push_route("/login")
 
@@ -43,39 +42,39 @@ class BaseDashboard(ft.Container):
             on_click=handle_logout
         )
 
+        # 1. SIDEBAR DESKTOP: Gắn Logo xịn xò và ép phẳng lề
         self.sidebar = get_glass_container(
-            width=200,
+            width=250,
+            border_radius=0, 
             content=ft.Column(
                 controls=[
                     ft.Container(
                         content=ft.Column([
-                            ft.Image(
-                            src="splash.png", 
-                            width=120,          
-                            height=120,         
-                            fit=ft.BoxFit.CONTAIN 
-                            ),
-                            
+                            ft.Image(src="icon.png", width=120, height=120, fit=ft.BoxFit.CONTAIN),
                             btn_logout
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         padding=ft.Padding(left=0, top=10, right=0, bottom=20),
                         alignment=ft.Alignment(0, 0)
                     )
                 ] + [self._create_sidebar_item(item) for item in self.menu_items],
-                spacing=5,
+                spacing=5
             )
         )
 
-        self.bottom_nav = get_glass_container(
-            padding=10,
-            content=ft.Row(
-                controls=[self._create_bottom_nav_item(item) for item in self.menu_items],
-                alignment=ft.MainAxisAlignment.SPACE_AROUND,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER
+        # 2. BOTTOM NAV MOBILE: Bọc trong Container tọa độ tuyệt đối để NỔI trên Stack
+        self.bottom_nav = ft.Container(
+            bottom=20, left=20, right=20, # Đẩy hở lề 3 cạnh tạo hiệu ứng lơ lửng
+            content=get_glass_container(
+                padding=10,
+                border_radius=30, # Bo tròn viên thuốc
+                content=ft.Row(
+                    controls=[self._create_bottom_nav_item(item) for item in self.menu_items],
+                    alignment=ft.MainAxisAlignment.SPACE_AROUND,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER
+                )
             )
         )
 
-        # Căn chỉnh top_center để nội dung đổ từ trên xuống
         self.content_area = ft.Container(
             content=self.main_content, 
             expand=True, 
@@ -83,22 +82,20 @@ class BaseDashboard(ft.Container):
             alignment=ft.Alignment.TOP_CENTER
         )
         
-        # Bắt buộc đặt vertical_alignment=START để thẻ nội dung dính lên mép trên màn hình Desktop
         self.desktop_layout = ft.Row(
             controls=[self.sidebar, self.content_area], 
             expand=True,
+            spacing=0, 
             vertical_alignment=ft.CrossAxisAlignment.START 
         )
         
-        # Màn hình Mobile thì tự động đổ từ trên xuống do là Column
-        self.mobile_layout = ft.Column(
+        # 3. ĐÃ ĐỔI SANG STACK ĐỂ BOTTOM NAV NẰM ĐÈ LÊN CONTENT AREA
+        self.mobile_layout = ft.Stack(
             controls=[self.content_area, self.bottom_nav], 
             expand=True
         )
 
         initial_layout = self.mobile_layout if (self.app_page.width and self.app_page.width < 768) else self.desktop_layout
-        
-        # ĐÃ SỬA: Đảm bảo SafeArea không có màu nền đè lên Container cha
         return ft.SafeArea(content=initial_layout)
 
     def _create_sidebar_item(self, item):
