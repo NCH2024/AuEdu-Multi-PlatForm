@@ -1,6 +1,6 @@
 import flet as ft
 import asyncio
-from core.theme import PRIMARY_COLOR, get_glass_container
+from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR, get_glass_container
 from components.options.camera_view import CameraView
 from components.options.custom_dropdown import CustomDropdown
 
@@ -11,9 +11,8 @@ class AttendanceSessionPage(ft.Container):
         self.expand = True
         self.bgcolor = ft.Colors.BLACK
 
-        session_data = self.app_page.session.store.get("user_session") or {}
-        self.mode = self.app_page.session.store.get("attendance_mode") or "1"
-        self.mode_name = "Từng sinh viên" if self.mode == "1" else "Quét cả lớp"
+        self.mode = "1"
+        self.mode_name = "Từng sinh viên"
 
         self.dd_camera = CustomDropdown(
             label="Chọn nguồn Camera", 
@@ -31,7 +30,7 @@ class AttendanceSessionPage(ft.Container):
                     tight=True,
                     spacing=20,
                     controls=[
-                        ft.Text("⚙️ TÙY CHỌN CAMERA", weight=ft.FontWeight.BOLD, size=16, color=PRIMARY_COLOR, text_align=ft.TextAlign.CENTER),
+                        ft.Text("⚙️ TÙY CHỌN CAMERA", weight=ft.FontWeight.BOLD, size=16, color=SECONDARY_COLOR, text_align=ft.TextAlign.CENTER),
                         self.dd_camera,
                         ft.Button(
                             content=ft.Text("Đóng lại", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE), 
@@ -46,10 +45,16 @@ class AttendanceSessionPage(ft.Container):
         self.content = self.build_ui()
 
     def did_mount(self):
-        """Đợi 0.1s để ID được đăng ký vào hệ thống Flet rồi mới gọi Camera."""
         async def delayed_init():
             await asyncio.sleep(0.1)
             if self.page:
+                
+                # KẾT HỢP CHUẨN
+                prefs = ft.SharedPreferences()
+                mode = await prefs.get("attendance_mode")
+                if mode:
+                    self.mode = str(mode)
+                    self.mode_name = "Từng sinh viên" if self.mode == "1" else "Quét cả lớp"
                 await self.init_camera_session()
         
         self.app_page.run_task(delayed_init)
@@ -93,16 +98,14 @@ class AttendanceSessionPage(ft.Container):
             content=self.camera_view 
         )
 
-        self.scanned_list = ft.ListView(
-            expand=3, spacing=10, padding=ft.Padding(15, 20, 15, 80)
-        )
+        self.scanned_list = ft.ListView(expand=3, spacing=10, padding=ft.Padding(15, 20, 15, 80))
         
         for i in range(5):
             card = ft.Container(
                 bgcolor=ft.Colors.WHITE, border_radius=12, padding=12,
-                border=ft.Border(left=ft.BorderSide(6, PRIMARY_COLOR)),
+                border=ft.Border(left=ft.BorderSide(6, SECONDARY_COLOR)),
                 content=ft.Row([
-                    ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=ft.Colors.WHITE), bgcolor=PRIMARY_COLOR, radius=20),
+                    ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=ft.Colors.WHITE), bgcolor=SECONDARY_COLOR, radius=20),
                     ft.Column([
                         ft.Text(f"Nguyễn Văn Sinh Viên {i+1}", weight=ft.FontWeight.BOLD, size=14, color=ft.Colors.BLACK_87),
                         ft.Text(f"MSSV: 22340{i} • Điểm danh: 08:30:1{i}", size=12, color=ft.Colors.GREY_600)
@@ -120,10 +123,7 @@ class AttendanceSessionPage(ft.Container):
             top=15, right=15, 
             content=get_glass_container(
                 padding=5,
-                content=ft.IconButton(
-                    icon=ft.Icons.SETTINGS_ROUNDED, icon_color=ft.Colors.WHITE, tooltip="Cài đặt",
-                    on_click=lambda e: self.open_settings()
-                )
+                content=ft.IconButton(icon=ft.Icons.SETTINGS_ROUNDED, icon_color=SECONDARY_COLOR, tooltip="Cài đặt", on_click=lambda e: self.open_settings())
             )
         )
 
@@ -137,8 +137,8 @@ class AttendanceSessionPage(ft.Container):
                         content=ft.Row(
                             spacing=20,
                             controls=[
-                                ft.FloatingActionButton(icon=ft.Icons.FLIP_CAMERA_ANDROID, bgcolor=ft.Colors.WHITE, shape=ft.CircleBorder(), tooltip="Lật hình ảnh", on_click=self.handle_flip_camera),
-                                ft.FloatingActionButton(icon=ft.Icons.PAUSE_ROUNDED, bgcolor=ft.Colors.ORANGE_500, shape=ft.CircleBorder(), tooltip="Tạm dừng"),
+                                ft.FloatingActionButton(icon=ft.Icons.FLIP_CAMERA_ANDROID, bgcolor=SECONDARY_COLOR, shape=ft.CircleBorder(), tooltip="Lật hình ảnh", on_click=self.handle_flip_camera),
+                                ft.FloatingActionButton(icon=ft.Icons.PAUSE_ROUNDED, bgcolor=ACCENT_COLOR, shape=ft.CircleBorder(), tooltip="Tạm dừng"),
                                 ft.FloatingActionButton(icon=ft.Icons.EXIT_TO_APP_ROUNDED, bgcolor=ft.Colors.RED_600, shape=ft.CircleBorder(), tooltip="Thoát", on_click=handle_exit)
                             ]
                         )

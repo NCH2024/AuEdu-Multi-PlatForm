@@ -1,26 +1,23 @@
 import flet as ft
+import json
 from pages.user.home_page import UserHomePage
 from pages.user.attendance_page import AttendancePage
-from pages.user.login_page import LoginPage 
+from pages.login_page import LoginPage 
 from pages.user.settings_page import SettingsPage
 from pages.user.schedule_page import SchedulePage
 from pages.user.stats_page import StatsPage
+from pages.about_page import AboutPage
 from pages.user.attendance_session_page import AttendanceSessionPage
-from core.theme import PRIMARY_COLOR
+from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, BG_COLOR
 
 async def main(page: ft.Page):
     page.title = "AuEdu Multi-Platform"
     
-    # ĐÃ SỬA: BẬT TÍNH NĂNG TRÀN VIỀN (EDGE-TO-EDGE)
+    # Bật tính năng tràn viền và màu nền chung
     page.theme = ft.Theme(
         system_overlay_style=ft.SystemOverlayStyle(
-            # Xóa màu xanh, để thanh trạng thái trong suốt hoàn toàn
             status_bar_color=ft.Colors.TRANSPARENT, 
-            
-            # Ép icon (pin, wifi, giờ) thành màu tối để nổi bật trên nền ảnh sáng
             status_bar_icon_brightness=ft.Brightness.DARK, 
-            
-            # Thanh điều hướng vuốt dưới đáy cũng trong suốt
             system_navigation_bar_color=ft.Colors.TRANSPARENT,
             system_navigation_bar_icon_brightness=ft.Brightness.DARK
         )
@@ -28,12 +25,25 @@ async def main(page: ft.Page):
     
     page.theme_mode = ft.ThemeMode.LIGHT 
     page.padding = 0 
+    page.bgcolor = BG_COLOR
     
-    # TÁCH LÕI LOGIC: Hàm này chịu trách nhiệm kiểm tra session và vẽ UI
     async def handle_routing(route_str: str):
         try:
-            session = page.session.store.get("user_session")
+            # KẾT HỢP CHUẨN: SharedPreferences + JSON
+            prefs = ft.SharedPreferences()
+            session_str = await prefs.get("user_session")
+            session = json.loads(session_str) if session_str else None
+            
             current_route = route_str if route_str else "/"
+            
+            
+
+            if current_route == "/login":
+                # Kích thước form đăng nhập
+                page.window.width = 1060
+                page.window.height = 700
+                page.window.resizable = False
+                page.window.maximizable = False
 
             # Rào chắn An ninh
             if not session and current_route != "/login":
@@ -43,43 +53,43 @@ async def main(page: ft.Page):
                 await page.push_route("/user/home")
                 return
 
-            # Xóa màn hình cũ
             page.views.clear()
 
             # Luôn lót nền Home nếu đã đăng nhập (chống văng app trên mobile)
             if session:
-                page.views.append(ft.View(route="/user/home", controls=[UserHomePage(page)], padding=0))
+                page.views.append(ft.View(route="/user/home", controls=[UserHomePage(page)], padding=0, bgcolor=BG_COLOR))
 
             # Phân nhánh vẽ màn hình
             if current_route == "/login":
-                page.views.append(ft.View(route="/login", controls=[LoginPage(page)], padding=0))
+                page.views.append(ft.View(route="/login", controls=[LoginPage(page)], padding=0, bgcolor=BG_COLOR))
                 
             elif current_route != "/user/home" and current_route != "/":
                 if current_route == "/user/attendance":
-                    page.views.append(ft.View(route="/user/attendance", controls=[AttendancePage(page)], padding=0))
+                    page.views.append(ft.View(route="/user/attendance", controls=[AttendancePage(page)], padding=0, bgcolor=BG_COLOR))
                 
                 elif current_route == "/user/settings":
-                    page.views.append(ft.View(route="/user/settings", controls=[SettingsPage(page)], padding=0))
+                    page.views.append(ft.View(route="/user/settings", controls=[SettingsPage(page)], padding=0, bgcolor=BG_COLOR))
                 
                 elif current_route == "/user/schedule":
-                    page.views.append(ft.View(route="/user/schedule", controls=[SchedulePage(page)], padding=0))
+                    page.views.append(ft.View(route="/user/schedule", controls=[SchedulePage(page)], padding=0, bgcolor=BG_COLOR))
                     
                 elif current_route == "/user/stats":
-                    page.views.append(ft.View(route="/user/stats", controls=[StatsPage(page)], padding=0)) 
+                    page.views.append(ft.View(route="/user/stats", controls=[StatsPage(page)], padding=0, bgcolor=BG_COLOR)) 
+                    
+                elif current_route == "/user/about":
+                    page.views.append(ft.View(route="/user/about", controls=[AboutPage(page)], padding=0, bgcolor=BG_COLOR)) 
                     
                 elif current_route == "/user/attendance/session":
-                    page.views.append(ft.View(route="/user/attendance/session", controls=[AttendanceSessionPage(page)], padding=0))        
+                    page.views.append(ft.View(route="/user/attendance/session", controls=[AttendanceSessionPage(page)], padding=0, bgcolor=ft.Colors.BLACK))        
          
             page.update()
             
         except Exception as ex:
             print(f"Lỗi routing: {ex}")
 
-    # Bắt sự kiện khi người dùng chủ động chuyển trang
     async def route_change(e: ft.RouteChangeEvent): 
         await handle_routing(e.route)
 
-    # Bắt sự kiện khi người dùng bấm nút Back cứng trên Mobile
     async def view_pop(e: ft.ViewPopEvent): 
         page.views.pop() 
         if len(page.views) > 0:
