@@ -4,8 +4,6 @@ import asyncio
 import json
 import time
 
-from components.pages.base_dashboard import BaseDashboard
-from components.pages.page_frame import PageFrame
 from components.options.custom_dropdown import CustomDropdown
 from components.options.camera_view import CameraView
 from components.options.top_notification import show_top_notification
@@ -69,6 +67,8 @@ class AttendancePage(ft.Container):
 
         # Đã loại bỏ hoàn toàn LoadingOverlay vì Cache load quá nhanh!
         self.content = self.build_ui()
+        
+    def did_mount(self):
         self.app_page.run_task(self.initialize_page)
 
     async def initialize_page(self):
@@ -157,8 +157,8 @@ class AttendancePage(ft.Container):
             ft.Column([side_column], col={"sm": 12, "md": 4}),
         ])
 
-        framed_layout = PageFrame(page=self.app_page, page_title="ĐIỂM DANH SINH VIÊN", main_content=main_layout)
-        return BaseDashboard(page=self.app_page, active_route="/user/attendance", main_content=framed_layout)
+        
+        return main_layout
 
     # ==========================================
     # LOGIC RENDER DROPDOWN ĐỘC LẬP

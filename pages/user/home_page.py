@@ -3,9 +3,7 @@ import json
 import asyncio
 import time
 from core.helper import hash_data, safe_json_load
-from components.pages.base_dashboard import BaseDashboard
 from components.options.top_notification import show_top_notification
-from components.pages.page_frame import PageFrame
 from core.theme import get_glass_container, PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
 from core.config import get_supabase_client
 
@@ -25,6 +23,7 @@ class UserHomePage(ft.Container):
         self.news_container = ft.Container()
 
         self.content = self.build_ui()
+        
         self.app_page.run_task(self.load_data)
 
     def create_skeleton(self, width=None, height=20, expand=False):
@@ -90,8 +89,8 @@ class UserHomePage(ft.Container):
             ft.Column([news_card], col={"sm": 12, "md": 6}),
         ], expand=True)
 
-        framed_layout = PageFrame(page=self.app_page, page_title="TRANG CHỦ", main_content=dashboard_content)
-        return BaseDashboard(page=self.app_page, active_route="/user/home", main_content=framed_layout)
+        
+        return dashboard_content
 
     def render_data_to_ui(self, thongbao_data, tkb_data):
         """Hàm gán dữ liệu thật vào giao diện"""
@@ -182,12 +181,15 @@ class UserHomePage(ft.Container):
         # LOAD CACHE
         # ==============================
         cached_news = safe_json_load(await prefs.get("cached_news"))
-        cached_schedule = safe_json_load(await prefs.get(f"cached_schedule_{self.gv_id}"))
+        
+        # ĐÃ ĐỔI TÊN KEY ĐỂ KHÔNG BỊ TRANG LỊCH GHI ĐÈ: cached_home_schedule
+        cached_schedule = safe_json_load(await prefs.get(f"cached_home_schedule_{self.gv_id}"))
 
         last_sync = float(await prefs.get(f"last_sync_home_{self.gv_id}") or 0)
 
         cached_news_hash = await prefs.get("news_hash")
-        cached_schedule_hash = await prefs.get(f"schedule_hash_{self.gv_id}")
+        # ĐÃ ĐỔI TÊN KEY: home_schedule_hash
+        cached_schedule_hash = await prefs.get(f"home_schedule_hash_{self.gv_id}")
 
         current_time = time.time()
         TTL = 300  # 5 phút
@@ -247,10 +249,14 @@ class UserHomePage(ft.Container):
             # STEP 5: UPDATE CACHE
             # ==============================
             await prefs.set("cached_news", json.dumps(fresh_news))
-            await prefs.set(f"cached_schedule_{self.gv_id}", json.dumps(fresh_schedule))
+            
+            # CẬP NHẬT TÊN KEY LƯU MỚI TẠI ĐÂY
+            await prefs.set(f"cached_home_schedule_{self.gv_id}", json.dumps(fresh_schedule))
 
             await prefs.set("news_hash", new_news_hash)
-            await prefs.set(f"schedule_hash_{self.gv_id}", new_schedule_hash)
+            
+            # CẬP NHẬT TÊN KEY LƯU MỚI TẠI ĐÂY
+            await prefs.set(f"home_schedule_hash_{self.gv_id}", new_schedule_hash)
 
             await prefs.set(f"last_sync_home_{self.gv_id}", str(current_time))
 
@@ -264,11 +270,12 @@ class UserHomePage(ft.Container):
                 print("HOME [SYNC] Dữ liệu chuẩn xác")
 
         except Exception as e:
-            show_top_notification(
-                self.app_page,
-                "HOME [Không thể kết nối]",
-                "Vui lòng kiểm tra mạng!",
-                4000,
-                color=ft.Colors.RED,
-            )
+            if getattr(self, "page", None):
+                show_top_notification(
+                    self.app_page,
+                    "HOME [Không thể kết nối]",
+                    "Vui lòng kiểm tra mạng!",
+                    4000,
+                    color=ft.Colors.RED,
+                )
             print("HOME ERROR:", e)

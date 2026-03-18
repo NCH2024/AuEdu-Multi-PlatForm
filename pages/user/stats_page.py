@@ -1,6 +1,5 @@
 import flet as ft
-from components.pages.base_dashboard import BaseDashboard
-from components.pages.page_frame import PageFrame
+
 from components.options.custom_dropdown import CustomDropdown
 from core.theme import get_glass_container, PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
 
@@ -10,6 +9,7 @@ class StatsPage(ft.Container):
         self.app_page = page
         self.expand = True
 
+        # Khởi tạo các Control để có thể truy xuất sau này
         self.dd_lop = CustomDropdown(label="Chọn một lớp", options=[ft.dropdown.Option("Tất cả")])
         self.btn_refresh = ft.Button(
             content=ft.Text("Làm mới", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), 
@@ -18,6 +18,15 @@ class StatsPage(ft.Container):
             height=40
         )
         
+        # Gắn UI vào content
+        self.content = self.build_ui()
+
+    def did_mount(self):
+        # Anh để sẵn hàm này cho em. 
+        # Sau này em viết hàm load_data từ Supabase thì gọi nó ở đây nhé!
+        pass
+
+    def build_ui(self):
         toolbar = ft.Row([self.dd_lop, self.btn_refresh], alignment=ft.MainAxisAlignment.END)
 
         def create_stat_card(icon_name, number_text, label_text, sub_text=""):
@@ -73,5 +82,4 @@ class StatsPage(ft.Container):
             ])
         ])
 
-        framed_layout = PageFrame(page=self.app_page, page_title="THỐNG KÊ ĐIỂM DANH", main_content=main_layout)
-        self.content = BaseDashboard(page=self.app_page, active_route="/user/stats", main_content=framed_layout)
+        return main_layout

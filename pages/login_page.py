@@ -249,7 +249,7 @@ class LoginPage(ft.Container):
             self.tf_username.disabled = False
             
         self.build_ui()
-        show_top_notification(self.app_page, "Đã gỡ tài khoản", f"Tài khoản {email_to_remove} đã được gỡ khỏi thiết bị.", color=ft.Colors.GREEN_500)
+        show_top_notification(self.app_page, "Đã gỡ tài khoản", f"Tài khoản {email_to_remove} đã được gỡ khỏi thiết bị.", color=ft.Colors.GREEN_500, sound="S")
 
     # ==========================================
     # LOGIC BACKEND
@@ -259,7 +259,7 @@ class LoginPage(ft.Container):
         password = self.tf_password.value
 
         if not email or not password:
-            show_top_notification(self.app_page, "Cảnh báo", "Vui lòng nhập Email và Mật khẩu!", color=ft.Colors.ORANGE_600)
+            show_top_notification(self.app_page, "Cảnh báo", "Vui lòng nhập Email và Mật khẩu!", color=ft.Colors.ORANGE_600, sound="E")
             return
 
         try:
@@ -277,7 +277,7 @@ class LoginPage(ft.Container):
                 if auth_resp.status_code != 200:
                     error_data = auth_resp.json()
                     error_msg = error_data.get("error_description", "Email hoặc mật khẩu không đúng!")
-                    show_top_notification(self.app_page, "Đăng nhập thất bại", error_msg, color=ft.Colors.RED_600)
+                    show_top_notification(self.app_page, "Đăng nhập thất bại", error_msg, color=ft.Colors.RED_600, sound="E")
                     self.reset_login_button()
                     return
 
@@ -310,7 +310,7 @@ class LoginPage(ft.Container):
                         self.saved_accounts.append(session_dict)
                         await prefs.set("saved_accounts", json.dumps(self.saved_accounts))
                     print(f"Tài khoản {ho_ten} đã đăng nhập thành công!")
-                    show_top_notification(self.app_page, "Thành công", f"Chào mừng {ho_ten} trở lại!", duration_ms=4000, color=ft.Colors.GREEN_600)
+                    show_top_notification(self.app_page, "Thành công", f"Chào mừng {ho_ten} trở lại!", duration_ms=4000, color=ft.Colors.GREEN_600, sound="S")
                     await self.app_page.push_route("/user/home")
                 else:
                     show_top_notification(self.app_page, "Lỗi phân quyền", "Tài khoản chưa được liên kết với Giảng viên nào!", color=ft.Colors.ORANGE_700)

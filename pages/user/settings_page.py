@@ -1,7 +1,6 @@
 import flet as ft
 import json
-from components.pages.base_dashboard import BaseDashboard
-from components.pages.page_frame import PageFrame
+
 from core.theme import get_glass_container, PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
 
 class SettingsPage(ft.Container):
@@ -13,6 +12,14 @@ class SettingsPage(ft.Container):
         # Biến giữ tên user, sẽ được cập nhật async để không treo UI
         self.user_name_text = ft.Text("Đang tải...", color=SECONDARY_COLOR, weight=ft.FontWeight.BOLD)
 
+        # Trỏ content vào hàm build_ui thay vì viết thẳng ở đây
+        self.content = self.build_ui()
+
+    # Dùng did_mount để tải dữ liệu, tránh lỗi "Control must be added to the page first"
+    def did_mount(self):
+        self.app_page.run_task(self.load_user_data)
+
+    def build_ui(self):
         # ==========================================
         # CỘT TRÁI: THIẾT LẬP NHẬN DẠNG (AI)
         # ==========================================
@@ -82,19 +89,9 @@ class SettingsPage(ft.Container):
         settings_content = ft.ResponsiveRow([
             ft.Column([ai_settings_card], col={"sm": 12, "md": 7}),
             ft.Column([account_settings_card], col={"sm": 12, "md": 5}),
-        ], expand=True)
-
-        # Bọc vào Khung PageFrame xịn sò của em
-        framed_layout = PageFrame(
-            page=self.app_page, 
-            page_title="CÀI ĐẶT PHẦN MỀM",
-            main_content=settings_content
-        )
-
-        self.content = BaseDashboard(page=self.app_page, active_route="/user/settings", main_content=framed_layout)
+        ], expand=True) 
         
-        # Gọi hàm lấy session
-        self.app_page.run_task(self.load_user_data)
+        return settings_content
 
     async def load_user_data(self):
         try:
@@ -103,6 +100,9 @@ class SettingsPage(ft.Container):
             if session_str:
                 session_data = json.loads(session_str)
                 self.user_name_text.value = session_data.get("name", "Unknown")
-                self.user_name_text.update()
+                
+                # CHÌA KHÓA: Kiểm tra trang đã sẵn sàng trước khi update
+                if getattr(self, "page", None):
+                    self.user_name_text.update()
         except Exception as e:
             print(f"Lỗi tải dữ liệu Settings: {e}")

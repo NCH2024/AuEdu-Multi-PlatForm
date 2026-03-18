@@ -5,8 +5,6 @@ import asyncio
 import json
 import time
 
-from components.pages.base_dashboard import BaseDashboard
-from components.pages.page_frame import PageFrame
 from components.options.schedule_list import ScheduleDetailList
 from components.options.top_notification import show_top_notification
 from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
@@ -47,6 +45,7 @@ class SchedulePage(ft.Container):
             expand=True,
         )
 
+    def did_mount(self):
         self.app_page.run_task(self.initialize_data)
 
     async def initialize_data(self):
@@ -459,9 +458,5 @@ class SchedulePage(ft.Container):
                 ft.Container(content=self.schedule_list, expand=True), 
             ],
         )
-
-        framed_layout = PageFrame(
-            page=self.app_page, page_title="LỊCH HỌC/ LỊCH THI",
-            main_content=ft.Container(content=main_layout, padding=0, expand=True), scrollable=False,
-        )
-        return BaseDashboard(page=self.app_page, active_route="/user/schedule", main_content=framed_layout)
+        
+        return main_layout

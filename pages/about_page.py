@@ -1,8 +1,7 @@
 import flet as ft
 import asyncio
 from flet import UrlLauncher
-from components.pages.base_dashboard import BaseDashboard
-from components.pages.page_frame import PageFrame
+
 from components.options.alert_dialog import show_alert_dialog
 from core.theme import get_glass_container, PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
 
@@ -148,13 +147,7 @@ class AboutPage(ft.Container):
             ]
         )
 
-        framed_layout = PageFrame(
-            page=self.app_page,
-            page_title="THÔNG TIN PHẦN MỀM",
-            main_content=main_layout
-        )
-
-        return BaseDashboard(page=self.app_page, active_route="/user/about", main_content=framed_layout)
+        return main_layout
 
 
     def _show_snackbar(self, message: str):

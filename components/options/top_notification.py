@@ -1,4 +1,5 @@
 import flet as ft
+import flet_audio as fta
 import asyncio
 from core.theme import PRIMARY_COLOR, SECONDARY_COLOR
 
@@ -66,9 +67,60 @@ class TopNotification(ft.Container):
         if self in self.app_page.overlay:
             self.app_page.overlay.remove(self)
             self.app_page.update()
+            
+def play_sound_success(page):
+    audio = fta.Audio(src="assets/sounds/sound-success.mp3", autoplay=True)
+    
+    if hasattr(page, 'services'):
+        page.services.append(audio)
+    else:
+        page.overlay.append(audio) # Chỉ là phương án dự phòng
+        
+    # Dọn dẹp rác bộ nhớ sau khi phát xong để chống giật lag app
+    async def clean_up_audio():
+        # Chờ 2 giây cho âm thanh phát xong (em có thể tăng giảm tùy độ dài file mp3)
+        await asyncio.sleep(2) 
+        if hasattr(page, 'services') and audio in page.services:
+            page.services.remove(audio)
+            page.update()
+            
+    page.run_task(clean_up_audio)
+    
+def play_sound_error(page):
+    audio = fta.Audio(src="assets/sounds/sound-error.mp3", autoplay=True)
+    
+    if hasattr(page, 'services'):
+        page.services.append(audio)
+    else:
+        page.overlay.append(audio) # Chỉ là phương án dự phòng
+        
+    # Dọn dẹp rác bộ nhớ sau khi phát xong để chống giật lag app
+    async def clean_up_audio():
+        # Chờ 2 giây cho âm thanh phát xong (em có thể tăng giảm tùy độ dài file mp3)
+        await asyncio.sleep(2) 
+        if hasattr(page, 'services') and audio in page.services:
+            page.services.remove(audio)
+            page.update()
+            
+    page.run_task(clean_up_audio)
 
-def show_top_notification(page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=SECONDARY_COLOR):
-    """Hàm gọi nhanh thông báo"""
+def show_top_notification(page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=SECONDARY_COLOR, sound=None):
+    """
+    Hàm gọi nhanh thông báo
+
+    sound: 
+        S - Success
+        E - Error
+
+    """
     notif = TopNotification(page, title, message, duration_ms, color)
     page.overlay.append(notif)
+    
+     
+    
+    if sound == "S":
+        play_sound_success(page)
+    elif sound == "E":
+        play_sound_error(page)
+        
     page.update()
