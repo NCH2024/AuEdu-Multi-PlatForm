@@ -2,14 +2,16 @@ import flet as ft
 import datetime
 import asyncio
 import json
+import time
 
 from components.pages.base_dashboard import BaseDashboard
 from components.pages.page_frame import PageFrame
 from components.options.custom_dropdown import CustomDropdown
-from components.options.loading_data import LoadingOverlay
 from components.options.camera_view import CameraView
+from components.options.top_notification import show_top_notification
 from core.theme import get_glass_container, PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
-from core.config import *
+from core.config import get_supabase_client
+from core.helper import hash_data, safe_json_load
 
 class AttendancePage(ft.Container):
     def __init__(self, page: ft.Page):
@@ -65,35 +67,31 @@ class AttendancePage(ft.Container):
             data_row_max_height=40,
         )
 
-        self.loading_overlay = LoadingOverlay(message="Đang tải dữ liệu điểm danh...")
-
-        main_ui = self.build_ui()
-        self.content = ft.Stack(controls=[main_ui, self.loading_overlay], expand=True)
-
+        # Đã loại bỏ hoàn toàn LoadingOverlay vì Cache load quá nhanh!
+        self.content = self.build_ui()
         self.app_page.run_task(self.initialize_page)
 
     async def initialize_page(self):
-        await asyncio.sleep(0.4)
-        
-        # KẾT HỢP CHUẨN
+        # Đọc Session để lấy ID Giảng Viên
         prefs = ft.SharedPreferences()
         session_str = await prefs.get("user_session")
         if session_str:
-            session_data = json.loads(session_str)
+            session_data = safe_json_load(session_str)
             self.gv_id = session_data.get("id", "N/A")
             
         try:
+            # Load danh sách Dropdown bằng cơ chế Cache mới
             await self.load_dropdowns()
         except Exception as e:
             self._show_error_snackbar(f"Lỗi tải dữ liệu lớp: {e}")
 
         try:
+            # Gọi Camera chạy ngầm
             await self.camera_view.load_available_cameras()
         except Exception as e:
             self._show_error_snackbar(f"Lỗi khởi tạo thiết bị: {e}")
         
-        self.loading_overlay.visible = False
-        if getattr(self, "app_page", None):
+        if getattr(self, "page", None):
             self.update()          
 
     def build_ui(self):
@@ -162,57 +160,47 @@ class AttendancePage(ft.Container):
         framed_layout = PageFrame(page=self.app_page, page_title="ĐIỂM DANH SINH VIÊN", main_content=main_layout)
         return BaseDashboard(page=self.app_page, active_route="/user/attendance", main_content=framed_layout)
 
-    async def load_dropdowns(self):
-        if self.gv_id == "N/A": return
-        try:
-            async with await get_supabase_client() as client:
-                params_tkb = {"select": "id,lop_id,hocphan_id,lop(tenlop),hocphan(tenhocphan)", "giangvien_id": f"eq.{self.gv_id}"}
-                res_tkb = await client.get("/thoikhoabieu", params=params_tkb)
-                res_tkb.raise_for_status()
-                self.tkb_data = res_tkb.json()
+    # ==========================================
+    # LOGIC RENDER DROPDOWN ĐỘC LẬP
+    # ==========================================
+    def render_dropdowns(self, tkb_data, tiet_data):
+        if not tkb_data: return
+        self.tkb_data = tkb_data 
 
-                if not self.tkb_data: return
+        today = datetime.datetime.now()
+        thu_today = today.weekday() + 2 
+        
+        default_lop_id = None
+        default_hp_id = None
 
-                today = datetime.datetime.now()
-                thu_today = today.weekday() + 2 
-                tkb_ids = [str(item['id']) for item in self.tkb_data]
-                
-                params_tiet = {"select": "tkb_id,thu", "tkb_id": f"in.({','.join(tkb_ids)})"}
-                res_tiet = await client.get("/tkb_tiet", params=params_tiet)
-                res_tiet.raise_for_status()
-                tiet_data = res_tiet.json()
+        if tiet_data:
+            for t in tiet_data:
+                if t["thu"] == thu_today:
+                    for tkb in self.tkb_data:
+                        if str(tkb["id"]) == str(t["tkb_id"]):
+                            default_lop_id = tkb["lop_id"]
+                            default_hp_id = tkb["hocphan_id"]
+                            break
+                    if default_lop_id: break
 
-                default_lop_id = None
-                default_hp_id = None
+        lops = {row["lop_id"]: row["lop"]["tenlop"] for row in self.tkb_data}
+        self.dd_lop.options = [ft.dropdown.Option(key=str(k), text=v) for k, v in lops.items()]
 
-                if tiet_data:
-                    for t in tiet_data:
-                        if t["thu"] == thu_today:
-                            for tkb in self.tkb_data:
-                                if tkb["id"] == t["tkb_id"]:
-                                    default_lop_id = tkb["lop_id"]
-                                    default_hp_id = tkb["hocphan_id"]
-                                    break
-                            if default_lop_id: break
+        if default_lop_id and str(default_lop_id) in [str(k) for k in lops.keys()]:
+            self.dd_lop.value = str(default_lop_id)
+        elif lops:
+            self.dd_lop.value = str(list(lops.keys())[0])
+        else:
+            self.dd_lop.value = None
 
-                lops = {row["lop_id"]: row["lop"]["tenlop"] for row in self.tkb_data}
-                self.dd_lop.options = [ft.dropdown.Option(key=k, text=v) for k, v in lops.items()]
+        self._sync_handle_lop_change(auto_hp_id=default_hp_id)
+        
+        if getattr(self, "page", None):
+            self.update()
 
-                if default_lop_id and default_lop_id in lops:
-                    self.dd_lop.value = default_lop_id
-                else:
-                    self.dd_lop.value = list(lops.keys())[0]
-
-                await self.handle_lop_change(None, auto_hp_id=default_hp_id)
-
-        except Exception as e:
-            print(f"Lỗi load_dropdowns: {e}")
-            if getattr(self, "page", None):
-                self._show_error_snackbar(f"Lỗi tải dữ liệu lớp: {e}")
-
-    async def handle_lop_change(self, e, auto_hp_id=None):
+    def _sync_handle_lop_change(self, auto_hp_id=None):
         lop_id = self.dd_lop.value
-        hps = {row["hocphan_id"]: row["hocphan"]["tenhocphan"] for row in self.tkb_data if row["lop_id"] == lop_id}
+        hps = {row["hocphan_id"]: row["hocphan"]["tenhocphan"] for row in self.tkb_data if str(row["lop_id"]) == str(lop_id)}
         self.dd_hocphan.options = [ft.dropdown.Option(key=str(k), text=v) for k, v in hps.items()]
 
         if auto_hp_id and str(auto_hp_id) in [str(k) for k in hps.keys()]:
@@ -221,17 +209,115 @@ class AttendancePage(ft.Container):
             self.dd_hocphan.value = str(list(hps.keys())[0])
         else:
             self.dd_hocphan.value = None
-        self.update()
 
+    async def handle_lop_change(self, e, auto_hp_id=None):
+        self._sync_handle_lop_change(auto_hp_id)
+        if getattr(self, "page", None):
+            self.update()
+
+    # ==========================================
+    # ÁP DỤNG THUẬT TOÁN CACHE HASH 
+    # ==========================================
+    async def load_dropdowns(self):
+        if self.gv_id == "N/A": return
+        
+        prefs = ft.SharedPreferences()
+
+        # ==============================
+        # LOAD CACHE
+        # ==============================
+        cached_tkb = safe_json_load(await prefs.get(f"cached_tkb_{self.gv_id}"))
+        cached_tiet = safe_json_load(await prefs.get(f"cached_tiet_{self.gv_id}"))
+
+        last_sync = float(await prefs.get(f"last_sync_attendance_{self.gv_id}") or 0)
+
+        cached_tkb_hash = await prefs.get(f"tkb_hash_{self.gv_id}")
+        cached_tiet_hash = await prefs.get(f"tiet_hash_{self.gv_id}")
+
+        current_time = time.time()
+        TTL = 300  # 5 phút
+
+        # ==============================
+        # STEP 1: HIỂN THỊ CACHE NGAY
+        # ==============================
+        if cached_tkb is not None and cached_tiet is not None:
+            self.render_dropdowns(cached_tkb, cached_tiet)
+
+        # ==============================
+        # STEP 2: CHECK TTL
+        # ==============================
+        if current_time - last_sync < TTL:
+            # print("ATTENDANCE: Cache còn hạn, bỏ qua bước gọi API!")
+            return
+
+        # ==============================
+        # STEP 3: CALL API (BACKGROUND)
+        # ==============================
+        try:
+            async with await get_supabase_client() as client:
+                
+                # ---- TKB ----
+                params_tkb = {"select": "id,lop_id,hocphan_id,lop(tenlop),hocphan(tenhocphan)", "giangvien_id": f"eq.{self.gv_id}"}
+                res_tkb = await client.get("/thoikhoabieu", params=params_tkb)
+                res_tkb.raise_for_status()
+                fresh_tkb = res_tkb.json()
+
+                # ---- TIẾT ----
+                fresh_tiet = []
+                if fresh_tkb:
+                    tkb_ids = [str(item['id']) for item in fresh_tkb]
+                    params_tiet = {"select": "tkb_id,thu", "tkb_id": f"in.({','.join(tkb_ids)})"}
+                    res_tiet = await client.get("/tkb_tiet", params=params_tiet)
+                    res_tiet.raise_for_status()
+                    fresh_tiet = res_tiet.json()
+
+            # ==============================
+            # STEP 4: HASH COMPARE
+            # ==============================
+            new_tkb_hash = hash_data(fresh_tkb)
+            new_tiet_hash = hash_data(fresh_tiet)
+
+            is_changed = (
+                new_tkb_hash != cached_tkb_hash or
+                new_tiet_hash != cached_tiet_hash
+            )
+
+            # ==============================
+            # STEP 5: UPDATE CACHE
+            # ==============================
+            await prefs.set(f"cached_tkb_{self.gv_id}", json.dumps(fresh_tkb))
+            await prefs.set(f"cached_tiet_{self.gv_id}", json.dumps(fresh_tiet))
+
+            await prefs.set(f"tkb_hash_{self.gv_id}", new_tkb_hash)
+            await prefs.set(f"tiet_hash_{self.gv_id}", new_tiet_hash)
+
+            await prefs.set(f"last_sync_attendance_{self.gv_id}", str(current_time))
+
+            # ==============================
+            # STEP 6: UPDATE UI IF CHANGED
+            # ==============================
+            if is_changed or cached_tkb is None:
+                print("ATTENDANCE [SYNC] ... đang đồng bộ dữ liệu lớp học mới ...")
+                self.render_dropdowns(fresh_tkb, fresh_tiet)
+            else:
+                print("ATTENDANCE [SYNC] Dữ liệu chuẩn xác")
+
+        except Exception as e:
+            show_top_notification(self.app_page, "ATTENDANCE [Không thể kết nối]", "Vui lòng kiểm tra mạng!", 4000, color=ft.Colors.RED)
+            print("ATTENDANCE ERROR:", e)
+
+    # ==========================================
+    # CÁC HÀM XỬ LÝ KHÁC
+    # ==========================================
     async def handle_limit_change(self, e):
         self.current_limit = int(self.dd_row_limit.value)
         self.render_table()
-        self.update()
+        if getattr(self, "page", None): self.update()
 
     async def handle_load_more(self, e):
         self.current_limit += 10
         self.render_table()
-        self.update()
+        if getattr(self, "page", None): self.update()
 
     def render_table(self):
         self.dt_sinhvien.rows.clear()
@@ -271,7 +357,7 @@ class AttendancePage(ft.Container):
                 res = await client.get("/sinhvien", params=params)
                 res.raise_for_status()
                 
-                if not self.page: return 
+                if not getattr(self, "page", None): return 
 
                 self.all_students_data = res.json()
                 self.current_limit = int(self.dd_row_limit.value)
@@ -288,14 +374,13 @@ class AttendancePage(ft.Container):
                 self.update()
             
     async def handle_start_session(self, e):
-        if not self.page: return
+        if not getattr(self, "page", None): return
         
         e.control.disabled = True
         e.control.update()
 
         mode = self.rg_mode.value if hasattr(self, 'rg_mode') else "1"
         
-        # KẾT HỢP CHUẨN
         prefs = ft.SharedPreferences()
         await prefs.set("attendance_mode", str(mode))
 
@@ -303,7 +388,7 @@ class AttendancePage(ft.Container):
         await self.app_page.push_route("/user/attendance/session")
 
     async def handle_test_camera(self, e):
-        if not self.page: return
+        if not getattr(self, "page", None): return
         
         self.test_progress.visible = True
         self.test_status_text.value = "Đang kết nối cảm biến..."
@@ -312,7 +397,7 @@ class AttendancePage(ft.Container):
 
         async def run_test():
             is_ok = await self.camera_view.test_sensor()
-            if not self.page: return
+            if not getattr(self, "page", None): return
 
             self.test_progress.visible = False
             self.test_status_text.value = "Sẵn sàng" if is_ok else "Lỗi kết nối"

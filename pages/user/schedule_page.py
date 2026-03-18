@@ -3,12 +3,15 @@ import datetime
 import calendar
 import asyncio
 import json
+import time
+
 from components.pages.base_dashboard import BaseDashboard
 from components.pages.page_frame import PageFrame
-from components.options.loading_data import LoadingOverlay
 from components.options.schedule_list import ScheduleDetailList
+from components.options.top_notification import show_top_notification
 from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
-from core.config import *
+from core.config import get_supabase_client
+from core.helper import hash_data, safe_json_load
 
 class SchedulePage(ft.Container):
     def __init__(self, page: ft.Page):
@@ -36,100 +39,143 @@ class SchedulePage(ft.Container):
         self.toolbar_container = ft.Container()
         self.calendar_area_container = ft.Container()
         self.schedule_list = ScheduleDetailList()
-        self.loading_overlay = LoadingOverlay(message="Đang đồng bộ hệ thống...")
 
+        # Đã loại bỏ LoadingOverlay để dùng Zero-latency UI
         main_ui = self.build_ui()
         self.content = ft.Stack(
-            controls=[main_ui, self.loading_overlay],
+            controls=[main_ui],
             expand=True,
         )
 
         self.app_page.run_task(self.initialize_data)
 
     async def initialize_data(self):
-        await asyncio.sleep(0.1)
-        
-        # KẾT HỢP CHUẨN
         prefs = ft.SharedPreferences()
+        
+        # ==============================
+        # 0. USER SESSION
+        # ==============================
         session_str = await prefs.get("user_session")
         if session_str:
-            session = json.loads(session_str)
+            session = safe_json_load(session_str)
             self.gv_id = session.get("id", "N/A")
-            
-        try:
-            await self.fetch_tuan_hoc_data()
-            await self.fetch_schedule_data()
+
+        # ==============================
+        # 1. LOAD CACHE
+        # ==============================
+        cached_tuan_hoc = safe_json_load(await prefs.get("cached_tuan_hoc"))
+        cached_schedule = safe_json_load(await prefs.get(f"cached_schedule_{self.gv_id}"))
+
+        last_sync = float(await prefs.get(f"last_sync_schedule_{self.gv_id}") or 0)
+        cached_tuan_hoc_hash = await prefs.get("tuan_hoc_hash")
+        cached_schedule_hash = await prefs.get(f"schedule_hash_{self.gv_id}")
+
+        current_time = time.time()
+        TTL = 21600  # 6 tiếng
+
+        # ==============================
+        # STEP 1: HIỂN THỊ CACHE NGAY
+        # ==============================
+        if cached_tuan_hoc is not None and cached_schedule is not None:
+            self.tuan_hoc_data = cached_tuan_hoc
+            self.raw_schedule_data = cached_schedule
             await self._async_rebuild_entire_ui()
-        finally:
-            self.loading_overlay.visible = False
-            self.update()
+            # print("SCHEDULE: Đã tải dữ liệu từ Cache lên giao diện cực nhanh!")
 
-    async def fetch_tuan_hoc_data(self):
-        try:
-            async with await get_supabase_client() as client:
-                params = {"select": "*", "order": "id.asc"}
-                res = await client.get("/tuan_hoc", params=params)
-                res.raise_for_status()
-                self.tuan_hoc_data = res.json()
-        except Exception as e:
-            print(f"Lỗi fetch_tuan_hoc_data: {e}")
-            
-    async def fetch_schedule_data(self):
-        if self.gv_id == "N/A":
+        # ==============================
+        # STEP 2: CHECK TTL
+        # ==============================
+        if current_time - last_sync < TTL:
+            # print("SCHEDULE: Cache còn hạn 6 tiếng, KHÔNG gọi API!")
             return
-            
+
+        # ==============================
+        # STEP 3: CALL API (BACKGROUND)
+        # ==============================
         try:
             async with await get_supabase_client() as client:
-                params_tkb = {"select": "id,hocphan(tenhocphan),lop(tenlop)", "giangvien_id": f"eq.{self.gv_id}"}
-                res_tkb = await client.get("/thoikhoabieu", params=params_tkb)
-                res_tkb.raise_for_status()
-                tkb_list = res_tkb.json()
+                # ---- TUẦN HỌC ----
+                res_th = await client.get("/tuan_hoc", params={"select": "*", "order": "id.asc"})
+                res_th.raise_for_status()
+                fresh_tuan_hoc = res_th.json()
 
-                if not tkb_list:
-                    return
+                # ---- LỊCH DẠY CỦA GIẢNG VIÊN ----
+                fresh_raw_schedule = []
+                if self.gv_id != "N/A":
+                    res_tkb = await client.get("/thoikhoabieu", params={"select": "id,hocphan(tenhocphan),lop(tenlop)", "giangvien_id": f"eq.{self.gv_id}"})
+                    res_tkb.raise_for_status()
+                    tkb_list = res_tkb.json()
 
-                tkb_dict = {
-                    row["id"]: {
-                        "hocphan": row["hocphan"]["tenhocphan"] if row.get("hocphan") else "N/A",
-                        "lop": row["lop"]["tenlop"] if row.get("lop") else "N/A",
-                    }
-                    for row in tkb_list
-                }
+                    if tkb_list:
+                        tkb_dict = {
+                            row["id"]: {
+                                "hocphan": row["hocphan"]["tenhocphan"] if row.get("hocphan") else "N/A",
+                                "lop": row["lop"]["tenlop"] if row.get("lop") else "N/A",
+                            }
+                            for row in tkb_list
+                        }
+                        tkb_ids_str = ",".join(map(str, tkb_dict.keys()))
+                        res_tiet = await client.get("/tkb_tiet", params={"select": "tkb_id,tiet_id,thu,phong_hoc", "tkb_id": f"in.({tkb_ids_str})"})
+                        res_tiet.raise_for_status()
+                        tkb_tiet_data = res_tiet.json()
 
-                tkb_ids_str = ",".join(map(str, tkb_dict.keys()))
-                params_tiet = {"select": "tkb_id,tiet_id,thu,phong_hoc", "tkb_id": f"in.({tkb_ids_str})"}
-                res_tiet = await client.get("/tkb_tiet", params=params_tiet)
-                res_tiet.raise_for_status()
-                tkb_tiet_data = res_tiet.json()
+                        if tkb_tiet_data:
+                            grouped = {}
+                            for item in tkb_tiet_data:
+                                key = (item["tkb_id"], item["thu"], item["phong_hoc"])
+                                grouped.setdefault(key, []).append(item["tiet_id"])
 
-                if not tkb_tiet_data:
-                    return
+                            for (tkb_id, thu, phong), tiets in grouped.items():
+                                tiets.sort()
+                                tiet_str = f"{tiets[0]} - {tiets[-1]}" if len(tiets) > 1 else str(tiets[0])
+                                ten_mon = tkb_dict[tkb_id]["hocphan"]
+                                card_color = "#FFC107" if any(k in ten_mon.lower() for k in ["thi", "bảo vệ"]) else "#00A884"
+                                
+                                fresh_raw_schedule.append({
+                                    "thu": thu,
+                                    "subject": ten_mon,
+                                    "time": tiet_str,
+                                    "room": phong if phong else "N/A",
+                                    "class_name": tkb_dict[tkb_id]["lop"],
+                                    "type_color": card_color,
+                                })
 
-                grouped = {}
-                for item in tkb_tiet_data:
-                    key = (item["tkb_id"], item["thu"], item["phong_hoc"])
-                    grouped.setdefault(key, []).append(item["tiet_id"])
+            # ==============================
+            # STEP 4: HASH COMPARE
+            # ==============================
+            new_tuan_hoc_hash = hash_data(fresh_tuan_hoc)
+            new_schedule_hash = hash_data(fresh_raw_schedule)
 
-                self.raw_schedule_data.clear()
-                for (tkb_id, thu, phong), tiets in grouped.items():
-                    tiets.sort()
-                    tiet_str = f"{tiets[0]} - {tiets[-1]}" if len(tiets) > 1 else str(tiets[0])
-                    ten_mon = tkb_dict[tkb_id]["hocphan"]
-                    
-                    card_color = "#FFC107" if any(k in ten_mon.lower() for k in ["thi", "bảo vệ"]) else "#00A884"
-                    
-                    self.raw_schedule_data.append({
-                        "thu": thu,
-                        "subject": ten_mon,
-                        "time": tiet_str,
-                        "room": phong if phong else "N/A",
-                        "class_name": tkb_dict[tkb_id]["lop"],
-                        "type_color": card_color,
-                    })
+            is_changed = (
+                new_tuan_hoc_hash != cached_tuan_hoc_hash or
+                new_schedule_hash != cached_schedule_hash
+            )
+
+            # ==============================
+            # STEP 5: UPDATE CACHE
+            # ==============================
+            await prefs.set("cached_tuan_hoc", json.dumps(fresh_tuan_hoc))
+            await prefs.set(f"cached_schedule_{self.gv_id}", json.dumps(fresh_raw_schedule))
+
+            await prefs.set("tuan_hoc_hash", new_tuan_hoc_hash)
+            await prefs.set(f"schedule_hash_{self.gv_id}", new_schedule_hash)
+
+            await prefs.set(f"last_sync_schedule_{self.gv_id}", str(current_time))
+
+            # ==============================
+            # STEP 6: UPDATE UI IF CHANGED
+            # ==============================
+            if is_changed or cached_tuan_hoc is None:
+                print("SCHEDULE [SYNC] ... đang đồng bộ dữ liệu lịch học mới ...")
+                self.tuan_hoc_data = fresh_tuan_hoc
+                self.raw_schedule_data = fresh_raw_schedule
+                await self._async_rebuild_entire_ui()
+            else:
+                print("SCHEDULE [SYNC] Dữ liệu chuẩn xác")
+
         except Exception as e:
-            print(f"Lỗi fetch_schedule_data: {e}")
-            if getattr(self, "page", None):
-                self._show_error_snackbar(f"Lỗi đồng bộ lịch: {e}")
+            print("SCHEDULE ERROR:", e)
+            show_top_notification(self.app_page, "SCHEDULE [Lỗi kết nối mạng]", "Không thể tải lịch học mới nhất!", 4000, color=ft.Colors.RED)
 
     async def _async_rebuild_entire_ui(self):
         if self.is_updating_ui: return
@@ -139,7 +185,8 @@ class SchedulePage(ft.Container):
         self.render_calendar_area()
         self.render_schedule_cards()
 
-        self.app_page.update()
+        if getattr(self, "app_page", None):
+            self.app_page.update()
         self.is_updating_ui = False
 
     async def _handle_year_change(self, e):
@@ -173,7 +220,8 @@ class SchedulePage(ft.Container):
 
     def _open_date_picker(self, e):
         self.date_picker.open = True
-        self.app_page.update()
+        if getattr(self, "app_page", None):
+            self.app_page.update()
 
     def _handle_date_picker_change(self, e):
         if self.date_picker.value:
@@ -260,7 +308,7 @@ class SchedulePage(ft.Container):
             if self.tuan_hoc_data:
                 for t in self.tuan_hoc_data:
                     start = datetime.datetime.strptime(t["ngay_bat_dau"].split("T")[0], "%Y-%m-%d").date()
-                    end = datetime.datetime.strptime(t["ngay_ket_thuc"].split("T")[0], "%Y-%m-%d").date() if "ngay_ket_thuc" in t else start
+                    end = datetime.datetime.strptime(t["ngay_ket_thuc"].split("T")[0], "%Y-%m-%d").date() if "ngay_ket_thuc" in t and t["ngay_ket_thuc"] else start + datetime.timedelta(days=6)
                     if start <= self.selected_date <= end:
                         current_week_id = str(t["id"])
                         break
@@ -417,7 +465,3 @@ class SchedulePage(ft.Container):
             main_content=ft.Container(content=main_layout, padding=0, expand=True), scrollable=False,
         )
         return BaseDashboard(page=self.app_page, active_route="/user/schedule", main_content=framed_layout)
-
-    def _show_error_snackbar(self, message: str):
-        self.app_page.overlay.append(ft.SnackBar(content=ft.Text(message), bgcolor=ft.Colors.RED_700, open=True))
-        self.app_page.update()

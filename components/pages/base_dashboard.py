@@ -29,8 +29,10 @@ class BaseDashboard(ft.Container):
         
         async def handle_logout(e):
             prefs = ft.SharedPreferences()
-            await prefs.remove("user_session")
-            await self.app_page.push_route("/login")
+            await prefs.remove("user_session") # Chỉ xóa session hiện tại
+            # Không dùng await prefs.clear() vì sẽ mất luôn danh sách tài khoản đã lưu!
+            
+            await self.app_page.push_route("/login")    
 
         btn_logout = ft.Button(
             content=ft.Text("Đăng xuất", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), 

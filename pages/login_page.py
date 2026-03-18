@@ -2,6 +2,8 @@ import flet as ft
 import httpx
 import json
 from components.options.carousel_banner import CarouselBanner
+from components.options.top_notification import show_top_notification
+from components.options.confirm_dialog import show_confirm_dialog
 from core.config import get_supabase_client, SUPABASE_URL, SUPABASE_KEY
 from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR, TEXT_MAIN
 
@@ -12,17 +14,19 @@ class LoginPage(ft.Container):
         self.expand = True
         self.padding = 0
         
-        # Kiểm tra kích thước cho banner thông báo trên thiết bị
+        self.saved_accounts = []
+        self.selected_account = None
+        
         def is_mobile(page: ft.Page):
             return page.platform in ["android", "ios"] or (page.width and page.width < 768)
+        
         if is_mobile(self.app_page):
             self.min_width_carousel = 320
         else:
             self.min_width_carousel = 420
-            
 
         # ==========================================
-        # 1. CÁC THÀNH PHẦN INPUT ĐƯỢC LÀM MỚI TỐI ƯU
+        # 1. CÁC THÀNH PHẦN INPUT 
         # ==========================================
         self.tf_username = ft.TextField(
             label="Tên đăng nhập / Email", 
@@ -67,9 +71,6 @@ class LoginPage(ft.Container):
             on_click=self.handle_login
         )
 
-        # ==========================================
-        # DỮ LIỆU BANNER (Em có thể thay đổi tùy ý)
-        # ==========================================
         banner_data = [
             {
                 "image": "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=200&auto=format&fit=crop",
@@ -82,125 +83,183 @@ class LoginPage(ft.Container):
                 "title": "Cập nhật phần mềm",
                 "subtitle": "Phiên bản mới giúp tăng tốc độ nhận dạng sinh viên lên 40%.",
                 "url": "https://github.com/NCH2024/AuEdu-Multi-PlatForm.git"
-            },
-            {
-                "image": "https://images.unsplash.com/photo-1555626906-fcf10d6851b4?q=80&w=200&auto=format&fit=crop",
-                "title": "Hoạt động ngoại khóa",
-                "subtitle": "Đăng ký tham gia giải chạy bộ thiện nguyện mùa hè.",
-                "url": "https://nctu.edu.vn"
             }
         ]
 
-        # Khởi tạo Component tự động trượt
         self.auto_slider_banner = CarouselBanner(
-            page=self.app_page, 
-            items=banner_data, 
-            width=self.min_width_carousel, 
-            height=80, 
-            interval=4 # 4 giây chuyển ảnh một lần
+            page=self.app_page, items=banner_data, 
+            width=self.min_width_carousel, height=80, interval=4
         )
         
-        
-        # ==========================================
-        # 2. KHUNG ĐĂNG NHẬP TRUNG TÂM (GLASS CARD)
-        # ==========================================
+        self.content = ft.Container(expand=True)
+        self.app_page.run_task(self.load_cached_accounts)
+
+    # ==========================================
+    # QUẢN LÝ GIAO DIỆN
+    # ==========================================
+    async def load_cached_accounts(self):
+        prefs = ft.SharedPreferences()
+        accounts_str = await prefs.get("saved_accounts")
+        if accounts_str:
+            self.saved_accounts = json.loads(accounts_str)
+        self.build_ui()
+
+    def build_ui(self):
+        if self.saved_accounts and not self.selected_account:
+            login_form_content = self.build_multi_account_view()
+        else:
+            login_form_content = self.build_standard_login_form()
+
         login_form = ft.Column(
-            horizontal_alignment="center",
-            alignment="center",
-            spacing=5, # Khoảng cách giữa Form và Banner
+            horizontal_alignment="center", alignment="center", spacing=5,
             controls=[
                 ft.Container(
-                    width=420,
-                    height=500,
+                    width=420, 
+                    # ĐÃ XÓA height=500 Ở ĐÂY ĐỂ KHUNG TỰ ĐỘNG CO GIÃN THEO NỘI DUNG
                     padding=ft.Padding(40, 50, 40, 50),
                     alignment=ft.Alignment(0,0),
-                    bgcolor=ft.Colors.with_opacity(0.80, ft.Colors.WHITE),
-                    blur=5,
-                    border_radius=24, 
-                    border=ft.Border.all(2, ft.Colors.WHITE),                   
-                    shadow=ft.BoxShadow(
-                        spread_radius=2, 
-                        blur_radius=20, 
-                        color=ft.Colors.with_opacity(0.2, ft.Colors.BLACK), 
-                        offset=ft.Offset(0, 10)
-                    ),
-                    content=ft.Column(
-                        horizontal_alignment="center",
-                        spacing=5,
-                        controls=[
-                            ft.Container(
-                                content=ft.Image(src="splash.png", width=100, height=100, fit="contain"),
-                            ),
-                            ft.Column(
-                                horizontal_alignment="center",
-                                spacing=0,
-                                controls=[
-                                    ft.Text("Hệ thống điểm danh khuôn mặt AI", size=14, color=ft.Colors.GREY_600, italic=True),
-                                ]
-                            ),
-                            ft.Container(height=10),
-                            self.tf_username,
-                            self.tf_password,
-                            ft.Container(height=15),
-                            self.btn_login,
-                            
-                            ft.Container(height=5),
-                            ft.Text("Trường Công nghệ số & Trí tuệ nhân tạo DNC", 
-                                    size=12, color=ft.Colors.GREY_500, weight=ft.FontWeight.W_500, text_align="center")
-                        ]
-                    )
+                    bgcolor=ft.Colors.with_opacity(0.80, ft.Colors.WHITE), blur=5,
+                    border_radius=24, border=ft.Border.all(2, ft.Colors.WHITE),                   
+                    shadow=ft.BoxShadow(spread_radius=2, blur_radius=20, color=ft.Colors.with_opacity(0.2, ft.Colors.BLACK), offset=ft.Offset(0, 10)),
+                    content=login_form_content
                 ),
                 self.auto_slider_banner
             ]
         )
 
-        # ==========================================
-        # 3. BACKGROUND VÀ BỐ CỤC CHUNG
-        # ==========================================
         background_image = ft.Image(
-            src="images/background-desktop.png", 
-            height=700,
-            width=1060,
-            fit=ft.BoxFit.COVER,
-            filter_quality=ft.FilterQuality.HIGH,
-            expand=True,
-            # opacity=0.6 
+            src="images/background-desktop.png", height=700, width=1060, fit=ft.BoxFit.COVER,
+            filter_quality=ft.FilterQuality.HIGH, expand=True
         )
         
-        # Xếp chồng: Ảnh nền -> Lớp phủ -> Khung đăng nhập căn giữa
         ui_content = ft.Stack(
             controls=[
                 background_image,
-                ft.Container(
-                    content=login_form,
-                    alignment=ft.Alignment(0, 0),
-                    expand=True,
-                    padding=20
-                )
+                ft.Container(content=login_form, alignment=ft.Alignment(0, 0), expand=True, padding=20)
             ],
             expand=True
         )
-        self.content = ft.WindowDragArea(
-            content=ui_content, 
-            expand=True
-        )
+        self.content.content = ft.WindowDragArea(content=ui_content, expand=True)
+        self.update()
+
+    def build_multi_account_view(self):
+        account_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, height=200)
         
+        for acc in self.saved_accounts:
+            acc_card = ft.Container(
+                bgcolor=ft.Colors.WHITE, border_radius=12, border=ft.Border.all(1, ft.Colors.BLACK_12),
+                content=ft.ListTile(
+                    leading=ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=ft.Colors.WHITE), bgcolor=SECONDARY_COLOR),
+                    title=ft.Text(acc["name"], weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR, size=14),
+                    subtitle=ft.Text(acc["email"], size=12, color=ft.Colors.GREY_600),
+                    trailing=ft.IconButton(ft.Icons.CANCEL_OUTLINED, icon_color=ft.Colors.RED_400, data=acc["email"], tooltip="Gỡ tài khoản", on_click=self.request_remove_account),
+                    on_click=lambda e, a=acc: self.select_account_to_login(a)
+                )
+            )
+            account_list.controls.append(acc_card)
+
+        btn_other_account = ft.TextButton(
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.CENTER,
+                controls=[
+                    ft.Icon(ft.Icons.ADD_CIRCLE_OUTLINE, color=ACCENT_COLOR, size=20), 
+                    ft.Text("Đăng nhập bằng tài khoản khác", color=ACCENT_COLOR, weight=ft.FontWeight.BOLD)
+                ]
+            ),
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+                overlay_color=ft.Colors.with_opacity(0.1, ACCENT_COLOR)
+            ),
+            on_click=self.show_standard_form
+        )
+
+        return ft.Column(
+            horizontal_alignment="center", spacing=10,
+            controls=[
+                ft.Image(src="splash.png", width=100, height=100, fit="contain"),
+                ft.Text("Chọn tài khoản của bạn", size=16, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR),
+                ft.Container(height=5),
+                account_list,
+                ft.Divider(color=ft.Colors.BLACK_12),
+                btn_other_account
+            ]
+        )
+
+    def build_standard_login_form(self):
+        btn_back = ft.Container()
+        if self.saved_accounts:
+            btn_back = ft.IconButton(
+                icon=ft.Icons.ARROW_BACK_IOS_NEW_ROUNDED, icon_color=ft.Colors.GREY_600,
+                tooltip="Quay lại danh sách tài khoản", on_click=self.back_to_multi_account
+            )
+
+        return ft.Column(
+            horizontal_alignment="center", spacing=5,
+            controls=[
+                ft.Row([btn_back, ft.Container(expand=True)], alignment=ft.MainAxisAlignment.START),
+                ft.Container(content=ft.Image(src="splash.png", width=100, height=100, fit="contain"), margin=ft.Margin(0, -30, 0, 0)),
+                ft.Column(horizontal_alignment="center", spacing=0, controls=[ft.Text("Hệ thống điểm danh khuôn mặt AI", size=14, color=ft.Colors.GREY_600, italic=True)]),
+                ft.Container(height=10),
+                self.tf_username, self.tf_password, ft.Container(height=15),
+                self.btn_login, ft.Container(height=5),
+                ft.Text("Trường Công nghệ số & Trí tuệ nhân tạo DNC", size=12, color=ft.Colors.GREY_500, weight=ft.FontWeight.W_500, text_align="center")
+            ]
+        )
 
     # ==========================================
-    # LOGIC BACKEND (GIỮ NGUYÊN 100%)
+    # LOGIC ĐIỀU HƯỚNG VÀ XÓA TÀI KHOẢN
+    # ==========================================
+    def select_account_to_login(self, account):
+        self.selected_account = account
+        self.tf_username.value = account["email"]
+        self.tf_username.disabled = True
+        self.tf_password.value = ""
+        self.build_ui()
+        
+    def show_standard_form(self, e):
+        self.selected_account = "NEW"
+        self.tf_username.value = ""
+        self.tf_username.disabled = False
+        self.tf_password.value = ""
+        self.build_ui()
+
+    def back_to_multi_account(self, e):
+        self.selected_account = None
+        self.build_ui()
+
+    def request_remove_account(self, e):
+        """Mở hộp thoại xác nhận trước khi xóa"""
+        email_to_remove = e.control.data
+        show_confirm_dialog(
+            page=self.app_page,
+            title="Gỡ tài khoản",
+            message=f"Bạn có chắc chắn muốn gỡ tài khoản {email_to_remove} khỏi thiết bị này không?",
+            on_confirm_callback=lambda: self.app_page.run_task(self.execute_remove_account, email_to_remove)
+        )
+
+    async def execute_remove_account(self, email_to_remove):
+        """Thực thi xóa tài khoản và hiện thông báo nổi"""
+        self.saved_accounts = [acc for acc in self.saved_accounts if acc["email"] != email_to_remove]
+        prefs = ft.SharedPreferences()
+        await prefs.set("saved_accounts", json.dumps(self.saved_accounts))
+        
+        if not self.saved_accounts:
+            self.selected_account = "NEW"
+            self.tf_username.value = ""
+            self.tf_username.disabled = False
+            
+        self.build_ui()
+        show_top_notification(self.app_page, "Đã gỡ tài khoản", f"Tài khoản {email_to_remove} đã được gỡ khỏi thiết bị.", color=ft.Colors.GREEN_500)
+
+    # ==========================================
+    # LOGIC BACKEND
     # ==========================================
     async def handle_login(self, e):
         email = self.tf_username.value 
         password = self.tf_password.value
-        
-        def show_snackbar(message: str, bg_color: str):
-            snack = ft.SnackBar(content=ft.Text(message), bgcolor=bg_color)
-            self.app_page.overlay.append(snack)
-            snack.open = True
-            self.app_page.update()
 
         if not email or not password:
-            show_snackbar("Vui lòng nhập Email và Mật khẩu!", ft.Colors.RED_700)
+            show_top_notification(self.app_page, "Cảnh báo", "Vui lòng nhập Email và Mật khẩu!", color=ft.Colors.ORANGE_600)
             return
 
         try:
@@ -218,7 +277,7 @@ class LoginPage(ft.Container):
                 if auth_resp.status_code != 200:
                     error_data = auth_resp.json()
                     error_msg = error_data.get("error_description", "Email hoặc mật khẩu không đúng!")
-                    show_snackbar(error_msg, ft.Colors.RED_700)
+                    show_top_notification(self.app_page, "Đăng nhập thất bại", error_msg, color=ft.Colors.RED_600)
                     self.reset_login_button()
                     return
 
@@ -235,24 +294,30 @@ class LoginPage(ft.Container):
                     giangvien = gv_data[0]
                     ho_ten = f"{giangvien.get('hodem', '')} {giangvien.get('ten', '')}".strip()
                     
-                    # Dùng SharedPreferences kết hợp json theo chuẩn mới nhất
                     session_dict = {
+                        "email": email,
                         "role": giangvien.get("vai_tro", "giangvien"), 
                         "name": ho_ten, 
                         "id": giangvien.get("id"),
                         "auth_id": user_id
                     }
+                    
                     prefs = ft.SharedPreferences()
                     await prefs.set("user_session", json.dumps(session_dict))
                     
+                    existing_emails = [acc["email"] for acc in self.saved_accounts]
+                    if email not in existing_emails:
+                        self.saved_accounts.append(session_dict)
+                        await prefs.set("saved_accounts", json.dumps(self.saved_accounts))
+                    print(f"Tài khoản {ho_ten} đã đăng nhập thành công!")
+                    show_top_notification(self.app_page, "Thành công", f"Chào mừng {ho_ten} trở lại!", duration_ms=4000, color=ft.Colors.GREEN_600)
                     await self.app_page.push_route("/user/home")
                 else:
-                    show_snackbar("Tài khoản chưa được liên kết với Giảng viên nào!", ft.Colors.ORANGE_700)
+                    show_top_notification(self.app_page, "Lỗi phân quyền", "Tài khoản chưa được liên kết với Giảng viên nào!", color=ft.Colors.ORANGE_700)
                     self.reset_login_button()
                     
         except Exception as ex:
-            print(f"Lỗi Đăng nhập: {ex}")
-            show_snackbar(f"Lỗi kết nối Server: {str(ex)}", ft.Colors.RED_700)
+            show_top_notification(self.app_page, "Lỗi hệ thống", f"Lỗi kết nối Server: {str(ex)}", color=ft.Colors.RED_700)
             self.reset_login_button()
 
     def reset_login_button(self):

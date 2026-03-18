@@ -17,8 +17,8 @@ class CustomDropdown(ft.Dropdown):
         self.bgcolor = ft.Colors.WHITE
         self.color = ft.Colors.BLACK_87 
         
-        self.label_style = ft.TextStyle(color=ft.Colors.GREY_600, size=10)
-        self.text_size = 10
+        self.label_style = ft.TextStyle(color=ft.Colors.GREY_600, size=13)
+        self.text_size = 13
         
         self.dense = True 
         self.filled = True 

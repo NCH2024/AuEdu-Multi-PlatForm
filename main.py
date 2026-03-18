@@ -44,6 +44,9 @@ async def main(page: ft.Page):
                 page.window.height = 700
                 page.window.resizable = False
                 page.window.maximizable = False
+            else:
+                page.window.resizable = True
+                page.window.maximizable = True
 
             # Rào chắn An ninh
             if not session and current_route != "/login":
