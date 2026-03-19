@@ -7,20 +7,22 @@ class TopNotification(ft.Container):
     def __init__(self, page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=SECONDARY_COLOR):
         super().__init__()
         self.app_page = page
-        self.top = -100  # Ẩn phía trên màn hình
-        self.left = 20
-        self.right = 20
+        self.top = -100 
+        self.left = 0
+        self.right = 0
         
         self.animate_position = ft.Animation(duration=500, curve=ft.AnimationCurve.EASE_OUT_BACK)
         self.animate_opacity = ft.Animation(duration=400, curve=ft.AnimationCurve.EASE_IN_OUT)
         self.opacity = 0
         self.duration_ms = duration_ms
 
+        noti_width = (self.app_page.width - 40) if (self.app_page.width and self.app_page.width < 450) else 400
+
         self.content = ft.Row(
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[
                 ft.Container(
-                    width=350,
+                    width=noti_width,
                     padding=15,
                     bgcolor=ft.Colors.WHITE,
                     border_radius=15,
@@ -48,25 +50,27 @@ class TopNotification(ft.Container):
         self.app_page.run_task(self.show_and_hide)
 
     async def show_and_hide(self):
-        # Hiệu ứng trượt xuống
         await asyncio.sleep(0.1)
+        if not self.page: return 
         self.top = 20
         self.opacity = 1
-        self.update()
+        try: self.update()
+        except: pass
 
-        # Chờ theo thời gian tùy chỉnh
         await asyncio.sleep(self.duration_ms / 1000.0)
 
-        # Hiệu ứng trượt lên và mờ đi
+        if not self.page: return 
         self.top = -100
         self.opacity = 0
-        self.update()
+        try: self.update()
+        except: pass
         
-        # Xóa khỏi bộ nhớ sau khi ẩn xong
         await asyncio.sleep(0.6)
-        if self in self.app_page.overlay:
-            self.app_page.overlay.remove(self)
-            self.app_page.update()
+        try:
+            if self in self.app_page.overlay:
+                self.app_page.overlay.remove(self)
+                self.app_page.update()
+        except: pass
             
 def play_sound_success(page):
     audio = fta.Audio(src="assets/sounds/sound-success.mp3", autoplay=True)
@@ -74,15 +78,18 @@ def play_sound_success(page):
     if hasattr(page, 'services'):
         page.services.append(audio)
     else:
-        page.overlay.append(audio) # Chỉ là phương án dự phòng
+        page.overlay.append(audio) 
         
-    # Dọn dẹp rác bộ nhớ sau khi phát xong để chống giật lag app
     async def clean_up_audio():
-        # Chờ 2 giây cho âm thanh phát xong (em có thể tăng giảm tùy độ dài file mp3)
         await asyncio.sleep(2) 
-        if hasattr(page, 'services') and audio in page.services:
-            page.services.remove(audio)
-            page.update()
+        try:
+            if hasattr(page, 'services') and audio in page.services:
+                page.services.remove(audio)
+                page.update()
+            elif audio in page.overlay:
+                page.overlay.remove(audio)
+                page.update()
+        except: pass
             
     page.run_task(clean_up_audio)
     
@@ -92,31 +99,24 @@ def play_sound_error(page):
     if hasattr(page, 'services'):
         page.services.append(audio)
     else:
-        page.overlay.append(audio) # Chỉ là phương án dự phòng
+        page.overlay.append(audio) 
         
-    # Dọn dẹp rác bộ nhớ sau khi phát xong để chống giật lag app
     async def clean_up_audio():
-        # Chờ 2 giây cho âm thanh phát xong (em có thể tăng giảm tùy độ dài file mp3)
         await asyncio.sleep(2) 
-        if hasattr(page, 'services') and audio in page.services:
-            page.services.remove(audio)
-            page.update()
+        try:
+            if hasattr(page, 'services') and audio in page.services:
+                page.services.remove(audio)
+                page.update()
+            elif audio in page.overlay:
+                page.overlay.remove(audio)
+                page.update()
+        except: pass
             
     page.run_task(clean_up_audio)
 
 def show_top_notification(page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=SECONDARY_COLOR, sound=None):
-    """
-    Hàm gọi nhanh thông báo
-
-    sound: 
-        S - Success
-        E - Error
-
-    """
     notif = TopNotification(page, title, message, duration_ms, color)
     page.overlay.append(notif)
-    
-     
     
     if sound == "S":
         play_sound_success(page)

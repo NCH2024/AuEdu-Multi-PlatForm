@@ -17,6 +17,16 @@ from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, BG_COLOR
 
 async def main(page: ft.Page):
     page.title = "AuEdu Multi-Platform"
+    
+    # --- CẤU HÌNH WINDOWS / MAC / MOBILE CHO FLET 0.82.2 ---
+    if page.platform == ft.PagePlatform.MACOS:
+        # Trên Mac: Ẩn thanh tiêu đề nhưng giữ lại 3 nút đèn giao thông (Apple chuẩn mực)
+        page.window.title_bar_style = ft.WindowTitleBarStyle.HIDDEN
+    elif page.platform == ft.PagePlatform.WINDOWS:
+        # Trên Windows: Ẩn hoàn toàn viền để lát nữa mình tự vẽ thanh Header tuỳ chỉnh
+        page.window.title_bar_hidden = True
+    
+    # Cấu hình thanh Status Bar cho Mobile (em đã làm rất tốt chỗ này)
     page.theme = ft.Theme(
         system_overlay_style=ft.SystemOverlayStyle(
             status_bar_color=ft.Colors.TRANSPARENT, 

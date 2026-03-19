@@ -32,7 +32,6 @@ class LoginPage(ft.Container):
             label="Tên đăng nhập / Email", 
             prefix_icon=ft.Icons.PERSON_OUTLINE_ROUNDED,
             border_radius=12, 
-            bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.WHITE),
             color=SECONDARY_COLOR,
             border_color=ft.Colors.TRANSPARENT,
             focused_border_color=ACCENT_COLOR,
@@ -48,7 +47,6 @@ class LoginPage(ft.Container):
             password=True, 
             can_reveal_password=True, 
             border_radius=12, 
-            bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.WHITE),
             color=SECONDARY_COLOR,
             border_color=ft.Colors.TRANSPARENT,
             focused_border_color=ACCENT_COLOR,
@@ -95,7 +93,7 @@ class LoginPage(ft.Container):
         self.app_page.run_task(self.load_cached_accounts)
 
     # ==========================================
-    # QUẢN LÝ GIAO DIỆN
+    # QUẢN LÝ GIAO DIỆN CHÍNH & THÍCH ỨNG
     # ==========================================
     async def load_cached_accounts(self):
         prefs = ft.SharedPreferences()
@@ -105,41 +103,85 @@ class LoginPage(ft.Container):
         self.build_ui()
 
     def build_ui(self):
+        is_mobile = self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS] or (self.app_page.width and self.app_page.width < 768)
+
+        # Cập nhật nền Input tuỳ vào thiết bị (Điện thoại dùng xám nhạt cho phẳng)
+        bg_input = ft.Colors.GREY_100 if is_mobile else ft.Colors.with_opacity(0.8, ft.Colors.WHITE)
+        self.tf_username.bgcolor = bg_input
+        self.tf_password.bgcolor = bg_input
+
         if self.saved_accounts and not self.selected_account:
             login_form_content = self.build_multi_account_view()
         else:
             login_form_content = self.build_standard_login_form()
 
+        # THÍCH ỨNG: Khối bọc form đăng nhập
+        login_card = ft.Container(
+            width=self.min_width_carousel + 40 if is_mobile else 420, 
+            padding=ft.Padding(20, 40, 20, 40) if is_mobile else ft.Padding(40, 50, 40, 50),
+            alignment=ft.Alignment(0,0),
+            border_radius=24,
+            content=login_form_content
+        )
+
+        if is_mobile:
+            # Cho Mobile: Ép phẳng, bỏ blur, bo viền trắng nhạt, shadow cực thấp
+            login_card.bgcolor = ft.Colors.WHITE
+            login_card.border = ft.Border.all(1, ft.Colors.BLACK_12)
+            login_card.shadow = ft.BoxShadow(spread_radius=0, blur_radius=4, color=ft.Colors.with_opacity(0.05, ft.Colors.BLACK), offset=ft.Offset(0, 2))
+        else:
+            # Cho PC: Kính mờ siêu cấp lộng lẫy
+            login_card.bgcolor = ft.Colors.with_opacity(0.80, ft.Colors.WHITE)
+            login_card.blur = 5
+            login_card.border = ft.Border.all(2, ft.Colors.WHITE)                   
+            login_card.shadow = ft.BoxShadow(spread_radius=2, blur_radius=20, color=ft.Colors.with_opacity(0.2, ft.Colors.BLACK), offset=ft.Offset(0, 10))
+
         login_form = ft.Column(
-            horizontal_alignment="center", alignment="center", spacing=5,
+            horizontal_alignment="center", alignment="center", spacing=15,
             controls=[
-                ft.Container(
-                    width=420, 
-                    # ĐÃ XÓA height=500 Ở ĐÂY ĐỂ KHUNG TỰ ĐỘNG CO GIÃN THEO NỘI DUNG
-                    padding=ft.Padding(40, 50, 40, 50),
-                    alignment=ft.Alignment(0,0),
-                    bgcolor=ft.Colors.with_opacity(0.80, ft.Colors.WHITE), blur=5,
-                    border_radius=24, border=ft.Border.all(2, ft.Colors.WHITE),                   
-                    shadow=ft.BoxShadow(spread_radius=2, blur_radius=20, color=ft.Colors.with_opacity(0.2, ft.Colors.BLACK), offset=ft.Offset(0, 10)),
-                    content=login_form_content
-                ),
+                login_card,
                 self.auto_slider_banner
             ]
         )
 
-        background_image = ft.Image(
-            src="images/background-desktop.png", height=700, width=1060, fit=ft.BoxFit.COVER,
-            filter_quality=ft.FilterQuality.HIGH, expand=True
+        # BỔ SUNG: Nút "X" cho cửa sổ Windows ở màn hình Đăng nhập
+        btn_close_windows = ft.Container(visible=False)
+        if self.app_page.platform == ft.PagePlatform.WINDOWS:
+            btn_style_close = ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=0),
+                overlay_color=ft.Colors.RED_600,
+                color={ft.ControlState.HOVERED: ft.Colors.WHITE, ft.ControlState.DEFAULT: ft.Colors.BLACK_87},
+                padding=10
+            )
+            async def handle_login_close(e):
+                await self.app_page.window.close()
+            
+            btn_close_windows = ft.Container(
+                top=0, right=0,
+                content=ft.IconButton(ft.Icons.CLOSE, icon_size=16, style=btn_style_close, width=45, height=35, on_click=handle_login_close)
+            )
+
+        ui_content = ft.Container(
+            expand=True,
+            image=ft.DecorationImage(
+                src="images/background-mobile.png" if is_mobile else "images/background-desktop.png",
+                fit=ft.BoxFit.COVER, # Đảm bảo ảnh luôn phủ kín toàn bộ 4 góc
+            ),
+            content=ft.Stack(
+                controls=[
+                    ft.Container(content=login_form, alignment=ft.Alignment(0, 0), expand=True, padding=20),
+                    btn_close_windows
+                ],
+                expand=True
+            )
         )
         
-        ui_content = ft.Stack(
-            controls=[
-                background_image,
-                ft.Container(content=login_form, alignment=ft.Alignment(0, 0), expand=True, padding=20)
-            ],
-            expand=True
-        )
-        self.content.content = ft.WindowDragArea(content=ui_content, expand=True)
+        # THÍCH ỨNG: Không dùng WindowDragArea trên thiết bị cảm ứng
+        if self.app_page.platform == ft.PagePlatform.WINDOWS:
+            self.content.content = ft.WindowDragArea(content=ui_content, expand=True)
+        else:
+            self.content.content = ui_content
+            
         self.update()
 
     def build_multi_account_view(self):
@@ -228,7 +270,6 @@ class LoginPage(ft.Container):
         self.build_ui()
 
     def request_remove_account(self, e):
-        """Mở hộp thoại xác nhận trước khi xóa"""
         email_to_remove = e.control.data
         show_confirm_dialog(
             page=self.app_page,
@@ -238,7 +279,6 @@ class LoginPage(ft.Container):
         )
 
     async def execute_remove_account(self, email_to_remove):
-        """Thực thi xóa tài khoản và hiện thông báo nổi"""
         self.saved_accounts = [acc for acc in self.saved_accounts if acc["email"] != email_to_remove]
         prefs = ft.SharedPreferences()
         await prefs.set("saved_accounts", json.dumps(self.saved_accounts))

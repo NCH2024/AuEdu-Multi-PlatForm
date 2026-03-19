@@ -1,5 +1,5 @@
 import flet as ft
-from core.theme import PRIMARY_COLOR
+from core.theme import PRIMARY_COLOR, SECONDARY_COLOR
 
 class CustomDropdown(ft.Dropdown):
     def __init__(self, label: str, options: list[ft.dropdown.Option], col=None, value=None, on_change=None):
@@ -9,20 +9,21 @@ class CustomDropdown(ft.Dropdown):
         self.col = col
         self.value = value
         
-        self.on_select = on_change 
+        self.on_change = on_change 
         
-        self.border_radius = 8
-        self.border_color = ft.Colors.with_opacity(0.1, ft.Colors.BLACK)
-        self.focused_border_color = PRIMARY_COLOR
-        self.bgcolor = ft.Colors.WHITE
-        self.color = ft.Colors.BLACK_87 
+        self.border_radius = 10
+        self.border_width = 1
+        self.border_color = ft.Colors.BLACK_12
+        self.focused_border_color = SECONDARY_COLOR
+        self.bgcolor = ft.Colors.GREY_50
+        self.color = SECONDARY_COLOR 
         
-        self.label_style = ft.TextStyle(color=ft.Colors.GREY_600, size=13)
+        self.label_style = ft.TextStyle(color=ft.Colors.GREY_600, size=12, weight=ft.FontWeight.W_500)
         self.text_size = 13
         
         self.dense = True 
         self.filled = True 
         
         self.menu_height = 250 
-        
-        self.content_padding = ft.Padding(0,0,0,0)
+        self.content_padding = ft.Padding.symmetric(horizontal=15, vertical=10)
+        self.icon_enabled_color = SECONDARY_COLOR

@@ -38,7 +38,6 @@ class SchedulePage(ft.Container):
         self.calendar_area_container = ft.Container()
         self.schedule_list = ScheduleDetailList()
 
-        # Đã loại bỏ LoadingOverlay để dùng Zero-latency UI
         main_ui = self.build_ui()
         self.content = ft.Stack(
             controls=[main_ui],
@@ -51,17 +50,11 @@ class SchedulePage(ft.Container):
     async def initialize_data(self):
         prefs = ft.SharedPreferences()
         
-        # ==============================
-        # 0. USER SESSION
-        # ==============================
         session_str = await prefs.get("user_session")
         if session_str:
             session = safe_json_load(session_str)
             self.gv_id = session.get("id", "N/A")
 
-        # ==============================
-        # 1. LOAD CACHE
-        # ==============================
         cached_tuan_hoc = safe_json_load(await prefs.get("cached_tuan_hoc"))
         cached_schedule = safe_json_load(await prefs.get(f"cached_schedule_{self.gv_id}"))
 
@@ -70,35 +63,22 @@ class SchedulePage(ft.Container):
         cached_schedule_hash = await prefs.get(f"schedule_hash_{self.gv_id}")
 
         current_time = time.time()
-        TTL = 21600  # 6 tiếng
+        TTL = 21600  
 
-        # ==============================
-        # STEP 1: HIỂN THỊ CACHE NGAY
-        # ==============================
         if cached_tuan_hoc is not None and cached_schedule is not None:
             self.tuan_hoc_data = cached_tuan_hoc
             self.raw_schedule_data = cached_schedule
             await self._async_rebuild_entire_ui()
-            # print("SCHEDULE: Đã tải dữ liệu từ Cache lên giao diện cực nhanh!")
 
-        # ==============================
-        # STEP 2: CHECK TTL
-        # ==============================
         if current_time - last_sync < TTL:
-            # print("SCHEDULE: Cache còn hạn 6 tiếng, KHÔNG gọi API!")
             return
 
-        # ==============================
-        # STEP 3: CALL API (BACKGROUND)
-        # ==============================
         try:
             async with await get_supabase_client() as client:
-                # ---- TUẦN HỌC ----
                 res_th = await client.get("/tuan_hoc", params={"select": "*", "order": "id.asc"})
                 res_th.raise_for_status()
                 fresh_tuan_hoc = res_th.json()
 
-                # ---- LỊCH DẠY CỦA GIẢNG VIÊN ----
                 fresh_raw_schedule = []
                 if self.gv_id != "N/A":
                     res_tkb = await client.get("/thoikhoabieu", params={"select": "id,hocphan(tenhocphan),lop(tenlop)", "giangvien_id": f"eq.{self.gv_id}"})
@@ -139,9 +119,6 @@ class SchedulePage(ft.Container):
                                     "type_color": card_color,
                                 })
 
-            # ==============================
-            # STEP 4: HASH COMPARE
-            # ==============================
             new_tuan_hoc_hash = hash_data(fresh_tuan_hoc)
             new_schedule_hash = hash_data(fresh_raw_schedule)
 
@@ -150,9 +127,6 @@ class SchedulePage(ft.Container):
                 new_schedule_hash != cached_schedule_hash
             )
 
-            # ==============================
-            # STEP 5: UPDATE CACHE
-            # ==============================
             await prefs.set("cached_tuan_hoc", json.dumps(fresh_tuan_hoc))
             await prefs.set(f"cached_schedule_{self.gv_id}", json.dumps(fresh_raw_schedule))
 
@@ -161,19 +135,12 @@ class SchedulePage(ft.Container):
 
             await prefs.set(f"last_sync_schedule_{self.gv_id}", str(current_time))
 
-            # ==============================
-            # STEP 6: UPDATE UI IF CHANGED
-            # ==============================
             if is_changed or cached_tuan_hoc is None:
-                print("SCHEDULE [SYNC] ... đang đồng bộ dữ liệu lịch học mới ...")
                 self.tuan_hoc_data = fresh_tuan_hoc
                 self.raw_schedule_data = fresh_raw_schedule
                 await self._async_rebuild_entire_ui()
-            else:
-                print("SCHEDULE [SYNC] Dữ liệu chuẩn xác")
 
         except Exception as e:
-            print("SCHEDULE ERROR:", e)
             show_top_notification(self.app_page, "SCHEDULE [Lỗi kết nối mạng]", "Không thể tải lịch học mới nhất!", 4000, color=ft.Colors.RED)
 
     async def _async_rebuild_entire_ui(self):
@@ -455,7 +422,7 @@ class SchedulePage(ft.Container):
             controls=[
                 self.toolbar_container,
                 self.calendar_area_container,
-                ft.Container(content=self.schedule_list, expand=True), 
+                ft.Container(content=self.schedule_list, height=500), 
             ],
         )
         

@@ -3,7 +3,7 @@ import asyncio
 from flet import UrlLauncher
 
 from components.options.alert_dialog import show_alert_dialog
-from core.theme import get_glass_container, PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
+from core.theme import adaptive_container, PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
 
 class AboutPage(ft.Container):
     def __init__(self, page: ft.Page):
@@ -13,17 +13,17 @@ class AboutPage(ft.Container):
 
         self.content = self.build_ui()
         
-    async def open_github(e):
+    async def open_github(self, e):
         await UrlLauncher().launch_url(
             "https://github.com/NCH2024/AuEdu-Multi-PlatForm.git"
         )
         
-    async def open_settings(e):
+    async def open_settings(self, e):
         await UrlLauncher().launch_url(
             "app-settings:"
         )
         
-    async def open_mail(e):
+    async def open_mail(self, e):
         await UrlLauncher().launch_url(
             "mailto:chanhhiep.vn+auedu@gmail.com"
             "?subject=Hỗ trợ ứng dụng AuEdu"
@@ -31,22 +31,19 @@ class AboutPage(ft.Container):
         )
         
     def build_ui(self):
-        # ==========================================
-        # KHỐI 1: LOGO VÀ THÔNG TIN CHÍNH
-        # ==========================================
-        info_card = get_glass_container(
+        info_card = adaptive_container(
+            page=self.app_page,
+            padding=ft.Padding(20, 30, 20, 30),
             content=ft.Column(
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=5,
+                spacing=8,
                 controls=[
-                    # Logo bo tròn góc nhẹ nhàng
                     ft.Container(
-                        content=ft.Image(src="splash.png", width=150, height=150, fit=ft.BoxFit.CONTAIN),
+                        content=ft.Image(src="splash.png", width=120, height=120, fit=ft.BoxFit.CONTAIN),
                     ),
-                    
-                    ft.Text("AuEdu Multi FlatForm", size=22, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR),
-                    ft.Text("Phiên bản: 1.0.0 (Release Build)", size=13, color=ft.Colors.GREY_600, weight=ft.FontWeight.W_500),
+                    ft.Text("AuEdu Multi-Platform", size=22, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR),
+                    ft.Text("Phiên bản: 1.0.0 (Release Build)", size=12, color=ft.Colors.GREY_500, weight=ft.FontWeight.W_500),
                     
                     ft.Divider(color=ft.Colors.BLACK_12, height=20),
                     
@@ -54,83 +51,74 @@ class AboutPage(ft.Container):
                             text_align=ft.TextAlign.CENTER, size=13, color=ft.Colors.BLACK_87),
                     
                     ft.Container(height=5),
-                    ft.Text("Phát triển bởi: Nguyễn Chánh Hiệp (223408)", size=14, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR),
+                    ft.Text("Phát triển bởi: Nguyễn Chánh Hiệp (223408)", size=13, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR),
                     ft.Text("Lớp 22TIN-TT", size=12, weight=ft.FontWeight.W_500, color=SECONDARY_COLOR),
                     ft.Text("Trường Công nghệ số & Trí tuệ nhân tạo DNC", size=12, weight=ft.FontWeight.W_400, color=ft.Colors.GREY_600),
                     
                     ft.Container(height=10),
                     
-                    # Nút Kiểm tra cập nhật nổi bật
                     ft.Button(
                         content=ft.Row([
                             ft.Icon(ft.Icons.UPDATE_ROUNDED, size=18, color=ft.Colors.WHITE), 
-                            ft.Text("Kiểm tra cập nhật", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD)
+                            ft.Text("Kiểm tra cập nhật", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13)
                         ], alignment=ft.MainAxisAlignment.CENTER),
                         bgcolor=SECONDARY_COLOR,
                         height=45,
-                        width=250,
+                        width=220,
                         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=25)),
                         on_click=lambda e: show_alert_dialog(self, "Cập nhật", 
-                                                             ft.Text("Phiên bản đang là phiên bản mới nhất!", size=14))
+                                                             ft.Text("Phiên bản đang là phiên bản mới nhất!", size=13))
                     )
                 ]
             )
         )
 
-        # ==========================================
-        # KHỐI 2: CÁC NÚT TÙY CHỌN (Quyền & Giấy phép)
-        # ==========================================
-        action_card = get_glass_container(
-            padding=10,
+        action_card = adaptive_container(
+            page=self.app_page,
+            padding=ft.Padding(5, 10, 5, 10),
             content=ft.Column(
                 spacing=0,
                 controls=[
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.SECURITY_ROUNDED, color=SECONDARY_COLOR),
-                        title=ft.Text("Quyền ứng dụng", weight=ft.FontWeight.BOLD, size=14, color=SECONDARY_COLOR),
-                        subtitle=ft.Text("Xem các quyền truy cập Camera, Mạng...", size=12),
+                        title=ft.Text("Quyền ứng dụng", weight=ft.FontWeight.BOLD, size=13, color=SECONDARY_COLOR),
+                        subtitle=ft.Text("Xem các quyền truy cập Camera, Mạng...", size=11),
                         trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, color=SECONDARY_COLOR),
                         on_click=self.open_settings
                     ),
                     ft.Divider(height=1, color=ft.Colors.BLACK_12),
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.VERIFIED_USER_OUTLINED, color=SECONDARY_COLOR),
-                        title=ft.Text("Bản quyền phần mềm", weight=ft.FontWeight.BOLD, size=14, color=SECONDARY_COLOR),
-                        subtitle=ft.Text("Giấy phép sử dụng và điều khoản", size=12),
+                        title=ft.Text("Bản quyền phần mềm", weight=ft.FontWeight.BOLD, size=13, color=SECONDARY_COLOR),
+                        subtitle=ft.Text("Giấy phép sử dụng và điều khoản", size=11),
                         trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, color=SECONDARY_COLOR),
                         on_click=lambda e: show_alert_dialog(self, "Giấy phép & Điều khoản", 
                                                              ft.Column(
-                                                                tight=True,
-                                                                controls=[
-                                                                    ft.Text("Giấy Phép", 
-                                                                            size=16, 
-                                                                            weight=ft.FontWeight.BOLD,
-                                                                            color=SECONDARY_COLOR),
-                                                                    ft.Text("• Được hội đồng Trường Công nghệ số và Trí tuệ nhân tạo chấp thuận sử dụng trong phạm vi dự án", size=14),
-                                                                    ft.Text("• Công bố rộng rãi và chấp nhận sử dụng từ người dùng thử nghiệm", size=14),
-                                                                    ft.Container(height=5),
-                                                                    ft.Text("Điều khoản", 
-                                                                            size=16, 
-                                                                            weight=ft.FontWeight.BOLD,
-                                                                            color=SECONDARY_COLOR),
-                                                                    ft.Text("• Xem điều khoản sữ dụng tại đường dẫn GitHub của dự án!", size=14),
-                                                                    
-                                                                ]
+                                                                 tight=True,
+                                                                 spacing=5,
+                                                                 controls=[
+                                                                     ft.Text("Giấy Phép", size=14, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR),
+                                                                     ft.Text("• Được hội đồng Trường Công nghệ số và Trí tuệ nhân tạo chấp thuận sử dụng trong phạm vi dự án", size=12),
+                                                                     ft.Text("• Công bố rộng rãi và chấp nhận sử dụng từ người dùng thử nghiệm", size=12),
+                                                                     ft.Container(height=5),
+                                                                     ft.Text("Điều khoản", size=14, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR),
+                                                                     ft.Text("• Xem điều khoản sử dụng tại đường dẫn GitHub của dự án!", size=12),
+                                                                 ]
                                                              ))
                     ),
                     ft.Divider(height=1, color=ft.Colors.BLACK_12),
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.DATA_OBJECT, color=SECONDARY_COLOR),
-                        title=ft.Text("GitHub dự án AuEdu", weight=ft.FontWeight.BOLD, size=14, color=SECONDARY_COLOR),
-                        subtitle=ft.Text("Kho lưu trữ dự án và thông tin chi tiết phát hành phiên bản phần mềm", size=12),
+                        title=ft.Text("GitHub dự án AuEdu", weight=ft.FontWeight.BOLD, size=13, color=SECONDARY_COLOR),
+                        subtitle=ft.Text("Kho lưu trữ dự án và thông tin chi tiết", size=11),
                         trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, color=SECONDARY_COLOR),
                         on_click=self.open_github
                     ),
                     ft.Divider(height=1, color=ft.Colors.BLACK_12),
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.MAIL_OUTLINED, color=SECONDARY_COLOR),
-                        title=ft.Text("Liên hệ với nhà phát triển", weight=ft.FontWeight.BOLD, size=14, color=SECONDARY_COLOR),
-                        subtitle=ft.Text("Gửi thông tin và báo lỗi phần mềm qua địa chỉ Mail liên hệ", size=12),
+                        title=ft.Text("Liên hệ phát triển", weight=ft.FontWeight.BOLD, size=13, color=SECONDARY_COLOR),
+                        subtitle=ft.Text("Gửi thông tin và báo lỗi qua Mail", size=11),
                         trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, color=SECONDARY_COLOR),
                         on_click=self.open_mail
                     )
@@ -138,17 +126,21 @@ class AboutPage(ft.Container):
             )
         )
 
-        # Lắp ráp bố cục tổng thể
-        main_layout = ft.Column(
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        main_layout = ft.ResponsiveRow(
+            alignment=ft.MainAxisAlignment.CENTER,
             controls=[
-                info_card,
-                action_card
+                ft.Column(
+                    col={"sm": 12, "md": 8, "lg": 6, "xl": 5},
+                    spacing=15,
+                    controls=[
+                        info_card,
+                        action_card
+                    ]
+                )
             ]
         )
 
         return main_layout
-
 
     def _show_snackbar(self, message: str):
         self.app_page.overlay.append(ft.SnackBar(content=ft.Text(message), bgcolor=SECONDARY_COLOR, open=True))
