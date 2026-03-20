@@ -5,40 +5,47 @@ from components.options.carousel_banner import CarouselBanner
 from components.options.top_notification import show_top_notification
 from components.options.confirm_dialog import show_confirm_dialog
 from core.config import get_supabase_client, SUPABASE_URL, SUPABASE_KEY
-from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR, TEXT_MAIN
+
+# Nhập hệ thống Theme phẳng mới của chúng ta
+from core.theme import current_theme
 
 class LoginPage(ft.Container):
     def __init__(self, page: ft.Page):
         super().__init__()
         self.app_page = page
+        
+        # 1. KHÔNG GIAN PHẲNG TUYỆT ĐỐI: Đặt ảnh nền thẳng vào lớp gốc
         self.expand = True
         self.padding = 0
+        
+        is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS] or (page.width and page.width < 768)
+        self.min_width_carousel = 320 if is_mobile else 420
+        
+        # ẢNH NỀN HIỂN THỊ TRỰC TIẾP 100%
+        self.image = ft.DecorationImage(
+            src="images/background-mobile.png" if is_mobile else "images/background-desktop.png",
+            fit=ft.BoxFit.COVER,
+        )
         
         self.saved_accounts = []
         self.selected_account = None
         
-        def is_mobile(page: ft.Page):
-            return page.platform in ["android", "ios"] or (page.width and page.width < 768)
+        # 2. CÁC THÀNH PHẦN INPUT 
+        # (Nền TextField được làm mờ nhẹ một chút xíu để chữ không bị lẫn vào chi tiết ảnh)
+        input_bg = ft.Colors.with_opacity(0.85, current_theme.surface_color)
         
-        if is_mobile(self.app_page):
-            self.min_width_carousel = 320
-        else:
-            self.min_width_carousel = 420
-
-        # ==========================================
-        # 1. CÁC THÀNH PHẦN INPUT 
-        # ==========================================
         self.tf_username = ft.TextField(
             label="Tên đăng nhập / Email", 
             prefix_icon=ft.Icons.PERSON_OUTLINE_ROUNDED,
             border_radius=12, 
-            color=SECONDARY_COLOR,
+            color=current_theme.text_main,
+            bgcolor=input_bg, 
             border_color=ft.Colors.TRANSPARENT,
-            focused_border_color=ACCENT_COLOR,
+            focused_border_color=current_theme.primary,
             filled=True,
             height=55,
             text_size=14,
-            cursor_color=SECONDARY_COLOR
+            cursor_color=current_theme.primary
         )
         
         self.tf_password = ft.TextField(
@@ -47,23 +54,22 @@ class LoginPage(ft.Container):
             password=True, 
             can_reveal_password=True, 
             border_radius=12, 
-            color=SECONDARY_COLOR,
+            color=current_theme.text_main,
+            bgcolor=input_bg,
             border_color=ft.Colors.TRANSPARENT,
-            focused_border_color=ACCENT_COLOR,
+            focused_border_color=current_theme.primary,
             filled=True,
             height=55,
             text_size=14,
-            cursor_color=SECONDARY_COLOR
+            cursor_color=current_theme.primary
         )
         
         self.btn_login = ft.Button(
             content=ft.Text("Đăng nhập", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15),
-            bgcolor=SECONDARY_COLOR, 
+            bgcolor=current_theme.primary, 
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=12),
                 padding=ft.Padding(0, 18, 0, 18),
-                elevation=5,
-                shadow_color=SECONDARY_COLOR
             ),
             width=320, 
             on_click=self.handle_login
@@ -89,12 +95,8 @@ class LoginPage(ft.Container):
             width=self.min_width_carousel, height=80, interval=4
         )
         
-        self.content = ft.Container(expand=True)
         self.app_page.run_task(self.load_cached_accounts)
 
-    # ==========================================
-    # QUẢN LÝ GIAO DIỆN CHÍNH & THÍCH ỨNG
-    # ==========================================
     async def load_cached_accounts(self):
         prefs = ft.SharedPreferences()
         accounts_str = await prefs.get("saved_accounts")
@@ -105,52 +107,41 @@ class LoginPage(ft.Container):
     def build_ui(self):
         is_mobile = self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS] or (self.app_page.width and self.app_page.width < 768)
 
-        # Cập nhật nền Input tuỳ vào thiết bị (Điện thoại dùng xám nhạt cho phẳng)
-        bg_input = ft.Colors.GREY_100 if is_mobile else ft.Colors.with_opacity(0.8, ft.Colors.WHITE)
-        self.tf_username.bgcolor = bg_input
-        self.tf_password.bgcolor = bg_input
-
         if self.saved_accounts and not self.selected_account:
             login_form_content = self.build_multi_account_view()
         else:
             login_form_content = self.build_standard_login_form()
 
-        # THÍCH ỨNG: Khối bọc form đăng nhập
-        login_card = ft.Container(
-            width=self.min_width_carousel + 40 if is_mobile else 420, 
-            padding=ft.Padding(20, 40, 20, 40) if is_mobile else ft.Padding(40, 50, 40, 50),
-            alignment=ft.Alignment(0,0),
-            border_radius=24,
-            content=login_form_content
-        )
-
-        if is_mobile:
-            # Cho Mobile: Ép phẳng, bỏ blur, bo viền trắng nhạt, shadow cực thấp
-            login_card.bgcolor = ft.Colors.WHITE
-            login_card.border = ft.Border.all(1, ft.Colors.BLACK_12)
-            login_card.shadow = ft.BoxShadow(spread_radius=0, blur_radius=4, color=ft.Colors.with_opacity(0.05, ft.Colors.BLACK), offset=ft.Offset(0, 2))
-        else:
-            # Cho PC: Kính mờ siêu cấp lộng lẫy
-            login_card.bgcolor = ft.Colors.with_opacity(0.80, ft.Colors.WHITE)
-            login_card.blur = 5
-            login_card.border = ft.Border.all(2, ft.Colors.WHITE)                   
-            login_card.shadow = ft.BoxShadow(spread_radius=2, blur_radius=20, color=ft.Colors.with_opacity(0.2, ft.Colors.BLACK), offset=ft.Offset(0, 10))
-
-        login_form = ft.Column(
-            horizontal_alignment="center", alignment="center", spacing=15,
+        # Dàn dọc trực tiếp các thành phần, ĐẶT THẲNG LÊN NỀN ẢNH (Không dùng lớp phủ)
+        main_column = ft.Column(
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=25,
             controls=[
-                login_card,
+                ft.Container(
+                    content=login_form_content,
+                    width=self.min_width_carousel + 40 if is_mobile else 420,
+                    alignment=ft.Alignment(0,0)
+                ),
                 self.auto_slider_banner
             ]
         )
 
-        # BỔ SUNG: Nút "X" cho cửa sổ Windows ở màn hình Đăng nhập
+        # Container trong suốt dùng để căn giữa nội dung và tạo khoảng cách với lề
+        content_wrapper = ft.Container(
+            expand=True,
+            alignment=ft.Alignment(0, 0),
+            padding=ft.Padding(20, 20, 20, 20),
+            content=main_column
+        )
+
+        # Nút X đóng ứng dụng riêng cho Windows
         btn_close_windows = ft.Container(visible=False)
         if self.app_page.platform == ft.PagePlatform.WINDOWS:
             btn_style_close = ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=0),
                 overlay_color=ft.Colors.RED_600,
-                color={ft.ControlState.HOVERED: ft.Colors.WHITE, ft.ControlState.DEFAULT: ft.Colors.BLACK_87},
+                color={ft.ControlState.HOVERED: ft.Colors.WHITE, ft.ControlState.DEFAULT: current_theme.text_main},
                 padding=10
             )
             async def handle_login_close(e):
@@ -161,26 +152,17 @@ class LoginPage(ft.Container):
                 content=ft.IconButton(ft.Icons.CLOSE, icon_size=16, style=btn_style_close, width=45, height=35, on_click=handle_login_close)
             )
 
-        ui_content = ft.Container(
-            expand=True,
-            image=ft.DecorationImage(
-                src="images/background-mobile.png" if is_mobile else "images/background-desktop.png",
-                fit=ft.BoxFit.COVER, # Đảm bảo ảnh luôn phủ kín toàn bộ 4 góc
-            ),
-            content=ft.Stack(
-                controls=[
-                    ft.Container(content=login_form, alignment=ft.Alignment(0, 0), expand=True, padding=20),
-                    btn_close_windows
-                ],
+        # GẮN VÀO ROOT
+        if self.app_page.platform == ft.PagePlatform.WINDOWS:
+            self.content = ft.WindowDragArea(
+                content=ft.Stack(
+                    controls=[content_wrapper, btn_close_windows],
+                    expand=True,
+                ), 
                 expand=True
             )
-        )
-        
-        # THÍCH ỨNG: Không dùng WindowDragArea trên thiết bị cảm ứng
-        if self.app_page.platform == ft.PagePlatform.WINDOWS:
-            self.content.content = ft.WindowDragArea(content=ui_content, expand=True)
         else:
-            self.content.content = ui_content
+            self.content = content_wrapper
             
         self.update()
 
@@ -189,11 +171,11 @@ class LoginPage(ft.Container):
         
         for acc in self.saved_accounts:
             acc_card = ft.Container(
-                bgcolor=ft.Colors.WHITE, border_radius=12, border=ft.Border.all(1, ft.Colors.BLACK_12),
+                bgcolor=ft.Colors.with_opacity(0.85, current_theme.surface_color), border_radius=12, border=ft.Border.all(1, ft.Colors.TRANSPARENT),
                 content=ft.ListTile(
-                    leading=ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=ft.Colors.WHITE), bgcolor=SECONDARY_COLOR),
-                    title=ft.Text(acc["name"], weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR, size=14),
-                    subtitle=ft.Text(acc["email"], size=12, color=ft.Colors.GREY_600),
+                    leading=ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=ft.Colors.WHITE), bgcolor=current_theme.primary),
+                    title=ft.Text(acc["name"], weight=ft.FontWeight.BOLD, color=current_theme.text_main, size=14),
+                    subtitle=ft.Text(acc["email"], size=12, color=current_theme.text_muted),
                     trailing=ft.IconButton(ft.Icons.CANCEL_OUTLINED, icon_color=ft.Colors.RED_400, data=acc["email"], tooltip="Gỡ tài khoản", on_click=self.request_remove_account),
                     on_click=lambda e, a=acc: self.select_account_to_login(a)
                 )
@@ -204,25 +186,25 @@ class LoginPage(ft.Container):
             content=ft.Row(
                 alignment=ft.MainAxisAlignment.CENTER,
                 controls=[
-                    ft.Icon(ft.Icons.ADD_CIRCLE_OUTLINE, color=ACCENT_COLOR, size=20), 
-                    ft.Text("Đăng nhập bằng tài khoản khác", color=ACCENT_COLOR, weight=ft.FontWeight.BOLD)
-                ]
-            ),
+                    ft.Icon(ft.Icons.ADD_CIRCLE_OUTLINE, color=current_theme.bg_color, size=20), 
+                    ft.Text("Đăng nhập bằng tài khoản khác", color=current_theme.bg_color, weight=ft.FontWeight.BOLD)
+                ],
+                            ),
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=8),
-                overlay_color=ft.Colors.with_opacity(0.1, ACCENT_COLOR)
+                overlay_color=ft.Colors.with_opacity(0.1, current_theme.accent)
             ),
             on_click=self.show_standard_form
         )
 
         return ft.Column(
-            horizontal_alignment="center", spacing=10,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10,
             controls=[
-                ft.Image(src="splash.png", width=100, height=100, fit="contain"),
-                ft.Text("Chọn tài khoản của bạn", size=16, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR),
-                ft.Container(height=5),
+                ft.Image(src="splash.png", width=120, height=120, fit=ft.BoxFit.CONTAIN),
+                ft.Text("Chọn tài khoản của bạn", size=18, weight=ft.FontWeight.BOLD, color=current_theme.text_main),
+                ft.Container(height=10),
                 account_list,
-                ft.Divider(color=ft.Colors.BLACK_12),
+                ft.Divider(color=current_theme.divider_color),
                 btn_other_account
             ]
         )
@@ -231,20 +213,20 @@ class LoginPage(ft.Container):
         btn_back = ft.Container()
         if self.saved_accounts:
             btn_back = ft.IconButton(
-                icon=ft.Icons.ARROW_BACK_IOS_NEW_ROUNDED, icon_color=ft.Colors.GREY_600,
+                icon=ft.Icons.ARROW_BACK_IOS_NEW_ROUNDED, icon_color=current_theme.text_main,
                 tooltip="Quay lại danh sách tài khoản", on_click=self.back_to_multi_account
             )
 
         return ft.Column(
-            horizontal_alignment="center", spacing=5,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10,
             controls=[
                 ft.Row([btn_back, ft.Container(expand=True)], alignment=ft.MainAxisAlignment.START),
-                ft.Container(content=ft.Image(src="splash.png", width=100, height=100, fit="contain"), margin=ft.Margin(0, -30, 0, 0)),
-                ft.Column(horizontal_alignment="center", spacing=0, controls=[ft.Text("Hệ thống điểm danh khuôn mặt AI", size=14, color=ft.Colors.GREY_600, italic=True)]),
-                ft.Container(height=10),
-                self.tf_username, self.tf_password, ft.Container(height=15),
-                self.btn_login, ft.Container(height=5),
-                ft.Text("Trường Công nghệ số & Trí tuệ nhân tạo DNC", size=12, color=ft.Colors.GREY_500, weight=ft.FontWeight.W_500, text_align="center")
+                ft.Image(src="splash.png", width=130, height=130, fit=ft.BoxFit.CONTAIN),
+                ft.Text("Hệ thống điểm danh khuôn mặt AI", size=15, color=current_theme.text_main, weight=ft.FontWeight.W_600),
+                ft.Container(height=15),
+                self.tf_username, self.tf_password, ft.Container(height=10),
+                self.btn_login, ft.Container(height=10),
+                ft.Text("Trường Công nghệ số & Trí tuệ nhân tạo DNC", size=12, color=current_theme.text_muted, weight=ft.FontWeight.W_500, text_align=ft.TextAlign.CENTER)
             ]
         )
 
