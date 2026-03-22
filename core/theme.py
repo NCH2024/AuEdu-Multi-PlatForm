@@ -11,8 +11,8 @@ class AppTheme:
         # ==========================================
         # 1. MÀU CHUNG (Nền, Chữ, Viền) 
         # ==========================================
-        self.bg_color = "#121212" if self.is_dark else "#F9FAFB"
-        self.surface_color = "#1E1E1E" if self.is_dark else "#FFFFFF"
+        self.bg_color = "#383838" if self.is_dark else "#EFEFF0"
+        self.surface_color = "#4E4E4E" if self.is_dark else "#FCFCFC"
         self.text_main = "#F9FAFB" if self.is_dark else "#111827"
         self.text_muted = "#9CA3AF" if self.is_dark else "#6B7280"
         self.divider_color = ft.Colors.with_opacity(0.1, ft.Colors.WHITE if self.is_dark else ft.Colors.BLACK)

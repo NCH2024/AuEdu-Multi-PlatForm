@@ -20,7 +20,7 @@ class BaseDashboard(ft.Container):
 
         self.user_name_text = ft.Text("Đang tải...", size=13, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
         self.page_title_text = ft.Text("TỔNG QUAN", size=15, weight=ft.FontWeight.BOLD)
-        self.content_area = ft.Container(expand=True, padding=ft.Padding(20, 10, 20, 20), alignment=ft.Alignment.TOP_CENTER)
+        self.content_area = ft.Container(expand=True, padding=ft.Padding(10, 10, 10, 10), alignment=ft.Alignment.TOP_CENTER)
         
         self.sidebar_controls = []
         self.bottom_nav_controls = []
@@ -186,8 +186,8 @@ class BaseDashboard(ft.Container):
         # THANH TIÊU ĐỀ: Dùng đúng màu bg_color tĩnh
         return ft.WindowDragArea(
             ft.Container(
-                height=35,
-                bgcolor=theme_module.current_theme.bg_color,
+                height=30,
+                bgcolor=ft.Colors.with_opacity(0.1,theme_module.current_theme.secondary),
                 padding=ft.Padding(15, 0, 0, 0), 
                 content=ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -244,7 +244,7 @@ class BaseDashboard(ft.Container):
 
         header_content = ft.Container(
             padding=ft.Padding(10, 10, 20, 10), 
-            bgcolor=theme_module.current_theme.bg_color,
+            bgcolor=theme_module.current_theme.secondary if is_mobile else theme_module.current_theme.bg_color,
             border=ft.Border(bottom=ft.BorderSide(1, theme_module.current_theme.divider_color)),
             alignment=ft.Alignment.TOP_CENTER,
             content=ft.Row(
@@ -276,9 +276,7 @@ class BaseDashboard(ft.Container):
         scroll_wrapper = ft.Column(
             expand=True, scroll=ft.ScrollMode.AUTO, alignment=ft.MainAxisAlignment.START, 
             controls=[
-                ft.Container(height=10), 
                 self.content_area, 
-                ft.Container(height=80)
             ]
         )
         
