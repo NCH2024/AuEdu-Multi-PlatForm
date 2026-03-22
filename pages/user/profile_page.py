@@ -3,7 +3,7 @@ import json
 import datetime
 import time
 
-from core.theme import get_glass_container, PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR
+from core.theme import current_theme
 from core.config import get_supabase_client
 from core.helper import hash_data, safe_json_load
 from components.options.top_notification import show_top_notification
@@ -13,63 +13,85 @@ class ProfilePage(ft.Container):
         super().__init__()
         self.app_page = page
         self.expand = True
+        self.padding = 0
 
         # ==========================================
         # CÁC BIẾN UI TRẠNG THÁI
         # ==========================================
         self.avatar_icon = ft.Icon(ft.Icons.PERSON, size=50, color=ft.Colors.WHITE)
-        self.name_text = ft.Text("Đang tải...", size=20, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR)
-        self.role_text = ft.Text("...", size=14, weight=ft.FontWeight.W_500, color=ACCENT_COLOR)
+        self.name_text = ft.Text("Đang tải...", size=20, weight=ft.FontWeight.BOLD, color=current_theme.secondary)
+        self.role_text = ft.Text("...", size=14, weight=ft.FontWeight.W_500, color=current_theme.accent)
         
-        self.id_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK_87)
-        self.gender_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK_87)
-        self.phone_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK_87)
-        self.address_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK_87)
-        self.khoa_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK_87)
-        self.join_date_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK_87)
+        self.id_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
+        self.gender_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
+        self.phone_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
+        self.address_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
+        self.khoa_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
+        self.join_date_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
 
-        self.total_classes_val = ft.Text("...", size=30, weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR)
+        self.total_classes_val = ft.Text("...", size=30, weight=ft.FontWeight.BOLD, color=current_theme.secondary)
 
         self.content = self.build_ui()
 
     def did_mount(self):
         self.app_page.run_task(self.load_profile_data)
 
+    def apply_theme(self):
+        """Vẽ lại màu sắc UI khi đổi Theme"""
+        self.name_text.color = current_theme.secondary
+        self.role_text.color = current_theme.accent
+        self.id_val.color = current_theme.text_main
+        self.gender_val.color = current_theme.text_main
+        self.phone_val.color = current_theme.text_main
+        self.address_val.color = current_theme.text_main
+        self.khoa_val.color = current_theme.text_main
+        self.join_date_val.color = current_theme.text_main
+        self.total_classes_val.color = current_theme.secondary
+        
+        self.content = self.build_ui()
+        if self.page: self.update()
+
     def build_ui(self):
-        # Đã thêm hàm async ở đây để khắc phục Warning "was never awaited"
         async def handle_update_click(e):
             await self.app_page.push_route("/user/settings")
+
+        def make_card(content):
+            return ft.Container(
+                content=content, padding=20, 
+                bgcolor=current_theme.surface_color, border_radius=16, 
+                border=ft.Border.all(1, current_theme.divider_color)
+            )
 
         def create_info_row(icon_name, label, value_control):
             return ft.Container(
                 padding=ft.Padding(0, 10, 0, 10),
-                border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.BLACK_12)),
+                border=ft.Border(bottom=ft.BorderSide(1, current_theme.divider_color)),
                 content=ft.Row([
                     ft.Row([
-                        ft.Icon(icon_name, size=20, color=ft.Colors.GREY_600),
-                        ft.Text(label, size=14, color=ft.Colors.GREY_600)
-                    ], width=120),
+                        ft.Icon(icon_name, size=20, color=current_theme.text_muted),
+                        ft.Text(label, size=14, color=current_theme.text_muted)
+                    ], width=130),
                     ft.Container(content=value_control, expand=True)
                 ])
             )
 
         # 1. CARD THÔNG TIN CÁ NHÂN
-        personal_info_card = get_glass_container(
+        personal_info_card = make_card(
             content=ft.Column([
                 ft.Row([
-                    ft.CircleAvatar(content=self.avatar_icon, bgcolor=SECONDARY_COLOR, radius=40),
+                    ft.CircleAvatar(content=self.avatar_icon, bgcolor=current_theme.secondary, radius=40),
                     ft.Container(width=10),
                     ft.Column([
                         self.name_text,
                         ft.Container(
-                            padding=ft.Padding(10, 4, 10, 4), bgcolor=ft.Colors.with_opacity(0.1, ACCENT_COLOR),
+                            padding=ft.Padding(10, 4, 10, 4), bgcolor=ft.Colors.with_opacity(0.1, current_theme.accent),
                             border_radius=12, content=self.role_text
                         )
                     ], spacing=2)
                 ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 
-                ft.Divider(color=ft.Colors.BLACK_12, height=30),
-                ft.Text("Chi tiết liên hệ & Định danh", weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR, size=13),
+                ft.Divider(color=current_theme.divider_color, height=30),
+                ft.Text("Chi tiết liên hệ & Định danh", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=13),
                 ft.Container(height=5),
                 
                 create_info_row(ft.Icons.BADGE_OUTLINED, "Mã Cán Bộ:", self.id_val),
@@ -83,22 +105,22 @@ class ProfilePage(ft.Container):
         )
 
         # 2. CARD HOẠT ĐỘNG & THỐNG KÊ
-        stats_card = get_glass_container(
+        stats_card = make_card(
             content=ft.Column([
-                ft.Text("HOẠT ĐỘNG GIẢNG DẠY", weight=ft.FontWeight.BOLD, color=SECONDARY_COLOR, size=13),
-                ft.Divider(color=ft.Colors.BLACK_12),
+                ft.Text("HOẠT ĐỘNG GIẢNG DẠY", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=13),
+                ft.Divider(color=current_theme.divider_color),
                 
                 ft.Container(
-                    bgcolor=ft.Colors.WHITE, padding=20, border_radius=12,
-                    border=ft.Border.all(1, ft.Colors.BLACK_12),
+                    bgcolor=current_theme.surface_variant, padding=20, border_radius=12,
+                    border=ft.Border.all(1, current_theme.divider_color),
                     content=ft.Row([
                         ft.Container(
-                            padding=15, bgcolor=ft.Colors.with_opacity(0.1, SECONDARY_COLOR), border_radius=12,
-                            content=ft.Icon(ft.Icons.CLASS_OUTLINED, color=SECONDARY_COLOR, size=30)
+                            padding=15, bgcolor=ft.Colors.with_opacity(0.1, current_theme.secondary), border_radius=12,
+                            content=ft.Icon(ft.Icons.CLASS_OUTLINED, color=current_theme.secondary, size=30)
                         ),
                         ft.Container(width=15),
                         ft.Column([
-                            ft.Text("Tổng số lớp phụ trách", size=13, color=ft.Colors.GREY_600),
+                            ft.Text("Tổng số lớp phụ trách", size=13, color=current_theme.text_muted),
                             self.total_classes_val
                         ], spacing=0)
                     ])
@@ -106,17 +128,19 @@ class ProfilePage(ft.Container):
                 
                 ft.Container(height=15),
                 ft.Button(
-                    content=ft.Row([ft.Icon(ft.Icons.EDIT_DOCUMENT, color=ft.Colors.WHITE, size=18), ft.Text("Cập nhật thông tin", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER), 
-                    bgcolor=ACCENT_COLOR, height=45,
-                    on_click=handle_update_click # Gọi hàm an toàn ở đây
+                    content=ft.Row([ft.Icon(ft.Icons.EDIT_DOCUMENT, color=current_theme.bg_color, size=18), ft.Text("Cập nhật thông tin", color=current_theme.bg_color, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER), 
+                    bgcolor=current_theme.accent, height=45,
+                    on_click=handle_update_click
                 )
             ], spacing=10)
         )
 
-        return ft.ResponsiveRow([
+        main_layout = ft.ResponsiveRow([
             ft.Column([personal_info_card], col={"sm": 12, "md": 7}),
             ft.Column([stats_card], col={"sm": 12, "md": 5}),
-        ], expand=True)
+        ], expand=True, spacing=15, run_spacing=15)
+
+        return ft.Column([ft.Container(height=5), main_layout, ft.Container(height=30)], scroll=ft.ScrollMode.AUTO, expand=True)
 
     def render_data_to_ui(self, info, total_classes):
         """Hàm gán dữ liệu vào giao diện"""
@@ -179,7 +203,6 @@ class ProfilePage(ft.Container):
 
             # BƯỚC 2: KIỂM TRA TTL
             if current_time - last_sync < TTL:
-                # print("PROFILE: Cache còn hạn 1 ngày, bỏ qua gọi API!")
                 return
 
             # ==============================
@@ -224,4 +247,4 @@ class ProfilePage(ft.Container):
         except Exception as e:
             print(f"Lỗi tải dữ liệu Hồ sơ: {e}")
             if getattr(self, "page", None):
-                show_top_notification(self.app_page, "Lỗi mạng", "Không thể tải hồ sơ mới nhất!", 4000, color=ft.Colors.RED)
+                show_top_notification(self.app_page, "Lỗi mạng", "Không thể tải hồ sơ mới nhất!", 4000, color=current_theme.primary)

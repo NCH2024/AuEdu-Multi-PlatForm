@@ -182,17 +182,19 @@ class LoginPage(ft.Container):
             )
             account_list.controls.append(acc_card)
 
-        btn_other_account = ft.TextButton(
+        btn_other_account = ft.Button(
             content=ft.Row(
                 alignment=ft.MainAxisAlignment.CENTER,
                 controls=[
-                    ft.Icon(ft.Icons.ADD_CIRCLE_OUTLINE, color=current_theme.bg_color, size=20), 
-                    ft.Text("Đăng nhập bằng tài khoản khác", color=current_theme.bg_color, weight=ft.FontWeight.BOLD)
+                    ft.Icon(ft.Icons.ADD_CIRCLE_OUTLINE, color=current_theme.surface_color, size=20), 
+                    ft.Text("Đăng nhập bằng tài khoản khác", color=current_theme.surface_color, weight=ft.FontWeight.BOLD)
                 ],
-                            ),
+            ),
+            bgcolor=current_theme.text_main, # Dùng màu tương phản với nền để tạo sự chú ý
             style=ft.ButtonStyle(
-                shape=ft.RoundedRectangleBorder(radius=8),
-                overlay_color=ft.Colors.with_opacity(0.1, current_theme.accent)
+                shape=ft.RoundedRectangleBorder(radius=12),
+                padding=ft.Padding(0, 15, 0, 15),
+                overlay_color=ft.Colors.with_opacity(0.1, current_theme.surface_color)
             ),
             on_click=self.show_standard_form
         )

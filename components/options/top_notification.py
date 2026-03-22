@@ -1,10 +1,10 @@
 import flet as ft
 import flet_audio as fta
 import asyncio
-from core.theme import PRIMARY_COLOR, SECONDARY_COLOR
+from core.theme import current_theme
 
 class TopNotification(ft.Container):
-    def __init__(self, page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=SECONDARY_COLOR):
+    def __init__(self, page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=None):
         super().__init__()
         self.app_page = page
         self.top = -100 
@@ -16,28 +16,30 @@ class TopNotification(ft.Container):
         self.opacity = 0
         self.duration_ms = duration_ms
 
+        theme_color = color if color else current_theme.primary
         noti_width = (self.app_page.width - 40) if (self.app_page.width and self.app_page.width < 450) else 400
+
+        # Xử lý màu chữ thông minh tương phản với màu nền của thông báo
+        is_light_bg = theme_color in [ft.Colors.YELLOW, ft.Colors.AMBER, "#FBCFE8", "#93C5FD", "#6EE7B7", "#FFFFFF", "#D1D5DB", "#A7F3D0", "#F3F4F6", ft.Colors.WHITE]
+        text_color = ft.Colors.BLACK_87 if is_light_bg else ft.Colors.WHITE
 
         self.content = ft.Row(
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[
                 ft.Container(
-                    width=noti_width,
-                    padding=15,
-                    bgcolor=ft.Colors.WHITE,
+                    width=noti_width, padding=15,
+                    bgcolor=theme_color,  # Sử dụng màu sắc làm nền chính luôn
                     border_radius=15,
-                    border=ft.Border(left=ft.BorderSide(6, color)),
-                    shadow=ft.BoxShadow(spread_radius=1, blur_radius=15, color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK), offset=ft.Offset(0, 5)),
+                    shadow=ft.BoxShadow(spread_radius=1, blur_radius=20, color=ft.Colors.with_opacity(0.4, theme_color), offset=ft.Offset(0, 5)),
                     content=ft.Row(
                         spacing=15,
                         controls=[
-                            ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_ROUNDED, color=color, size=24),
+                            ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_ROUNDED, color=text_color, size=26),
                             ft.Column(
-                                expand=True,
-                                spacing=2,
+                                expand=True, spacing=2,
                                 controls=[
-                                    ft.Text(title, weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK_87, size=14),
-                                    ft.Text(message, color=ft.Colors.GREY_700, size=12)
+                                    ft.Text(title, weight=ft.FontWeight.BOLD, color=text_color, size=14),
+                                    ft.Text(message, color=ft.Colors.with_opacity(0.9, text_color), size=12)
                                 ]
                             )
                         ]
@@ -46,8 +48,7 @@ class TopNotification(ft.Container):
             ]
         )
 
-    def did_mount(self):
-        self.app_page.run_task(self.show_and_hide)
+    def did_mount(self): self.app_page.run_task(self.show_and_hide)
 
     async def show_and_hide(self):
         await asyncio.sleep(0.1)
@@ -71,14 +72,11 @@ class TopNotification(ft.Container):
                 self.app_page.overlay.remove(self)
                 self.app_page.update()
         except: pass
-            
+        
 def play_sound_success(page):
     audio = fta.Audio(src="assets/sounds/sound-success.mp3", autoplay=True)
-    
-    if hasattr(page, 'services'):
-        page.services.append(audio)
-    else:
-        page.overlay.append(audio) 
+    if hasattr(page, 'services'): page.services.append(audio)
+    else: page.overlay.append(audio) 
         
     async def clean_up_audio():
         await asyncio.sleep(2) 
@@ -90,16 +88,12 @@ def play_sound_success(page):
                 page.overlay.remove(audio)
                 page.update()
         except: pass
-            
     page.run_task(clean_up_audio)
     
 def play_sound_error(page):
     audio = fta.Audio(src="assets/sounds/sound-error.mp3", autoplay=True)
-    
-    if hasattr(page, 'services'):
-        page.services.append(audio)
-    else:
-        page.overlay.append(audio) 
+    if hasattr(page, 'services'): page.services.append(audio)
+    else: page.overlay.append(audio) 
         
     async def clean_up_audio():
         await asyncio.sleep(2) 
@@ -111,16 +105,11 @@ def play_sound_error(page):
                 page.overlay.remove(audio)
                 page.update()
         except: pass
-            
     page.run_task(clean_up_audio)
 
-def show_top_notification(page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=SECONDARY_COLOR, sound=None):
+def show_top_notification(page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=None, sound=None):
     notif = TopNotification(page, title, message, duration_ms, color)
     page.overlay.append(notif)
-    
-    if sound == "S":
-        play_sound_success(page)
-    elif sound == "E":
-        play_sound_error(page)
-        
+    if sound == "S": play_sound_success(page)
+    elif sound == "E": play_sound_error(page)
     page.update()

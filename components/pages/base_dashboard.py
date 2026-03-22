@@ -35,11 +35,12 @@ class BaseDashboard(ft.Container):
         is_dark = await prefs.get("app_is_dark") == "True"
         palette = await prefs.get("app_palette") or "BLUE"
         
-        theme_module.current_theme = theme_module.AppTheme(is_dark=is_dark, palette_type=palette)
+        # GỌI HÀM UPDATE (KHÔNG TẠO MỚI) ĐỂ ĐỒNG BỘ TOÀN BỘ APP
+        theme_module.current_theme.update_theme(is_dark=is_dark, palette_type=palette)
+        
         self.app_page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
         self.app_page.bgcolor = theme_module.current_theme.bg_color
         
-        # Chữ ở Header sẽ tự động đổi màu tương phản với màu nền (bg_color)
         self.user_name_text.color = theme_module.current_theme.text_main
         self.page_title_text.color = theme_module.current_theme.text_main
         
@@ -55,14 +56,18 @@ class BaseDashboard(ft.Container):
                 self.user_name_text.update()
             except: pass
 
-    # ==========================================
-    # LOGIC CHUYỂN ĐỔI THEME VÀ MÀU SẮC
+   # ==========================================
+    # LOGIC CHUYỂN ĐỔI THEME VÀ MÀU SẮC SIÊU MƯỢT
     # ==========================================
     async def toggle_dark_mode(self, e):
         prefs = ft.SharedPreferences()
         new_is_dark = not theme_module.current_theme.is_dark
         await prefs.set("app_is_dark", "True" if new_is_dark else "False")
         await self.init_app_settings()
+        
+        # KIỂM TRA: Nếu trang hiện tại có hàm apply_theme thì gọi nó thay vì load lại trang
+        if hasattr(self.content_area.content, 'apply_theme'):
+            self.content_area.content.apply_theme()
 
     async def change_palette(self, p_type):
         prefs = ft.SharedPreferences()
@@ -71,6 +76,10 @@ class BaseDashboard(ft.Container):
             if isinstance(item, ft.AlertDialog) and item.open:
                 item.open = False
         await self.init_app_settings()
+        
+        # KIỂM TRA: Nếu trang hiện tại có hàm apply_theme thì gọi nó thay vì load lại trang
+        if hasattr(self.content_area.content, 'apply_theme'):
+            self.content_area.content.apply_theme()
 
     def open_theme_dialog(self, e):
         def build_palette_option(name, primary, secondary, accent, p_type):
@@ -95,9 +104,10 @@ class BaseDashboard(ft.Container):
             content=ft.Column(
                 tight=True, spacing=10,
                 controls=[
-                    build_palette_option("Xanh Đen (Mặc định)", "#0450DF", "#1E3A8A", "#0EA5E9", "BLUE"),
-                    build_palette_option("Trắng Đen (Tối giản)", "#111827", "#111827", "#6B7280", "MONO"),
-                    build_palette_option("Đa Sắc (Năng động)", "#7C3AED", "#111827", "#10B981", "COLORFUL"),
+                    build_palette_option("Hồng Phấn (Ngọt ngào)", "#EC4899", "#BE185D", "#F472B6", "PINK"),
+                    build_palette_option("Xanh Dương Tươi (Mặc định)", "#2563EB", "#1D4ED8", "#3B82F6", "BLUE"),
+                    build_palette_option("Xanh Lá Pastel", "#10B981", "#047857", "#34D399", "GREEN"),
+                    build_palette_option("Đen Trắng (Tối giản)", "#111827", "#000000", "#6B7280", "MONO"),
                 ]
             ),
             actions=[ft.TextButton("Đóng", on_click=lambda e: self._close_dialog(dialog))],
@@ -120,9 +130,17 @@ class BaseDashboard(ft.Container):
         self.content_area.content = new_content
         self.active_route = route
         self.build_navigation()
-        self.sidebar.content.controls[0].controls = self.sidebar.content.controls[0].controls[:1] + self.sidebar_controls
-        self.bottom_nav.content.content.controls = self.bottom_nav_controls
-        if getattr(self, "page", None): self.update()
+        
+        # BẢO VỆ CHỐNG CRASH: Chỉ cập nhật Sidebar/BottomNav khi chúng thực sự đã được tạo ra
+        if hasattr(self, "sidebar") and getattr(self.sidebar, "content", None):
+            self.sidebar.content.controls[0].controls = self.sidebar.content.controls[0].controls[:1] + self.sidebar_controls
+            
+        if hasattr(self, "bottom_nav") and getattr(self.bottom_nav, "content", None):
+            # SỬA LỖI TẠI ĐÂY: Đổi từ .content.content.controls thành .content.controls
+            self.bottom_nav.content.controls = self.bottom_nav_controls
+            
+        if getattr(self, "page", None): 
+            self.update()
 
     def toggle_sidebar(self, e):
         self.is_sidebar_expanded = not self.is_sidebar_expanded
@@ -224,7 +242,6 @@ class BaseDashboard(ft.Container):
             ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.LOGOUT, color=ft.Colors.RED_500), ft.Text("Đăng xuất", color=ft.Colors.RED_500)]), on_click=handle_normal_logout),
         ])
 
-        # HEADER: Dùng màu nền bg_color tĩnh 100%, đồng bộ hoàn toàn với không gian ứng dụng
         header_content = ft.Container(
             padding=ft.Padding(10, 10, 20, 10), 
             bgcolor=theme_module.current_theme.bg_color,
@@ -265,7 +282,6 @@ class BaseDashboard(ft.Container):
             ]
         )
         
-        # TRỞ VỀ COLUMN CHUẨN: Giao diện nhẹ, không đè lớp, thân thiện với người dùng
         main_view_stack = ft.Column(
             expand=True, spacing=0,
             controls=[top_bar_area, scroll_wrapper]
@@ -273,7 +289,10 @@ class BaseDashboard(ft.Container):
 
         self.build_navigation()
 
-        # CHỈ CÓ SIDEBAR VÀ BOTTOM NAV LÀ GIỮ MÀU THEME CHỦ ĐẠO
+        # ⚠️ NÂNG CẤP: Tính toán màu tương phản cho các item trong Sidebar
+        on_secondary_color = ft.Colors.BLACK_87 if theme_module.current_theme.is_dark else ft.Colors.WHITE
+        on_secondary_bg_overlay = ft.Colors.with_opacity(0.1, ft.Colors.BLACK) if theme_module.current_theme.is_dark else ft.Colors.with_opacity(0.1, ft.Colors.WHITE)
+
         self.sidebar = ft.Container(
             width=220 if self.is_sidebar_expanded else 70, 
             bgcolor=theme_module.current_theme.secondary,
@@ -286,6 +305,7 @@ class BaseDashboard(ft.Container):
                         controls=[
                             ft.Container(
                                 padding=ft.Padding(0, 20, 0, 20), alignment=ft.Alignment.CENTER,
+                                # Đổi logo tạm nếu cần cho hiển thị rõ (giữ icon-1.png gốc)
                                 content=ft.Image(src="icon-1.png", width=35, height=35, fit=ft.BoxFit.CONTAIN)
                             )
                         ] + self.sidebar_controls
@@ -294,13 +314,13 @@ class BaseDashboard(ft.Container):
                         padding=ft.Padding(16, 12, 16, 12) if self.is_sidebar_expanded else ft.Padding(0, 12, 0, 12),
                         margin=ft.Margin(10, 0, 10, 15), border_radius=12,
                         ink=True, on_click=self.toggle_dark_mode,
-                        bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
+                        bgcolor=on_secondary_bg_overlay,
                         visible=not is_mobile,
                         content=ft.Row(
                             alignment=ft.MainAxisAlignment.START if self.is_sidebar_expanded else ft.MainAxisAlignment.CENTER,
                             controls=[
-                                ft.Icon(ft.Icons.LIGHT_MODE_ROUNDED if theme_module.current_theme.is_dark else ft.Icons.DARK_MODE_ROUNDED, color=ft.Colors.WHITE, size=22),
-                                ft.Text("Chế độ: " + ("Tối" if theme_module.current_theme.is_dark else "Sáng"), size=14, color=ft.Colors.WHITE, weight=ft.FontWeight.W_600, visible=self.is_sidebar_expanded)
+                                ft.Icon(ft.Icons.LIGHT_MODE_ROUNDED if theme_module.current_theme.is_dark else ft.Icons.DARK_MODE_ROUNDED, color=on_secondary_color, size=22),
+                                ft.Text("Chế độ: " + ("Sáng" if theme_module.current_theme.is_dark else "Tối"), size=14, color=on_secondary_color, weight=ft.FontWeight.W_600, visible=self.is_sidebar_expanded)
                             ]
                         )
                     )
@@ -323,6 +343,11 @@ class BaseDashboard(ft.Container):
         self.sidebar_controls.clear()
         self.bottom_nav_controls.clear()
 
+        # Đổi màu icon và text tương phản hoàn toàn với màu nền Sidebar
+        on_secondary_color = ft.Colors.BLACK_87 if theme_module.current_theme.is_dark else ft.Colors.WHITE
+        on_secondary_color_muted = ft.Colors.BLACK_54 if theme_module.current_theme.is_dark else ft.Colors.WHITE_54
+        on_secondary_bg_active = ft.Colors.with_opacity(0.15, ft.Colors.BLACK) if theme_module.current_theme.is_dark else ft.Colors.with_opacity(0.15, ft.Colors.WHITE)
+
         for item in self.menu_items:
             is_active = self.active_route == item["route"]
             def create_nav_click(route):
@@ -331,9 +356,9 @@ class BaseDashboard(ft.Container):
                         await self.app_page.push_route(route)
                 return on_click
 
-            icon_color = ft.Colors.WHITE if is_active else ft.Colors.WHITE_54
-            text_color = ft.Colors.WHITE if is_active else ft.Colors.WHITE_54
-            bg_active = ft.Colors.with_opacity(0.15, ft.Colors.WHITE) if is_active else ft.Colors.TRANSPARENT
+            icon_color = on_secondary_color if is_active else on_secondary_color_muted
+            text_color = on_secondary_color if is_active else on_secondary_color_muted
+            bg_active = on_secondary_bg_active if is_active else ft.Colors.TRANSPARENT
 
             nav_content = ft.Row(
                 alignment=ft.MainAxisAlignment.START if self.is_sidebar_expanded else ft.MainAxisAlignment.CENTER,

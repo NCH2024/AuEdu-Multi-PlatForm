@@ -11,13 +11,13 @@ assets_dir = "assets"
 # Định danh duy nhất cho app
 package_name = "com.nch2024.auedu"
 # Phiên bản
-version_code = 1
-version_name = "1.0.0"
+version_code = 2
+version_name = "0.2.0"
 
 # CẤU HÌNH GIAO DIỆN KHI TẢI APP
 # Đường dẫn tính từ thư mục assets
 icon = "icon.png"
-splash_image = "splash.png"
+splash_image = "icon-2.png"
 splash_color = "#ffffff" 
 
 # QUYỀN TRUY CẬP (Rất quan trọng cho Camera)
