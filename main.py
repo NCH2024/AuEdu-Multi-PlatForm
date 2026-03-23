@@ -47,19 +47,6 @@ async def main(page: ft.Page):
     
     dashboard = BaseDashboard(page)
     
-    async def init_app():
-        if DEBUG_LOADING:
-            await asyncio.sleep(9999)
-            return
-
-        prefs = ft.SharedPreferences()
-        session = await prefs.get("user_session")
-
-        if session:
-            await page.push_route("/user/home")
-        else:
-            await page.push_route("/login")
-    
     async def handle_routing(route_str: str):
         try:
             prefs = ft.SharedPreferences()
@@ -138,17 +125,39 @@ async def main(page: ft.Page):
             
         except Exception as ex:
             print(f"Lỗi routing: {ex}")
-
+    
+    
     async def route_change(e: ft.RouteChangeEvent): await handle_routing(e.route)
     async def view_pop(e: ft.ViewPopEvent): 
-        page.views.pop() 
-        if len(page.views) > 0:
-            top_view = page.views[-1]
-            await page.push_route(top_view.route) 
+        page.views.pop()
+        if page.views:
+            await page.push_route(page.views[-1].route)
 
     page.on_route_change = route_change
     page.on_view_pop = view_pop
+
+    page.views.append(ft.View(
+        route="/loading",
+        controls=[SplashPage()],
+        padding=0,
+        bgcolor=theme_module.current_theme.bg_color
+    ))
+    page.update() 
+
     await page.push_route("/loading")
+    
+    async def init_app():
+        if DEBUG_LOADING:
+            await asyncio.sleep(9999)
+            return
+
+        prefs = ft.SharedPreferences()
+        session = await prefs.get("user_session")
+
+        if session:
+            await page.push_route("/user/home")
+        else:
+            await page.push_route("/login")
 
 if __name__ == "__main__":
     ft.run(main)

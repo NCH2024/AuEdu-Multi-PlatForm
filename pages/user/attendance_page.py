@@ -215,20 +215,21 @@ class AttendancePage(ft.Container):
 
         return ft.Column([ft.Container(height=5), dashboard_layout, ft.Container(height=30)], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    # ... (Khu vực Logic Data giữ nguyên, chỉ sửa hàm sinh UI động) ...
+
     async def initialize_page(self):
         prefs = ft.SharedPreferences()
         session_str = await prefs.get("user_session")
         if session_str:
             session_data = safe_json_load(session_str)
             self.gv_id = session_data.get("id", "N/A")
-            
-        try: await self.load_all_schedules()
-        except Exception as e: self._show_error_snackbar(f"Lỗi tải dữ liệu: {e}")
-
-        try: await self.camera_view.load_available_cameras()
-        except Exception: pass
-        if getattr(self, "page", None): self.app_page.update()          
+        await asyncio.gather(
+            self.load_all_schedules(),
+            self.camera_view.load_available_cameras(),
+            return_exceptions=True  # Không crash nếu một cái lỗi
+        )
+        
+        if getattr(self, "page", None):
+            self.app_page.update()        
 
     async def load_all_schedules(self):
         if self.gv_id == "N/A": return

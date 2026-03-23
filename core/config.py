@@ -19,14 +19,21 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
-async def get_supabase_client():
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        raise ValueError(f"Chưa tìm thấy hoặc cấu hình sai biến môi trường tại: {ENV_PATH}")
-    
-    return httpx.AsyncClient(
-        base_url=f"{SUPABASE_URL}/rest/v1",
-        headers=get_headers()
-    )
+# core/config.py — Thêm connection pool singleton
+
+_shared_client: httpx.AsyncClient | None = None
+
+async def get_supabase_client() -> httpx.AsyncClient:
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.AsyncClient(
+            base_url=f"{SUPABASE_URL}/rest/v1",
+            headers=get_headers(),
+            # Giữ kết nối sống, tái dụng TCP connection
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+            timeout=httpx.Timeout(10.0)
+        )
+    return _shared_client
 
 def get_storage_url() -> str:
     """URL gốc để truy cập các object public trong Storage."""
