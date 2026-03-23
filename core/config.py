@@ -10,6 +10,7 @@ load_dotenv(dotenv_path=ENV_PATH)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "public")
 
 def get_headers():
     return {
@@ -26,3 +27,7 @@ async def get_supabase_client():
         base_url=f"{SUPABASE_URL}/rest/v1",
         headers=get_headers()
     )
+
+def get_storage_url() -> str:
+    """URL gốc để truy cập các object public trong Storage."""
+    return f"{SUPABASE_URL}/storage/v1/object/public"

@@ -1,11 +1,10 @@
 import flet as ft
 import json
-import asyncio
 import time
 import datetime
-from flet import UrlLauncher
-from core.helper import hash_data, safe_json_load
+from core.helper import hash_data, safe_json_load, process_image_url
 from components.options.top_notification import show_top_notification
+from components.options.open_browser import open_browser
 from core.theme import current_theme
 from core.config import get_supabase_client
 
@@ -23,8 +22,8 @@ class UserHomePage(ft.Container):
         self.today_data = None
         self.is_loading = True
 
-        # Khởi tạo UI chuẩn theo cấu trúc của AboutPage
         self.content = self.build_ui()
+        # Đưa lệnh load về lại __init__ để tránh lỗi xám màn hình khi mount UI động
         self.app_page.run_task(self.load_data)
 
     def apply_theme(self):
@@ -38,16 +37,15 @@ class UserHomePage(ft.Container):
         async def on_click(e):
             link = item.get("link_web")
             if link and str(link).strip() != "":
-                # Gọi UrlLauncher chuẩn xác bằng await như AboutPage
-                await UrlLauncher().launch_url(str(link).strip()) 
+                # Thêm chữ await vào đằng trước để chờ trình duyệt gọi xong
+                await open_browser(self.app_page, link, item.get("tieu_de", "Thông báo"))
             else:
                 def close_dlg(e):
                     dlg.open = False
                     self.app_page.update()
                 
-                img_src = item.get("hinh_anh")
-                if not img_src or str(img_src).strip() == "" or not str(img_src).startswith("http"):
-                    img_src = "icon.png"
+                # Áp dụng hàm xử lý hình ảnh cho cả chi tiết popup
+                img_src = process_image_url(item.get("hinh_anh"))
 
                 dlg_content = ft.Column([
                     ft.Image(src=img_src, width=300, height=150, fit=ft.BoxFit.COVER, border_radius=8),
@@ -136,9 +134,10 @@ class UserHomePage(ft.Container):
             for _ in range(3): news_list.controls.append(ft.Container(height=70, padding=10, content=ft.Row([self.create_skeleton(width=50, height=50, border_radius=8), ft.Column([self.create_skeleton(width=150, height=14), self.create_skeleton(width=80, height=10)], spacing=5)])))
         elif self.thongbao_data:
             for item in self.thongbao_data:
-                img_src = item.get("hinh_anh")
-                if not img_src or str(img_src).strip() == "" or not str(img_src).startswith("http"): img_src = "icon.png"
-                img_widget = ft.Image(src=img_src, width=50, height=50, fit=ft.BoxFit.COVER, border_radius=8)
+                # Dùng module helper xử lý hình ảnh
+                img_src = process_image_url(item.get("hinh_anh"))
+                
+                img_widget = ft.Image(src=img_src, width=80, height=80, fit=ft.BoxFit.COVER, border_radius=8)
 
                 news_list.controls.append(
                     ft.Container(
@@ -157,7 +156,6 @@ class UserHomePage(ft.Container):
 
         dashboard_layout = ft.Column([header_section, ft.Container(height=10), stats_row, ft.Container(height=10), ft.ResponsiveRow([ft.Column([timeline_section], col={"xs": 12, "md": 12, "lg": 7, "xl": 8}), ft.Column([quick_actions_section, ft.Container(height=10), news_section], col={"xs": 12, "md": 12, "lg": 5, "xl": 4})], spacing=20, run_spacing=20)], spacing=0)
         
-        # Trả về đối tượng giao diện thay vì set trực tiếp để không bị lỗi bất đồng bộ
         return ft.Column([ft.Container(height=10), dashboard_layout, ft.Container(height=40)], scroll=ft.ScrollMode.AUTO, expand=True)
 
     def render_data_to_ui(self, thongbao, tkb, today):

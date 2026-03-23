@@ -1,9 +1,8 @@
 import flet as ft
-import asyncio
-from flet import UrlLauncher
 from core.theme import current_theme
 from core.config import get_supabase_client
-from components.options.top_notification import show_top_notification
+from core.helper import process_image_url
+from components.options.open_browser import open_browser
 
 class NewsPage(ft.Container):
     def __init__(self, page: ft.Page):
@@ -19,32 +18,34 @@ class NewsPage(ft.Container):
         self.has_more = True
         self.is_loading = False
 
-        self.list_view = ft.Column(spacing=15)
+        # LABEL TEST: Kiểm tra xem Route có mở thành công trang này không
+        self.test_label = ft.Text("Đang kiểm tra Route NewsPage...", size=20, color=ft.Colors.RED_500, weight=ft.FontWeight.BOLD)
         
+        # Gán nội dung ban đầu là label test
+        self.content = ft.Container(content=self.test_label, alignment=ft.Alignment(0,0), expand=True)
+
+    def did_mount(self):
+        # Khi trang đã được "neo" an toàn vào Route, ta mới dựng UI thật và gọi dữ liệu
+        self.build_initial_ui()
+        self.app_page.run_task(self.load_news_data)
+
+    def build_initial_ui(self):
+        self.list_view = ft.Column(spacing=15)
         self.load_more_btn = ft.Container(
             padding=10, border_radius=8, bgcolor=ft.Colors.with_opacity(0.1, current_theme.secondary),
             ink=True, on_click=self.on_load_more, alignment=ft.Alignment(0,0),
             content=ft.Text("Xem thêm thông báo", color=current_theme.secondary, weight=ft.FontWeight.BOLD),
             visible=False
         )
-
         self.loading_indicator = ft.Container(content=ft.ProgressRing(width=20, height=20, color=current_theme.secondary), alignment=ft.Alignment(0,0), visible=True, margin=10)
 
-        # Cấu trúc y hệt AboutPage để đảm bảo UI render ổn định
-        self.content = self.build_ui()
-        self.app_page.run_task(self.load_news_data)
-
-    def apply_theme(self):
-        self.content = self.build_ui()
-        if self.page: self.update()
-
-    def build_ui(self):
         header = ft.Row([
             ft.IconButton(ft.Icons.ARROW_BACK_IOS_NEW_ROUNDED, icon_color=current_theme.text_main, on_click=lambda e: self.app_page.run_task(self.app_page.push_route, "/user/home")),
             ft.Text("Tất cả thông báo", size=20, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
         ], alignment=ft.MainAxisAlignment.START)
 
-        return ft.Column([
+        # Ghi đè label test bằng UI hoàn chỉnh
+        self.content = ft.Column([
             header,
             ft.Container(height=10),
             self.list_view,
@@ -52,20 +53,20 @@ class NewsPage(ft.Container):
             ft.Container(content=self.load_more_btn, alignment=ft.Alignment(0,0)),
             ft.Container(height=40)
         ], scroll=ft.ScrollMode.AUTO, expand=True)
+        
+        self.update()
 
     def get_click_handler(self, item):
         async def on_click(e):
             link = item.get("link_web")
             if link and str(link).strip() != "":
-                await UrlLauncher().launch_url(str(link).strip())
+                await open_browser(self.app_page, link, item.get("tieu_de", "Thông báo"))
             else:
                 def close_dlg(e):
                     dlg.open = False
                     self.app_page.update()
                 
-                img_src = item.get("hinh_anh")
-                if not img_src or str(img_src).strip() == "" or not str(img_src).startswith("http"):
-                    img_src = "icon.png" 
+                img_src = process_image_url(item.get("hinh_anh"))
 
                 dlg_content = ft.Column([
                     ft.Image(src=img_src, width=300, height=150, fit=ft.BoxFit.COVER, border_radius=8),
@@ -84,10 +85,7 @@ class NewsPage(ft.Container):
     def render_news(self):
         self.list_view.controls.clear()
         for item in self.news_data:
-            img_src = item.get("hinh_anh")
-            if not img_src or str(img_src).strip() == "" or not str(img_src).startswith("http"):
-                img_src = "icon.png"
-            
+            img_src = process_image_url(item.get("hinh_anh"))
             img_widget = ft.Image(src=img_src, width=80, height=80, fit=ft.BoxFit.COVER, border_radius=8)
 
             card = ft.Container(
