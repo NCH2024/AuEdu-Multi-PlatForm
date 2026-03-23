@@ -1,8 +1,10 @@
 import flet as ft
 import json
+import asyncio
 
 # Import các View
 from components.pages.base_dashboard import BaseDashboard
+from pages.splash_page import SplashPage
 from pages.user.home_page import UserHomePage
 from pages.user.attendance_page import AttendancePage
 from pages.login_page import LoginPage 
@@ -14,10 +16,12 @@ from pages.user.profile_page import ProfilePage
 from pages.user.news_page import NewsPage
 from pages.user.attendance_session_page import AttendanceSessionPage
 
-from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, BG_COLOR
+import core.theme as theme_module
+
+DEBUG_LOADING = False
 
 async def main(page: ft.Page):
-    page.title = "AuEdu Multi-Platform"
+    page.title = "AuEdu PC"
     
     # --- CẤU HÌNH WINDOWS / MAC / MOBILE CHO FLET 0.82.2 ---
     if page.platform == ft.PagePlatform.MACOS:
@@ -27,20 +31,34 @@ async def main(page: ft.Page):
         # Trên Windows: Ẩn hoàn toàn viền để lát nữa mình tự vẽ thanh Header tuỳ chỉnh
         page.window.title_bar_hidden = True
     
-    # Cấu hình thanh Status Bar cho Mobile (em đã làm rất tốt chỗ này)
+    # Cấu hình thanh Status Bar cho Mobile
     page.theme = ft.Theme(
         system_overlay_style=ft.SystemOverlayStyle(
-            status_bar_color=ft.Colors.TRANSPARENT, 
-            status_bar_icon_brightness=ft.Brightness.DARK, 
-            system_navigation_bar_color=ft.Colors.TRANSPARENT,
-            system_navigation_bar_icon_brightness=ft.Brightness.DARK
+            status_bar_color=theme_module.current_theme.surface_color, 
+            status_bar_icon_brightness=theme_module.current_theme.text_main, 
+            
+            system_navigation_bar_color=theme_module.current_theme.surface_color,
+            system_navigation_bar_icon_brightness=theme_module.current_theme.text_main
         )
     )
     page.theme_mode = ft.ThemeMode.LIGHT 
     page.padding = 0 
-    page.bgcolor = BG_COLOR
+    page.bgcolor = theme_module.current_theme.bg_color
     
     dashboard = BaseDashboard(page)
+    
+    async def init_app():
+        if DEBUG_LOADING:
+            await asyncio.sleep(9999)
+            return
+
+        prefs = ft.SharedPreferences()
+        session = await prefs.get("user_session")
+
+        if session:
+            await page.push_route("/user/home")
+        else:
+            await page.push_route("/login")
     
     async def handle_routing(route_str: str):
         try:
@@ -63,26 +81,40 @@ async def main(page: ft.Page):
             if not session and current_route != "/login":
                 await page.push_route("/login")
                 return
+
+            if current_route == "/loading":
+                page.views.clear()
+                page.views.append(
+                    ft.View(
+                        route="/loading",
+                        controls=[SplashPage()],
+                        padding=0,
+                        bgcolor=theme_module.current_theme.bg_color
+                    )
+                )
+                page.update()
+                page.run_task(init_app)
+                return
             
             # Gộp chung "/" và "/login" để ép nhảy vào Home nếu đã đăng nhập
-            if session and current_route in ["/login", "/"]:
-                await page.push_route("/user/home")
+            if not session and current_route not in ["/login", "/loading"]:
+                await page.push_route("/login")
                 return
 
             # Xử lý các màn hình tách biệt khỏi Dashboard (Login, Màn hình quét Camera)
             if current_route == "/login":
                 page.views.clear()
-                page.views.append(ft.View(route="/login", controls=[LoginPage(page)], padding=0, bgcolor=BG_COLOR))
+                page.views.append(ft.View(route="/login", controls=[LoginPage(page)], padding=0, bgcolor=theme_module.current_theme.bg_color))
             
             elif current_route == "/user/attendance/session":
                 page.views.clear()
-                page.views.append(ft.View(route="/user/attendance/session", controls=[AttendanceSessionPage(page)], padding=0, bgcolor=ft.Colors.BLACK))        
+                page.views.append(ft.View(route="/user/attendance/session", controls=[AttendanceSessionPage(page)], padding=0, bgcolor=theme_module.current_theme.bg_color))        
             
             # Xử lý cơ chế thay ruột SPA trong Dashboard
             else:
                 if not page.views or page.views[-1].route != "/dashboard_layout":
                     page.views.clear()
-                    page.views.append(ft.View(route="/dashboard_layout", controls=[dashboard], padding=0, bgcolor=BG_COLOR))
+                    page.views.append(ft.View(route="/dashboard_layout", controls=[dashboard], padding=0, bgcolor=theme_module.current_theme.bg_color))
                     page.update()
 
                 if current_route == "/user/home":
@@ -116,7 +148,7 @@ async def main(page: ft.Page):
 
     page.on_route_change = route_change
     page.on_view_pop = view_pop
-    await handle_routing(page.route)
+    await page.push_route("/loading")
 
 if __name__ == "__main__":
     ft.run(main)

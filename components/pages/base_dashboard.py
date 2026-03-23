@@ -11,6 +11,7 @@ class BaseDashboard(ft.Container):
         self.active_route = ""
         self.is_sidebar_expanded = False
         
+        
         self.menu_items = [
             {"label": "Tổng quan", "icon": ft.Icons.DASHBOARD_ROUNDED, "route": "/user/home"},
             {"label": "Điểm danh", "icon": ft.Icons.CAMERA_ALT_ROUNDED, "route": "/user/attendance"},
@@ -19,7 +20,7 @@ class BaseDashboard(ft.Container):
         ]
 
         self.user_name_text = ft.Text("Đang tải...", size=13, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
-        self.page_title_text = ft.Text("TỔNG QUAN", size=15, weight=ft.FontWeight.BOLD)
+        self.page_title_text = ft.Text("TỔNG QUAN", size=15, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.primary)
         self.content_area = ft.Container(expand=True, padding=ft.Padding(10, 10, 10, 10), alignment=ft.Alignment.TOP_CENTER)
         
         self.sidebar_controls = []
@@ -42,7 +43,7 @@ class BaseDashboard(ft.Container):
         self.app_page.bgcolor = theme_module.current_theme.bg_color
         
         self.user_name_text.color = theme_module.current_theme.text_main
-        self.page_title_text.color = theme_module.current_theme.text_main
+        self.page_title_text.color = theme_module.current_theme.primary
         
         self.content = self.build_layout()
         self.update()
@@ -186,22 +187,23 @@ class BaseDashboard(ft.Container):
         # THANH TIÊU ĐỀ: Dùng đúng màu bg_color tĩnh
         return ft.WindowDragArea(
             ft.Container(
-                height=30,
-                bgcolor=ft.Colors.with_opacity(0.1,theme_module.current_theme.secondary),
+                height=25,
+                bgcolor=theme_module.current_theme.bg_color,
                 padding=ft.Padding(15, 0, 0, 0), 
                 content=ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     controls=[
                         ft.Row([
                             ft.Icon(ft.Icons.AUTO_AWESOME, color=theme_module.current_theme.text_main, size=16),
-                            ft.Text("AuEdu Multi-Platform", color=theme_module.current_theme.text_main, size=12, weight=ft.FontWeight.BOLD)
+                            ft.Text("AuEdu PC", color=theme_module.current_theme.text_main, size=12, weight=ft.FontWeight.BOLD)
                         ]),
                         ft.Row(
                             spacing=0,
+                            alignment=ft.Alignment(0,0),
                             controls=[
-                                ft.IconButton(ft.Icons.MINIMIZE, icon_size=16, style=btn_style_normal, width=45, height=35, on_click=handle_minimize),
-                                ft.IconButton(ft.Icons.CROP_SQUARE, icon_size=16, style=btn_style_normal, width=45, height=35, on_click=handle_maximize),
-                                ft.IconButton(ft.Icons.CLOSE, icon_size=16, style=btn_style_close, width=45, height=35, on_click=handle_close),
+                                ft.IconButton(ft.Icons.MINIMIZE, icon_size=16, style=btn_style_normal, width=34, height=25,on_click=handle_minimize),
+                                ft.IconButton(ft.Icons.CROP_SQUARE, icon_size=16, style=btn_style_normal, width=34, height=25, on_click=handle_maximize),
+                                ft.IconButton(ft.Icons.CLOSE, icon_size=16, style=btn_style_close, width=34, height=25, on_click=handle_close),
                             ]
                         )
                     ]
@@ -243,26 +245,33 @@ class BaseDashboard(ft.Container):
         ])
 
         header_content = ft.Container(
-            padding=ft.Padding(10, 10, 20, 10), 
-            bgcolor=theme_module.current_theme.secondary if is_mobile else theme_module.current_theme.bg_color,
+            padding=ft.Padding.all(1), 
+            bgcolor=theme_module.current_theme.surface_color,
             border=ft.Border(bottom=ft.BorderSide(1, theme_module.current_theme.divider_color)),
             alignment=ft.Alignment.TOP_CENTER,
             content=ft.Row(
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 controls=[
-                    ft.Row(spacing=10, controls=[self.btn_menu_toggle, self.page_title_text]),
-                    ft.Row(spacing=15, controls=[
+                    ft.Row(spacing=5, controls=[
+                        self.btn_menu_toggle, 
                         ft.Container(
-                            ink=True, on_click=go_to_profile, border_radius=8,
-                            padding=ft.Padding(8, 4, 8, 4),
+                            width=5
+                        ),
+                        self.page_title_text
+                        ]),
+                    ft.Row(spacing=5, controls=[
+                        ft.Container(
+                            ink=True, on_click=go_to_profile, border_radius=50,
+                            padding=ft.Padding(3, 3, 3, 3),
                             bgcolor=ft.Colors.with_opacity(0.08, theme_module.current_theme.text_main),
                             content=ft.Row(spacing=8, controls=[
-                                ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=theme_module.current_theme.bg_color, size=16), bgcolor=theme_module.current_theme.text_main, radius=16),
-                                self.user_name_text
+                                ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=theme_module.current_theme.bg_color, size=16), bgcolor=theme_module.current_theme.secondary, radius=16),
+                                self.user_name_text,
+                                ft.Container(width=3, visible=False if is_mobile else True),
                             ])
                         ),
                         ft.PopupMenuButton(
-                            icon=ft.Icons.MORE_VERT, icon_color=theme_module.current_theme.text_main, icon_size=20,
+                            icon=ft.Icons.MORE_VERT, icon_color=theme_module.current_theme.text_main, icon_size=25,
                             items=popup_items
                         )
                     ])

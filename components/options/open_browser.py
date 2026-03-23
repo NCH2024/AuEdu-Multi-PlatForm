@@ -1,5 +1,4 @@
 import flet as ft
-import asyncio
 from core.theme import current_theme
 from flet import UrlLauncher
 
@@ -9,11 +8,10 @@ except ImportError:
     fv = None
 
 async def open_browser(page: ft.Page, url: str, title: str = "Trình duyệt"):
-    if not url or str(url).strip() == "":
+    if not url or str(url).strip() == "" or str(url).strip() == "None":
         return
 
     url = str(url).strip()
-    
     supported_platforms = [ft.PagePlatform.IOS, ft.PagePlatform.ANDROID, ft.PagePlatform.MACOS]
     
     if page.platform in supported_platforms and fv is not None:
@@ -40,16 +38,8 @@ async def open_browser(page: ft.Page, url: str, title: str = "Trình duyệt"):
         wv_dlg.open = True
         page.update()
     else:
-        # Tìm UrlLauncher có sẵn, nếu chưa có thì tạo mới
-        launcher = next((c for c in page.overlay if isinstance(c, ft.UrlLauncher)), None)
-        if not launcher:
-            launcher = ft.UrlLauncher()
-            page.overlay.append(launcher)
-            page.update()
-            # Chờ một nhịp để client kịp render đối tượng Launcher
-            await asyncio.sleep(0.2)
-            
+        # Flet 0.82.2 hỗ trợ phương thức async launch_url trực tiếp trên đối tượng page
         try:
-            await launcher.launch_url(url)
+            await UrlLauncher().launch_url(url)
         except Exception as e:
-            print(f"Lỗi khi mở trình duyệt ngoài: {e}")
+            print(f"Lỗi mở URL: {e}")

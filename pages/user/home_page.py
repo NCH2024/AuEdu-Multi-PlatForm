@@ -73,7 +73,7 @@ class UserHomePage(ft.Container):
         header_section = ft.Row([
             ft.Column([
                 ft.Text(f"{greeting},", size=14, color=current_theme.text_muted, weight=ft.FontWeight.W_500),
-                ft.Text(f"GV. {self.gv_name} 👋", size=24, weight=ft.FontWeight.W_800, color=current_theme.text_main),
+                ft.Text(f"GV. {self.gv_name}", size=24, weight=ft.FontWeight.W_800, color=current_theme.text_main),
                 ft.Text(f"Hôm nay là {now.strftime('%d/%m/%Y')} • Chúc bạn ngày mới hiệu quả!", size=12, color=current_theme.text_muted, weight=ft.FontWeight.W_500)
             ], spacing=0, expand=True),
             ft.Container(padding=10, border_radius=12, bgcolor=current_theme.surface_variant, content=ft.Icon(ft.Icons.CALENDAR_TODAY_ROUNDED, color=current_theme.secondary, size=24))
