@@ -53,39 +53,46 @@ class UserHomePage(ft.Container):
 
     def get_news_click_handler(self, item):
         async def on_click(e):
-            link = item.get("link_web")
-            has_link = bool(link and str(link).strip() not in ("", "None"))
+            try:
+                link = item.get("link_web")
+                has_link = bool(link and str(link).strip() not in ("", "None"))
 
-            if has_link:
-                await open_browser(self.app_page, link, item.get("tieu_de", "Thông báo"))
-            else:
-                def close_dlg(e):
-                    dlg.open = False
+                if has_link:
+                    from components.options.open_browser import open_browser
+                    await open_browser(self.app_page, link, item.get("tieu_de", "Thông báo"))
+                else:
+                    def close_dlg(ev):
+                        dlg.open = False
+                        self.app_page.update()
+
+                    img_widget = build_news_image(item.get("hinh_anh"), width=320, height=160, border_radius=10)
+
+                    dlg = ft.AlertDialog(
+                        title=ft.Text(item.get("tieu_de", ""), weight=ft.FontWeight.BOLD, size=16, color=current_theme.secondary),
+                        scrollable=True, # CHUẨN FLET 0.82.2
+                        content=ft.Container(
+                            width=340,
+                            content=ft.Column(
+                                tight=True, 
+                                spacing=10,
+                                controls=[
+                                    img_widget,
+                                    ft.Text(item.get("noi_dung", "Nội dung chưa cập nhật"), size=13, color=current_theme.text_main)
+                                ]
+                            )
+                        ),
+                        actions=[ft.TextButton("Đóng lại", on_click=close_dlg)],
+                        shape=ft.RoundedRectangleBorder(radius=12),
+                        bgcolor=current_theme.surface_color,
+                        content_padding=20
+                    )
+                    
+                    if dlg not in self.app_page.overlay:
+                        self.app_page.overlay.append(dlg)
+                    dlg.open = True
                     self.app_page.update()
-
-                # ✅ Dùng build_news_image — có fallback, bo góc, error_content
-                img_widget = build_news_image(item.get("hinh_anh"),
-                                              width=320, height=160, border_radius=10)
-
-                dlg = ft.AlertDialog(
-                    title=ft.Text(item.get("tieu_de", ""), weight=ft.FontWeight.BOLD,
-                                  size=16, color=current_theme.secondary),
-                    content=ft.Container(
-                        width=360,
-                        content=ft.Column([
-                            img_widget,
-                            ft.Container(height=10),
-                            ft.Text(item.get("noi_dung", "Nội dung chưa cập nhật"),
-                                    size=13, color=current_theme.text_main)
-                        ], tight=True, spacing=0, scroll=ft.ScrollMode.AUTO)
-                    ),
-                    actions=[ft.TextButton("Đóng lại", on_click=close_dlg)],
-                    shape=ft.RoundedRectangleBorder(radius=12),
-                    bgcolor=current_theme.surface_color
-                )
-                self.app_page.overlay.append(dlg)
-                dlg.open = True
-                self.app_page.update()
+            except Exception as ex:
+                print(f"[LỖI CRITICAL - HomePage] {ex}")
         return on_click
 
     def _build_timeline_controls(self):
@@ -358,11 +365,7 @@ class UserHomePage(ft.Container):
                     ft.Icon(ft.Icons.CAMPAIGN_ROUNDED, color=ft.Colors.RED_400, size=20),
                     ft.Text("BẢNG TIN HỌC VỤ", weight=ft.FontWeight.BOLD, color=current_theme.text_main, size=14)
                 ]),
-                ft.Container(
-                    content=ft.Text("Xem tất cả", size=12, color=current_theme.secondary, weight=ft.FontWeight.BOLD),
-                    ink=True, on_click=lambda e: self.app_page.run_task(self.app_page.push_route, "/user/news")
-                )
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ], alignment=ft.Alignment(-1,-1)),
             ft.Container(height=5),
             news_list
         ], spacing=0))

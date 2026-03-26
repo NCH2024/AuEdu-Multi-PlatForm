@@ -53,7 +53,7 @@ class TopNotification(ft.Container):
     async def show_and_hide(self):
         await asyncio.sleep(0.1)
         if not self.page: return 
-        self.top = 20
+        self.top = 30
         self.opacity = 1
         try: self.update()
         except: pass

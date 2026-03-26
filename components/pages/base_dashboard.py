@@ -20,7 +20,9 @@ class BaseDashboard(ft.Container):
 
         self.user_name_text = ft.Text("Đang tải...", size=13, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
         self.page_title_text = ft.Text("TỔNG QUAN", size=15, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.primary)
-        self.content_area = ft.Container(expand=True, padding=ft.Padding(10, 10, 10, 10), alignment=ft.Alignment.TOP_CENTER)
+        
+        # Sửa thành padding số nguyên an toàn cho Flet 0.82+
+        self.content_area = ft.Container(expand=True, padding=10, alignment=ft.Alignment.TOP_CENTER)
         
         self.sidebar_controls = []
         self.bottom_nav_controls = []
@@ -43,12 +45,10 @@ class BaseDashboard(ft.Container):
         self.user_name_text.color = theme_module.current_theme.text_main
         self.page_title_text.color = theme_module.current_theme.primary
 
-        # ── QUAN TRỌNG: Lưu content hiện tại trước khi build lại layout ──
         saved_content = self.content_area.content
 
         self.content = self.build_layout()
 
-        # ── Khôi phục content đã lưu vào content_area mới ──
         if saved_content is not None:
             self.content_area.content = saved_content
 
@@ -64,14 +64,7 @@ class BaseDashboard(ft.Container):
             except Exception:
                 pass
 
-    # ══════════════════════════════════════════════════════════════════
-    # THEME: Cập nhật chủ đề và gọi apply_theme() trên trang hiện tại
-    # ══════════════════════════════════════════════════════════════════
     async def _apply_theme_to_current_page(self):
-        """
-        Sau khi rebuild layout, gọi apply_theme() trên trang hiện tại.
-        Tách riêng để dùng chung cho toggle_dark_mode và change_palette.
-        """
         current_page = self.content_area.content
         if current_page is not None and hasattr(current_page, "apply_theme"):
             current_page.apply_theme()
@@ -80,18 +73,17 @@ class BaseDashboard(ft.Container):
         prefs = ft.SharedPreferences()
         new_is_dark = not theme_module.current_theme.is_dark
         await prefs.set("app_is_dark", "True" if new_is_dark else "False")
-        await self.init_app_settings()           # build lại layout shell (header, sidebar)
-        await self._apply_theme_to_current_page()  # apply theme cho trang đang hiển thị
+        await self.init_app_settings()
+        await self._apply_theme_to_current_page()
 
     async def change_palette(self, p_type):
         prefs = ft.SharedPreferences()
         await prefs.set("app_palette", p_type)
-        # Đóng dialog đang mở
         for item in self.app_page.overlay[:]:
             if isinstance(item, ft.AlertDialog) and item.open:
                 item.open = False
-        await self.init_app_settings()           # build lại layout shell
-        await self._apply_theme_to_current_page()  # apply theme cho trang đang hiển thị
+        await self.init_app_settings()
+        await self._apply_theme_to_current_page()
 
     def open_theme_dialog(self, e):
         def build_palette_option(name, primary, secondary, accent, p_type):
@@ -126,14 +118,16 @@ class BaseDashboard(ft.Container):
             bgcolor=theme_module.current_theme.surface_color,
             shape=ft.RoundedRectangleBorder(radius=16)
         )
-        self.app_page.open(dialog)
+        
+        if dialog not in self.app_page.overlay:
+            self.app_page.overlay.append(dialog)
+        dialog.open = True
+        self.app_page.update()
 
     def _close_dialog(self, dialog):
-        self.app_page.close(dialog)
+        dialog.open = False
+        self.app_page.update()
 
-    # ══════════════════════════════════════════════════════════════════
-    # QUẢN LÝ GIAO DIỆN
-    # ══════════════════════════════════════════════════════════════════
     def set_content(self, title: str, new_content: ft.Control, route: str):
         self.page_title_text.value = title.upper()
         self.content_area.content = new_content
@@ -294,24 +288,20 @@ class BaseDashboard(ft.Container):
         windows_title_bar = self.build_windows_title_bar()
         top_bar_area = ft.Column(spacing=0, controls=[windows_title_bar, header_content])
 
-        # ── content_area: GIỮ NGUYÊN instance cũ nếu đã tồn tại ──
-        # Không tạo mới để không mất nội dung trang hiện tại.
-        # (Việc khôi phục content được xử lý trong init_app_settings)
         if not hasattr(self, "content_area") or self.content_area is None:
             self.content_area = ft.Container(
                 expand=True,
-                padding=ft.Padding(10, 10, 10, 10),
+                padding=10,
                 alignment=ft.Alignment.TOP_CENTER
             )
 
-        scroll_wrapper = ft.Column(
-            expand=True, scroll=ft.ScrollMode.AUTO, alignment=ft.MainAxisAlignment.START,
-            controls=[self.content_area]
-        )
-
+        # -------------------------------------------------------------
+        # FIX CỐT LÕI: Đưa trực tiếp self.content_area vào Column
+        # KHÔNG DÙNG scroll_wrapper có scroll=AUTO bọc bên ngoài nữa!
+        # -------------------------------------------------------------
         main_view_stack = ft.Column(
             expand=True, spacing=0,
-            controls=[top_bar_area, scroll_wrapper]
+            controls=[top_bar_area, self.content_area]
         )
 
         self.build_navigation()

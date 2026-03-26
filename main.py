@@ -13,7 +13,6 @@ from pages.user.schedule_page import SchedulePage
 from pages.user.stats_page import StatsPage
 from pages.about_page import AboutPage
 from pages.user.profile_page import ProfilePage
-from pages.user.news_page import NewsPage
 from pages.user.attendance_session_page import AttendanceSessionPage
 
 import core.theme as theme_module
@@ -118,8 +117,6 @@ async def main(page: ft.Page):
                     dashboard.set_content("THÔNG TIN PHẦN MỀM", AboutPage(page), current_route)
                 elif current_route == "/user/profile":
                     dashboard.set_content("HỒ SƠ TÀI KHOẢN", ProfilePage(page), current_route)
-                elif current_route == "/user/news":
-                    dashboard.set_content("THÔNG BÁO", NewsPage(page), current_route)
 
             page.update()
             

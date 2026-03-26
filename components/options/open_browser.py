@@ -1,23 +1,21 @@
 # components/options/open_browser.py
 import flet as ft
 from flet import UrlLauncher
+from components.options.top_notification import TopNotification
 
 async def open_browser(page: ft.Page, url: str, title: str = "Trình duyệt"):
-    if not url or str(url).strip() == "" or str(url).strip() == "None":
+    print(f"[DEBUG - Browser] Yêu cầu mở URL: {url} | Tiêu đề: {title}")
+    
+    if not url or str(url).strip() in ("", "None"):
+        print("[DEBUG - Browser] Cảnh báo: URL rỗng hoặc None, hủy thao tác mở trình duyệt.")
         return
 
     url = str(url).strip()
-    supported_platforms = [ft.PagePlatform.IOS, ft.PagePlatform.ANDROID, ft.PagePlatform.MACOS]
     
-    # Nếu là Mobile/Mac và có thư viện webview
-    if page.platform in supported_platforms:
-        # Lưu trữ URL và Title vào session để lấy ở trang BrowserPage
-        page.session.set("browser_url", url)
-        page.session.set("browser_title", title)
-        await page.push_route("/user/browser")
-    else:
-        # Fallback mở trình duyệt mặc định của Windows/Web
-        try:
-            await UrlLauncher().launch_url(url)
-        except Exception as e:
-            print(f"Lỗi mở URL: {e}")
+    try:
+        print(f"[DEBUG - Browser] Đang thực thi UrlLauncher().launch_url({url})...")
+        # Sử dụng đúng chuẩn API của Flet 0.82.2 giống với about_page.py
+        await UrlLauncher().launch_url(url)
+        print("[DEBUG - Browser] Gọi UrlLauncher thành công.")
+    except Exception as e:
+        print(f"[LỖI CRITICAL - Browser] UrlLauncher thất bại. Chi tiết lỗi: {e}")
