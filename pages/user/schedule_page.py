@@ -19,13 +19,12 @@ class SchedulePage(ft.Container):
         self.padding = 0
 
         self.gv_id = "N/A"
-        self.view_mode = "week"                 
+        self.view_mode = "week"
         self.selected_date = datetime.date.today()
-        self.raw_schedule_data = []           
-        self.tuan_hoc_data = []               
-        self.calendar_day_refs = {}            
-
-        self.is_updating_ui = False           
+        self.raw_schedule_data = []
+        self.tuan_hoc_data = []
+        self.calendar_day_refs = {}
+        self.is_updating_ui = False
 
         self.date_picker = ft.DatePicker(
             first_date=datetime.date(2025, 1, 1),
@@ -39,8 +38,7 @@ class SchedulePage(ft.Container):
         self.schedule_list = ScheduleDetailList()
 
         self.content = ft.Column(
-            spacing=10,
-            expand=True,
+            spacing=10, expand=True,
             controls=[
                 ft.Container(height=5),
                 self.toolbar_container,
@@ -50,7 +48,6 @@ class SchedulePage(ft.Container):
         )
 
     def apply_theme(self):
-        """Cơ chế thay đổi toàn bộ UI khi bấm nút ở Dashboard."""
         self.render_toolbar()
         self.render_calendar_area()
         self.schedule_list.apply_theme()
@@ -61,7 +58,7 @@ class SchedulePage(ft.Container):
 
     async def initialize_data(self):
         prefs = ft.SharedPreferences()
-        
+
         session_str = await prefs.get("user_session")
         if session_str:
             session = safe_json_load(session_str)
@@ -69,71 +66,85 @@ class SchedulePage(ft.Container):
 
         cached_tuan_hoc = safe_json_load(await prefs.get("cached_tuan_hoc"))
         cached_schedule = safe_json_load(await prefs.get(f"cached_schedule_{self.gv_id}"))
-
         last_sync = float(await prefs.get(f"last_sync_schedule_{self.gv_id}") or 0)
         cached_tuan_hoc_hash = await prefs.get("tuan_hoc_hash")
         cached_schedule_hash = await prefs.get(f"schedule_hash_{self.gv_id}")
 
         current_time = time.time()
-        TTL = 21600  
+        TTL = 21600  # 6 giờ
 
+        # Hiển thị cache ngay
         if cached_tuan_hoc is not None and cached_schedule is not None:
             self.tuan_hoc_data = cached_tuan_hoc
             self.raw_schedule_data = cached_schedule
             await self._async_rebuild_entire_ui()
 
-        if current_time - last_sync < TTL: return
+        if current_time - last_sync < TTL:
+            return
 
         try:
-            async with await get_supabase_client() as client:
-                res_th = await client.get("/tuan_hoc", params={"select": "*", "order": "id.asc"})
+            # ✅ Singleton client, KHÔNG dùng async with
+            client = await get_supabase_client()
+
+            # ✅ Fetch tuan_hoc và TKB song song
+            res_th, res_tkb = await asyncio.gather(
+                client.get("/tuan_hoc", params={"select": "*", "order": "id.asc"}),
+                client.get("/thoikhoabieu", params={"select": "id,hocphan(tenhocphan),lop(tenlop)", "giangvien_id": f"eq.{self.gv_id}"}) if self.gv_id != "N/A" else asyncio.sleep(0),
+                return_exceptions=True
+            )
+
+            fresh_tuan_hoc = []
+            if not isinstance(res_th, Exception):
                 res_th.raise_for_status()
                 fresh_tuan_hoc = res_th.json()
 
-                fresh_raw_schedule = []
-                if self.gv_id != "N/A":
-                    res_tkb = await client.get("/thoikhoabieu", params={"select": "id,hocphan(tenhocphan),lop(tenlop)", "giangvien_id": f"eq.{self.gv_id}"})
-                    res_tkb.raise_for_status()
-                    tkb_list = res_tkb.json()
+            fresh_raw_schedule = []
+            if not isinstance(res_tkb, Exception) and res_tkb is not None and hasattr(res_tkb, 'json'):
+                res_tkb.raise_for_status()
+                tkb_list = res_tkb.json()
 
-                    if tkb_list:
-                        tkb_dict = {
-                            row["id"]: {"hocphan": row["hocphan"]["tenhocphan"] if row.get("hocphan") else "N/A", "lop": row["lop"]["tenlop"] if row.get("lop") else "N/A"}
-                            for row in tkb_list
+                if tkb_list:
+                    tkb_dict = {
+                        row["id"]: {
+                            "hocphan": row["hocphan"]["tenhocphan"] if row.get("hocphan") else "N/A",
+                            "lop": row["lop"]["tenlop"] if row.get("lop") else "N/A"
                         }
-                        tkb_ids_str = ",".join(map(str, tkb_dict.keys()))
-                        res_tiet = await client.get("/tkb_tiet", params={"select": "tkb_id,tiet_id,thu,phong_hoc", "tkb_id": f"in.({tkb_ids_str})"})
-                        res_tiet.raise_for_status()
-                        tkb_tiet_data = res_tiet.json()
+                        for row in tkb_list
+                    }
+                    tkb_ids_str = ",".join(map(str, tkb_dict.keys()))
+                    res_tiet = await client.get("/tkb_tiet", params={"select": "tkb_id,tiet_id,thu,phong_hoc", "tkb_id": f"in.({tkb_ids_str})"})
+                    res_tiet.raise_for_status()
+                    tkb_tiet_data = res_tiet.json()
 
-                        if tkb_tiet_data:
-                            grouped = {}
-                            for item in tkb_tiet_data:
-                                key = (item["tkb_id"], item["thu"], item["phong_hoc"])
-                                grouped.setdefault(key, []).append(item["tiet_id"])
+                    if tkb_tiet_data:
+                        grouped = {}
+                        for item in tkb_tiet_data:
+                            key = (item["tkb_id"], item["thu"], item["phong_hoc"])
+                            grouped.setdefault(key, []).append(item["tiet_id"])
 
-                            for (tkb_id, thu, phong), tiets in grouped.items():
-                                tiets.sort()
-                                tiet_str = f"{tiets[0]} - {tiets[-1]}" if len(tiets) > 1 else str(tiets[0])
-                                ten_mon = tkb_dict[tkb_id]["hocphan"]
-                                card_color = "#FFC107" if any(k in ten_mon.lower() for k in ["thi", "bảo vệ"]) else "#00A884"
-                                
-                                fresh_raw_schedule.append({
-                                    "thu": thu, "subject": ten_mon, "time": tiet_str,
-                                    "room": phong if phong else "N/A", "class_name": tkb_dict[tkb_id]["lop"],
-                                    "type_color": card_color,
-                                })
+                        for (tkb_id, thu, phong), tiets in grouped.items():
+                            tiets.sort()
+                            tiet_str = f"{tiets[0]} - {tiets[-1]}" if len(tiets) > 1 else str(tiets[0])
+                            ten_mon = tkb_dict[tkb_id]["hocphan"]
+                            card_color = "#FFC107" if any(k in ten_mon.lower() for k in ["thi", "bảo vệ"]) else "#00A884"
+                            fresh_raw_schedule.append({
+                                "thu": thu, "subject": ten_mon, "time": tiet_str,
+                                "room": phong if phong else "N/A", "class_name": tkb_dict[tkb_id]["lop"],
+                                "type_color": card_color,
+                            })
 
             new_tuan_hoc_hash = hash_data(fresh_tuan_hoc)
             new_schedule_hash = hash_data(fresh_raw_schedule)
-
             is_changed = (new_tuan_hoc_hash != cached_tuan_hoc_hash or new_schedule_hash != cached_schedule_hash)
 
-            await prefs.set("cached_tuan_hoc", json.dumps(fresh_tuan_hoc))
-            await prefs.set(f"cached_schedule_{self.gv_id}", json.dumps(fresh_raw_schedule))
-            await prefs.set("tuan_hoc_hash", new_tuan_hoc_hash)
-            await prefs.set(f"schedule_hash_{self.gv_id}", new_schedule_hash)
-            await prefs.set(f"last_sync_schedule_{self.gv_id}", str(current_time))
+            # ✅ Lưu cache song song
+            await asyncio.gather(
+                prefs.set("cached_tuan_hoc", json.dumps(fresh_tuan_hoc)),
+                prefs.set(f"cached_schedule_{self.gv_id}", json.dumps(fresh_raw_schedule)),
+                prefs.set("tuan_hoc_hash", new_tuan_hoc_hash),
+                prefs.set(f"schedule_hash_{self.gv_id}", new_schedule_hash),
+                prefs.set(f"last_sync_schedule_{self.gv_id}", str(current_time)),
+            )
 
             if is_changed or cached_tuan_hoc is None:
                 self.tuan_hoc_data = fresh_tuan_hoc
@@ -141,7 +152,8 @@ class SchedulePage(ft.Container):
                 await self._async_rebuild_entire_ui()
 
         except Exception as e:
-            show_top_notification(self.app_page, "SCHEDULE [Lỗi kết nối mạng]", "Không thể tải lịch học mới nhất!", 4000, color=ft.Colors.RED)
+            print(f"schedule initialize_data lỗi: {e}")
+            show_top_notification(self.app_page, "Lỗi kết nối", "Không thể tải lịch học mới nhất!", 4000, color=ft.Colors.RED)
 
     async def _async_rebuild_entire_ui(self):
         if self.is_updating_ui: return
@@ -231,18 +243,15 @@ class SchedulePage(ft.Container):
             day_str = ["Th 2", "Th 3", "Th 4", "Th 5", "Th 6", "Th 7", "CN"][self.selected_date.weekday()]
             btn = ft.TextButton(
                 content=ft.Row([
-                        ft.Text(f"{day_str}, {self.selected_date.strftime('%d/%m/%Y')}", size=14, weight=ft.FontWeight.BOLD, color=current_theme.secondary),
-                        ft.Icon(ft.Icons.ARROW_DROP_DOWN, color=current_theme.secondary, size=20),
-                    ], spacing=2),
+                    ft.Text(f"{day_str}, {self.selected_date.strftime('%d/%m/%Y')}", size=14, weight=ft.FontWeight.BOLD, color=current_theme.secondary),
+                    ft.Icon(ft.Icons.ARROW_DROP_DOWN, color=current_theme.secondary, size=20),
+                ], spacing=2),
                 style=ft.ButtonStyle(padding=0), on_click=self._open_date_picker,
             )
             controls_left = [ft.Container(content=btn)]
 
         elif self.view_mode == "week":
-            dd_year = ft.Dropdown(
-                value=str(self.selected_date.year), options=[ft.dropdown.Option(key=str(y), text=str(y)) for y in range(2025, 2031)],
-                text_size=14, border=ft.InputBorder.NONE, dense=True, width=100, menu_height=250, color=current_theme.text_main,
-            )
+            dd_year = ft.Dropdown(value=str(self.selected_date.year), options=[ft.dropdown.Option(key=str(y), text=str(y)) for y in range(2025, 2031)], text_size=14, border=ft.InputBorder.NONE, dense=True, width=100, menu_height=250, color=current_theme.text_main)
             dd_year.on_select = self._handle_year_change
 
             week_opts = [ft.dropdown.Option(key=str(t["id"]), text=t["ten_tuan"]) for t in self.tuan_hoc_data]
@@ -261,21 +270,15 @@ class SchedulePage(ft.Container):
             controls_left = [dd_year, dd_week]
 
         elif self.view_mode == "month":
-            dd_year = ft.Dropdown(
-                value=str(self.selected_date.year), options=[ft.dropdown.Option(key=str(y), text=str(y)) for y in range(2025, 2031)],
-                text_size=14, border=ft.InputBorder.NONE, dense=True, width=100, menu_height=250, color=current_theme.text_main,
-            )
+            dd_year = ft.Dropdown(value=str(self.selected_date.year), options=[ft.dropdown.Option(key=str(y), text=str(y)) for y in range(2025, 2031)], text_size=14, border=ft.InputBorder.NONE, dense=True, width=100, menu_height=250, color=current_theme.text_main)
             dd_year.on_select = self._handle_year_change
 
-            dd_month = ft.Dropdown(
-                value=str(self.selected_date.month), options=[ft.dropdown.Option(key=str(m), text=f"Tháng {m}") for m in range(1, 13)],
-                text_size=14, border=ft.InputBorder.NONE, dense=True, width=120, menu_height=250, color=current_theme.text_main,
-            )
+            dd_month = ft.Dropdown(value=str(self.selected_date.month), options=[ft.dropdown.Option(key=str(m), text=f"Tháng {m}") for m in range(1, 13)], text_size=14, border=ft.InputBorder.NONE, dense=True, width=120, menu_height=250, color=current_theme.text_main)
             dd_month.on_select = self._handle_month_change
             controls_left = [dd_year, dd_month]
 
         self.toolbar_container.content = ft.Row(
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER, wrap=True, 
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER, wrap=True,
             controls=[ft.Row(controls=controls_left, spacing=5), segment_group],
         )
 
@@ -298,10 +301,7 @@ class SchedulePage(ft.Container):
                 has_dot = any(item.get("thu") == target_thu for item in self.raw_schedule_data)
 
                 txt_day = ft.Text(day_names[i], size=11, color=current_theme.bg_color if is_selected else current_theme.text_muted)
-                txt_num = ft.Text(
-                    d.strftime("%d"), size=15, weight=ft.FontWeight.W_800,
-                    color=current_theme.bg_color if is_selected else current_theme.text_main,
-                )
+                txt_num = ft.Text(d.strftime("%d"), size=15, weight=ft.FontWeight.W_800, color=current_theme.bg_color if is_selected else current_theme.text_main)
                 dot = ft.Container(width=5, height=5, border_radius=2.5, bgcolor=ft.Colors.AMBER_500 if has_dot else ft.Colors.TRANSPARENT)
                 box = ft.Container(
                     expand=True, bgcolor=current_theme.secondary if is_selected else current_theme.surface_color,
@@ -318,10 +318,8 @@ class SchedulePage(ft.Container):
         now = self.selected_date
         cal = calendar.monthcalendar(now.year, now.month)
         day_names = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
-        
-        header_controls = []
-        for i, d_name in enumerate(day_names):
-            header_controls.append(ft.Container(expand=True, alignment=ft.Alignment(0, 0), content=ft.Text(d_name, size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_500 if i >= 5 else current_theme.secondary)))
+
+        header_controls = [ft.Container(expand=True, alignment=ft.Alignment(0, 0), content=ft.Text(d_name, size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_500 if i >= 5 else current_theme.secondary)) for i, d_name in enumerate(day_names)]
         header_row = ft.Row(controls=header_controls, spacing=0)
 
         weeks_controls = []
@@ -337,23 +335,20 @@ class SchedulePage(ft.Container):
                     has_dot = any(item.get("thu") == target_thu for item in self.raw_schedule_data)
 
                     txt_num = ft.Text(str(day), size=12, weight=ft.FontWeight.W_500 if is_selected else ft.FontWeight.NORMAL, color=current_theme.bg_color if is_selected else current_theme.text_main)
-                    day_circle = ft.Container(
-                        width=32, height=32, border_radius=16, bgcolor=current_theme.secondary if is_selected else ft.Colors.TRANSPARENT,
-                        alignment=ft.Alignment(0, 0), content=txt_num,
-                    )
+                    day_circle = ft.Container(width=32, height=32, border_radius=16, bgcolor=current_theme.secondary if is_selected else ft.Colors.TRANSPARENT, alignment=ft.Alignment(0, 0), content=txt_num)
                     dot = ft.Container(width=5, height=5, border_radius=2.5, bgcolor=ft.Colors.AMBER_500 if has_dot and not is_selected else ft.Colors.TRANSPARENT)
                     day_box = ft.Container(expand=True, height=45, content=ft.Column(alignment=ft.MainAxisAlignment.START, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2, controls=[day_circle, dot]))
                     day_box.on_click = lambda e, date_val=d_obj: self._set_selected_date_and_scroll(date_val)
                     week_row_controls.append(day_box)
                     self.calendar_day_refs[d_obj] = {"bg": day_circle, "text": txt_num}
-            
+
             weeks_controls.append(ft.Row(controls=week_row_controls, spacing=0))
 
         self.calendar_area_container.content = ft.Container(
             bgcolor=current_theme.surface_color, padding=ft.Padding(5, 10, 5, 10), border_radius=12, border=ft.Border.all(1, current_theme.divider_color),
             content=ft.Column(spacing=5, controls=[header_row, ft.Divider(height=1, color=current_theme.divider_color), ft.Container(height=180, content=ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, controls=weeks_controls))])
         )
-    
+
     def render_schedule_cards(self):
         display_schedules = []
 

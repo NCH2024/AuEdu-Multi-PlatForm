@@ -3,9 +3,10 @@ import json
 import time
 import asyncio
 import datetime
-from core.helper import hash_data, safe_json_load, process_image_url
+from core.helper import hash_data, safe_json_load
 from components.options.top_notification import show_top_notification
 from components.options.open_browser import open_browser
+from components.options.news_image import build_news_image
 from core.theme import current_theme
 from core.config import get_supabase_client
 
@@ -53,22 +54,31 @@ class UserHomePage(ft.Container):
     def get_news_click_handler(self, item):
         async def on_click(e):
             link = item.get("link_web")
-            if link and str(link).strip() != "":
+            has_link = bool(link and str(link).strip() not in ("", "None"))
+
+            if has_link:
                 await open_browser(self.app_page, link, item.get("tieu_de", "Thông báo"))
             else:
                 def close_dlg(e):
                     dlg.open = False
                     self.app_page.update()
 
-                img_src = process_image_url(item.get("hinh_anh"))
-                dlg_content = ft.Column([
-                    ft.Image(src=img_src, width=300, height=150, fit=ft.BoxFit.COVER, border_radius=8),
-                    ft.Text(item.get("noi_dung", "Nội dung chưa cập nhật"), size=13, color=current_theme.text_main)
-                ], tight=True, spacing=10, scroll=ft.ScrollMode.AUTO)
+                # ✅ Dùng build_news_image — có fallback, bo góc, error_content
+                img_widget = build_news_image(item.get("hinh_anh"),
+                                              width=320, height=160, border_radius=10)
 
                 dlg = ft.AlertDialog(
-                    title=ft.Text(item.get("tieu_de", ""), weight=ft.FontWeight.BOLD, size=16, color=current_theme.secondary),
-                    content=dlg_content,
+                    title=ft.Text(item.get("tieu_de", ""), weight=ft.FontWeight.BOLD,
+                                  size=16, color=current_theme.secondary),
+                    content=ft.Container(
+                        width=360,
+                        content=ft.Column([
+                            img_widget,
+                            ft.Container(height=10),
+                            ft.Text(item.get("noi_dung", "Nội dung chưa cập nhật"),
+                                    size=13, color=current_theme.text_main)
+                        ], tight=True, spacing=0, scroll=ft.ScrollMode.AUTO)
+                    ),
                     actions=[ft.TextButton("Đóng lại", on_click=close_dlg)],
                     shape=ft.RoundedRectangleBorder(radius=12),
                     bgcolor=current_theme.surface_color
@@ -184,20 +194,24 @@ class UserHomePage(ft.Container):
 
         if self.thongbao_data:
             for item in self.thongbao_data:
-                img_src = process_image_url(item.get("hinh_anh"))
-                img_widget = ft.Image(src=img_src, width=80, height=80, fit=ft.BoxFit.COVER, border_radius=8)
-                has_link = bool(item.get("link_web") and str(item.get("link_web")).strip() != "")
+                # ✅ build_news_image: kích thước cố định, có fallback, bo góc sắc nét
+                img_widget = build_news_image(item.get("hinh_anh"),
+                                              width=80, height=80, border_radius=8)
+                has_link = bool(item.get("link_web") and str(item.get("link_web")).strip() not in ("", "None"))
+                created_at = item.get("created_at", "")
+                date_str = str(created_at)[:10] if created_at and len(str(created_at)) >= 10 else "N/A"
                 controls.append(ft.Container(
                     padding=ft.Padding(0, 12, 0, 12),
                     border=ft.Border(bottom=ft.BorderSide(1, current_theme.divider_color)),
                     ink=True, on_click=self.get_news_click_handler(item),
                     content=ft.Row([
                         img_widget,
+                        ft.Container(width=10),
                         ft.Column([
                             ft.Text(item.get("tieu_de", ""), weight=ft.FontWeight.W_600, size=13, color=current_theme.text_main, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                             ft.Row([
                                 ft.Icon(ft.Icons.ACCESS_TIME, size=12, color=current_theme.text_muted),
-                                ft.Text(item.get("created_at", "N/A")[:10], size=11, color=current_theme.text_muted)
+                                ft.Text(date_str, size=11, color=current_theme.text_muted)
                             ], spacing=4)
                         ], spacing=4, expand=True),
                         ft.Icon(

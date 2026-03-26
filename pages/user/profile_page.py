@@ -1,6 +1,7 @@
 import flet as ft
 import json
 import datetime
+import asyncio
 import time
 
 from core.theme import current_theme
@@ -15,20 +16,17 @@ class ProfilePage(ft.Container):
         self.expand = True
         self.padding = 0
 
-        # ==========================================
-        # CÁC BIẾN UI TRẠNG THÁI
-        # ==========================================
+        # Controls tái sử dụng — không tạo lại khi apply_theme
         self.avatar_icon = ft.Icon(ft.Icons.PERSON, size=50, color=ft.Colors.WHITE)
         self.name_text = ft.Text("Đang tải...", size=20, weight=ft.FontWeight.BOLD, color=current_theme.secondary)
         self.role_text = ft.Text("...", size=14, weight=ft.FontWeight.W_500, color=current_theme.accent)
-        
+
         self.id_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
         self.gender_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
         self.phone_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
         self.address_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
         self.khoa_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
         self.join_date_val = ft.Text("...", size=14, weight=ft.FontWeight.BOLD, color=current_theme.text_main)
-
         self.total_classes_val = ft.Text("...", size=30, weight=ft.FontWeight.BOLD, color=current_theme.secondary)
 
         self.content = self.build_ui()
@@ -37,17 +35,14 @@ class ProfilePage(ft.Container):
         self.app_page.run_task(self.load_profile_data)
 
     def apply_theme(self):
-        """Vẽ lại màu sắc UI khi đổi Theme"""
+        # Cập nhật màu trực tiếp trên control hiện có
         self.name_text.color = current_theme.secondary
         self.role_text.color = current_theme.accent
-        self.id_val.color = current_theme.text_main
-        self.gender_val.color = current_theme.text_main
-        self.phone_val.color = current_theme.text_main
-        self.address_val.color = current_theme.text_main
-        self.khoa_val.color = current_theme.text_main
-        self.join_date_val.color = current_theme.text_main
         self.total_classes_val.color = current_theme.secondary
-        
+        for ctrl in [self.id_val, self.gender_val, self.phone_val, self.address_val, self.khoa_val, self.join_date_val]:
+            ctrl.color = current_theme.text_main
+
+        # Rebuild layout vì màu nền các card thay đổi
         self.content = self.build_ui()
         if self.page: self.update()
 
@@ -57,8 +52,8 @@ class ProfilePage(ft.Container):
 
         def make_card(content):
             return ft.Container(
-                content=content, padding=20, 
-                bgcolor=current_theme.surface_color, border_radius=16, 
+                content=content, padding=20,
+                bgcolor=current_theme.surface_color, border_radius=16,
                 border=ft.Border.all(1, current_theme.divider_color)
             )
 
@@ -75,7 +70,6 @@ class ProfilePage(ft.Container):
                 ])
             )
 
-        # 1. CARD THÔNG TIN CÁ NHÂN
         personal_info_card = make_card(
             content=ft.Column([
                 ft.Row([
@@ -84,32 +78,30 @@ class ProfilePage(ft.Container):
                     ft.Column([
                         self.name_text,
                         ft.Container(
-                            padding=ft.Padding(10, 4, 10, 4), bgcolor=ft.Colors.with_opacity(0.1, current_theme.accent),
+                            padding=ft.Padding(10, 4, 10, 4),
+                            bgcolor=ft.Colors.with_opacity(0.1, current_theme.accent),
                             border_radius=12, content=self.role_text
                         )
                     ], spacing=2)
                 ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                
+
                 ft.Divider(color=current_theme.divider_color, height=30),
                 ft.Text("Chi tiết liên hệ & Định danh", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=13),
                 ft.Container(height=5),
-                
+
                 create_info_row(ft.Icons.BADGE_OUTLINED, "Mã Cán Bộ:", self.id_val),
                 create_info_row(ft.Icons.WC_ROUNDED, "Giới tính:", self.gender_val),
                 create_info_row(ft.Icons.PHONE_ANDROID_ROUNDED, "Điện thoại:", self.phone_val),
                 create_info_row(ft.Icons.HOME_OUTLINED, "Địa chỉ:", self.address_val),
                 create_info_row(ft.Icons.ACCOUNT_BALANCE_OUTLINED, "Đơn vị (Khoa):", self.khoa_val),
                 create_info_row(ft.Icons.CALENDAR_TODAY_ROUNDED, "Ngày tham gia:", self.join_date_val),
-                
             ], spacing=10)
         )
 
-        # 2. CARD HOẠT ĐỘNG & THỐNG KÊ
         stats_card = make_card(
             content=ft.Column([
                 ft.Text("HOẠT ĐỘNG GIẢNG DẠY", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=13),
                 ft.Divider(color=current_theme.divider_color),
-                
                 ft.Container(
                     bgcolor=current_theme.surface_variant, padding=20, border_radius=12,
                     border=ft.Border.all(1, current_theme.divider_color),
@@ -125,10 +117,9 @@ class ProfilePage(ft.Container):
                         ], spacing=0)
                     ])
                 ),
-                
                 ft.Container(height=15),
                 ft.Button(
-                    content=ft.Row([ft.Icon(ft.Icons.EDIT_DOCUMENT, color=current_theme.bg_color, size=18), ft.Text("Cập nhật thông tin", color=current_theme.bg_color, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER), 
+                    content=ft.Row([ft.Icon(ft.Icons.EDIT_DOCUMENT, color=current_theme.bg_color, size=18), ft.Text("Cập nhật thông tin", color=current_theme.bg_color, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER),
                     bgcolor=current_theme.accent, height=45,
                     on_click=handle_update_click
                 )
@@ -143,10 +134,9 @@ class ProfilePage(ft.Container):
         return ft.Column([ft.Container(height=5), main_layout, ft.Container(height=30)], scroll=ft.ScrollMode.AUTO, expand=True)
 
     def render_data_to_ui(self, info, total_classes):
-        """Hàm gán dữ liệu vào giao diện"""
         ho_ten = f"{info.get('hodem', '')} {info.get('ten', '')}".strip()
         self.name_text.value = ho_ten
-        
+
         role = info.get("vai_tro", "giangvien")
         self.role_text.value = "Quản trị viên hệ thống" if role == "admin" else "Giảng viên"
 
@@ -154,7 +144,7 @@ class ProfilePage(ft.Container):
         self.gender_val.value = info.get("gioitinh", "Chưa cập nhật")
         self.phone_val.value = info.get("sodienthoai", "Chưa cập nhật")
         self.address_val.value = info.get("diachi", "Chưa cập nhật")
-        
+
         if info.get("khoa") and isinstance(info["khoa"], dict) and info["khoa"].get("tenkhoa"):
             self.khoa_val.value = info["khoa"]["tenkhoa"]
         else:
@@ -165,7 +155,7 @@ class ProfilePage(ft.Container):
             try:
                 parsed_date = datetime.datetime.fromisoformat(raw_date.replace('Z', '+00:00'))
                 self.join_date_val.value = parsed_date.strftime("%d/%m/%Y")
-            except:
+            except Exception:
                 self.join_date_val.value = raw_date[:10]
         else:
             self.join_date_val.value = "Không xác định"
@@ -180,71 +170,64 @@ class ProfilePage(ft.Container):
             prefs = ft.SharedPreferences()
             session_str = await prefs.get("user_session")
             if not session_str: return
-            
+
             session_data = safe_json_load(session_str)
             gv_id = session_data.get("id")
             if not gv_id or gv_id == "N/A": return
 
-            # ==============================
-            # BƯỚC 1: LOAD CACHE VÀ ĐỌC HASH
-            # ==============================
             cached_profile = safe_json_load(await prefs.get(f"cached_profile_{gv_id}"))
             cached_total_classes = await prefs.get(f"cached_total_classes_{gv_id}")
-            
             last_sync = float(await prefs.get(f"last_sync_profile_{gv_id}") or 0)
             cached_profile_hash = await prefs.get(f"profile_hash_{gv_id}")
 
             current_time = time.time()
-            TTL = 86400  # 1 Ngày = 24 * 60 * 60 giây
+            TTL = 86400  # 1 ngày
 
-            # HIỂN THỊ CACHE TỨC THÌ
+            # Hiển thị cache ngay
             if cached_profile is not None and cached_total_classes is not None:
                 self.render_data_to_ui(cached_profile, cached_total_classes)
 
-            # BƯỚC 2: KIỂM TRA TTL
             if current_time - last_sync < TTL:
                 return
 
-            # ==============================
-            # BƯỚC 3: CALL API (BACKGROUND)
-            # ==============================
-            async with await get_supabase_client() as client:
-                params_gv = {"select": "*, khoa(tenkhoa)", "id": f"eq.{gv_id}"}
-                res_gv = await client.get("/giangvien", params=params_gv)
-                res_gv.raise_for_status()
-                gv_data = res_gv.json()
-                fresh_profile = gv_data[0] if gv_data else {}
+            # ✅ Singleton client, KHÔNG dùng async with
+            client = await get_supabase_client()
 
-                params_tkb = {"select": "id", "giangvien_id": f"eq.{gv_id}"}
-                res_tkb = await client.get("/thoikhoabieu", params=params_tkb)
-                res_tkb.raise_for_status()
-                tkb_data = res_tkb.json()
-                fresh_total_classes = len(tkb_data)
+            # ✅ Fetch profile và TKB song song
+            res_gv, res_tkb = await asyncio.gather(
+                client.get("/giangvien", params={"select": "*, khoa(tenkhoa)", "id": f"eq.{gv_id}"}),
+                client.get("/thoikhoabieu", params={"select": "id", "giangvien_id": f"eq.{gv_id}"}),
+                return_exceptions=True
+            )
 
-            # ==============================
-            # BƯỚC 4: BĂM HASH SO SÁNH
-            # ==============================
+            if isinstance(res_gv, Exception): raise res_gv
+            if isinstance(res_tkb, Exception): raise res_tkb
+
+            res_gv.raise_for_status()
+            res_tkb.raise_for_status()
+
+            gv_data = res_gv.json()
+            fresh_profile = gv_data[0] if gv_data else {}
+            fresh_total_classes = len(res_tkb.json())
+
             new_profile_hash = hash_data({"profile": fresh_profile, "total": fresh_total_classes})
             is_changed = (new_profile_hash != cached_profile_hash)
 
-            # ==============================
-            # BƯỚC 5: CẬP NHẬT CACHE VÀ THỜI GIAN
-            # ==============================
-            await prefs.set(f"cached_profile_{gv_id}", json.dumps(fresh_profile))
-            await prefs.set(f"cached_total_classes_{gv_id}", str(fresh_total_classes))
-            await prefs.set(f"profile_hash_{gv_id}", new_profile_hash)
-            await prefs.set(f"last_sync_profile_{gv_id}", str(current_time))
+            # ✅ Lưu cache song song
+            await asyncio.gather(
+                prefs.set(f"cached_profile_{gv_id}", json.dumps(fresh_profile)),
+                prefs.set(f"cached_total_classes_{gv_id}", str(fresh_total_classes)),
+                prefs.set(f"profile_hash_{gv_id}", new_profile_hash),
+                prefs.set(f"last_sync_profile_{gv_id}", str(current_time)),
+            )
 
-            # ==============================
-            # BƯỚC 6: CẬP NHẬT UI NẾU CÓ THAY ĐỔI
-            # ==============================
             if is_changed or cached_profile is None:
-                print("PROFILE [SYNC] ... đang đồng bộ dữ liệu hồ sơ mới ...")
+                print("PROFILE [SYNC] Cập nhật dữ liệu mới...")
                 self.render_data_to_ui(fresh_profile, fresh_total_classes)
             else:
-                print("PROFILE [SYNC] Dữ liệu hồ sơ chuẩn xác")
+                print("PROFILE [SYNC] Dữ liệu không thay đổi")
 
         except Exception as e:
-            print(f"Lỗi tải dữ liệu Hồ sơ: {e}")
+            print(f"load_profile_data lỗi: {e}")
             if getattr(self, "page", None):
                 show_top_notification(self.app_page, "Lỗi mạng", "Không thể tải hồ sơ mới nhất!", 4000, color=current_theme.primary)
