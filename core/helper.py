@@ -1,7 +1,7 @@
 import hashlib
 import json
 import re
-from core.config import SUPABASE_URL
+from core.config import SUPABASE_URL, SUPABASE_STORAGE_BUCKET
 
 # HELPER [Tạo hash dữ liệu cache để so khớp]
 def hash_data(data):
@@ -16,16 +16,18 @@ def safe_json_load(data_str):
     except:
         return None
 
-def process_image_url(url: str, bucket_name: str = "images") -> str:
-    # Bắt mọi trường hợp None, rỗng hoặc khoảng trắng
+def process_image_url(url: str, bucket_name: str = None) -> str:
     if not url or not str(url).strip() or str(url).strip() == "None":
         return "icon.png"
     
     url = str(url).strip()
+    bucket = bucket_name if bucket_name else SUPABASE_STORAGE_BUCKET
     
     # 1. Nếu là ảnh trong storage của Supabase (không có http)
     if not url.startswith("http"):
-        return f"{SUPABASE_URL}/storage/v1/object/public/{bucket_name}/{url}"
+        # Xóa dấu slash ở đầu nếu có để tránh lỗi URL
+        url = url.lstrip("/")
+        return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{url}"
         
     # 2. Xử lý link Google Drive dạng /file/d/ID/view
     drive_match = re.search(r"/file/d/([a-zA-Z0-9_-]+)", url)
@@ -37,5 +39,5 @@ def process_image_url(url: str, bucket_name: str = "images") -> str:
     if "drive.google.com" in url and drive_id_match:
         return f"https://drive.google.com/uc?export=view&id={drive_id_match.group(1)}"
 
-    # 4. Là URL bình thường (từ website trường đại học, v.v...)
+    # 4. Là URL bình thường (từ website trường đại học)
     return url

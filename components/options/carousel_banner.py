@@ -18,6 +18,10 @@ class CarouselBanner(ft.Container):
 
         self.carousel_row = ft.Row(spacing=0, scroll="hidden", width=self.banner_width, expand=False)
         self.dots_row = ft.Row(alignment=ft.MainAxisAlignment.CENTER, spacing=5)
+        
+        # Kiểm tra nếu là mobile thì tắt shadow để tăng 60FPS
+        is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+        self.shadow_opt = None if is_mobile else ft.BoxShadow(spread_radius=0, blur_radius=8, color=ft.Colors.with_opacity(0.04, ft.Colors.BLACK), offset=ft.Offset(0, 3))
 
         self.build_items()
 
@@ -34,7 +38,7 @@ class CarouselBanner(ft.Container):
                 bgcolor=ft.Colors.with_opacity(0.85, current_theme.surface_color), # Đồng bộ màu nền
                 blur=5, border_radius=16,
                 border=ft.Border.all(1, current_theme.divider_color),
-                shadow=ft.BoxShadow(spread_radius=1, blur_radius=10, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK), offset=ft.Offset(0, 4)),
+                shadow=self.shadow_opt,
                 ink=True, on_click=self.create_click_handler(item.get("url", "")),
                 content=ft.Row(
                     spacing=15, vertical_alignment=ft.CrossAxisAlignment.CENTER,

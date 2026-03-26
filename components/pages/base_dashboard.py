@@ -126,13 +126,10 @@ class BaseDashboard(ft.Container):
             bgcolor=theme_module.current_theme.surface_color,
             shape=ft.RoundedRectangleBorder(radius=16)
         )
-        self.app_page.overlay.append(dialog)
-        dialog.open = True
-        self.app_page.update()
+        self.app_page.open(dialog)
 
     def _close_dialog(self, dialog):
-        dialog.open = False
-        self.app_page.update()
+        self.app_page.close(dialog)
 
     # ══════════════════════════════════════════════════════════════════
     # QUẢN LÝ GIAO DIỆN

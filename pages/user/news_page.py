@@ -19,7 +19,7 @@ class NewsPage(ft.Container):
         self.has_more = True
         self.is_loading = False
 
-        self.list_view = ft.Column(spacing=12)
+        self.list_view = ft.ListView(spacing=12, expand=True)
 
         self.load_more_btn = ft.Container(
             padding=ft.Padding.all(12),
@@ -74,33 +74,27 @@ class NewsPage(ft.Container):
             self.loading_indicator,
             self.load_more_btn,
             ft.Container(height=40)
-        ], scroll=ft.ScrollMode.AUTO, expand=True)
+        ], expand=True)
 
     def _build_detail_dialog(self, item: dict) -> ft.AlertDialog:
-        def close_dlg(e):
-            dlg.open = False
-            self.app_page.update()
-
-        img_widget = build_news_image(item.get("hinh_anh"), width=320, height=160,
-                                      border_radius=10)
+        img_widget = build_news_image(item.get("hinh_anh"), width=320, height=160, border_radius=10)
 
         dlg = ft.AlertDialog(
-            title=ft.Text(
-                str(item.get("tieu_de", "Thông báo")),
-                weight=ft.FontWeight.BOLD, size=16, color=current_theme.secondary
-            ),
+            title=ft.Text(str(item.get("tieu_de", "Thông báo")), weight=ft.FontWeight.BOLD, size=16, color=current_theme.secondary),
+            # FIX: Thay vì dùng Scroll bên trong Column, cấu hình Dialog hỗ trợ cuộn (scrollable)
             content=ft.Container(
                 width=360,
-                content=ft.Column([
-                    img_widget,
-                    ft.Container(height=10),
-                    ft.Text(
-                        str(item.get("noi_dung", "Nội dung chưa cập nhật")),
-                        size=13, color=current_theme.text_main
-                    )
-                ], tight=True, spacing=0, scroll=ft.ScrollMode.AUTO)
+                # Đặt chiều cao tối đa để không tràn màn hình
+                height=400, 
+                content=ft.ListView(
+                    controls=[
+                        img_widget,
+                        ft.Container(height=10),
+                        ft.Text(str(item.get("noi_dung", "Nội dung chưa cập nhật")), size=14, color=current_theme.text_main)
+                    ], spacing=0
+                )
             ),
-            actions=[ft.TextButton("Đóng lại", on_click=close_dlg)],
+            actions=[ft.TextButton("Đóng lại", on_click=lambda e: self.app_page.close(dlg))],
             shape=ft.RoundedRectangleBorder(radius=12),
             bgcolor=current_theme.surface_color
         )
@@ -116,9 +110,7 @@ class NewsPage(ft.Container):
                                        item.get("tieu_de", "Thông báo"))
                 else:
                     dlg = self._build_detail_dialog(item)
-                    self.app_page.overlay.append(dlg)
-                    dlg.open = True
-                    self.app_page.update()
+                    self.app_page.open(dlg)
             except Exception as ex:
                 print(f"Lỗi click news: {ex}")
         return on_click
