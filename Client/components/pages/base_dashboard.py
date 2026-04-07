@@ -163,13 +163,14 @@ class BaseDashboard(ft.Container):
         btn_style_normal = ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=0),
             overlay_color=ft.Colors.with_opacity(0.1, theme_module.current_theme.text_main),
-            color=theme_module.current_theme.text_main, padding=10
+            color=theme_module.current_theme.text_main, 
+            padding=0 
         )
         btn_style_close = ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=0),
             overlay_color=ft.Colors.RED_600,
             color={ft.ControlState.HOVERED: ft.Colors.WHITE, ft.ControlState.DEFAULT: theme_module.current_theme.text_main},
-            padding=10
+            padding=0
         )
 
         async def handle_minimize(e):
@@ -177,30 +178,43 @@ class BaseDashboard(ft.Container):
             self.app_page.update()
 
         async def handle_maximize(e):
+            # 1. Đảo ngược trạng thái phóng to cửa sổ
             self.app_page.window.maximized = not self.app_page.window.maximized
+            
+            # 2. Đổi icon: Nếu đang phóng to thì hiện 2 ô vuông lồng nhau, ngược lại hiện 1 ô vuông
+            e.control.icon = ft.Icons.FILTER_NONE if self.app_page.window.maximized else ft.Icons.CROP_SQUARE
+            
+            # 3. Cập nhật lại giao diện nút và trang
+            e.control.update()
             self.app_page.update()
 
         async def handle_close(e):
             await self.app_page.window.close()
 
+        btn_width = 38
+        btn_height = 30
+        current_max_icon = ft.Icons.FILTER_NONE if self.app_page.window.maximized else ft.Icons.CROP_SQUARE
+
         return ft.WindowDragArea(
             ft.Container(
-                height=25,
+                height=btn_height, 
                 bgcolor=theme_module.current_theme.bg_color,
                 padding=ft.Padding(15, 0, 0, 0),
                 content=ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
                         ft.Row([
                             ft.Icon(ft.Icons.AUTO_AWESOME, color=theme_module.current_theme.text_main, size=16),
                             ft.Text("AuEdu PC", color=theme_module.current_theme.text_main, size=12, weight=ft.FontWeight.BOLD)
-                        ]),
+                        ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         ft.Row(
-                            spacing=0, alignment=ft.Alignment(0, 0),
+                            spacing=0, 
+                            vertical_alignment=ft.CrossAxisAlignment.START,
                             controls=[
-                                ft.IconButton(ft.Icons.MINIMIZE, icon_size=16, style=btn_style_normal, width=34, height=25, on_click=handle_minimize),
-                                ft.IconButton(ft.Icons.CROP_SQUARE, icon_size=16, style=btn_style_normal, width=34, height=25, on_click=handle_maximize),
-                                ft.IconButton(ft.Icons.CLOSE, icon_size=16, style=btn_style_close, width=34, height=25, on_click=handle_close),
+                                ft.IconButton(ft.Icons.REMOVE, icon_size=16, style=btn_style_normal, width=btn_width, height=btn_height, on_click=handle_minimize),
+                                ft.IconButton(current_max_icon, icon_size=16, style=btn_style_normal, width=btn_width, height=btn_height, on_click=handle_maximize),
+                                ft.IconButton(ft.Icons.CLOSE, icon_size=16, style=btn_style_close, width=btn_width, height=btn_height, on_click=handle_close),
                             ]
                         )
                     ]

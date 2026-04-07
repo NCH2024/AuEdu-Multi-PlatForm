@@ -22,6 +22,11 @@ DEBUG_LOADING = False
 async def main(page: ft.Page):
     page.title = "AuEdu PC"
     
+    # Khai báo font App (Inter)
+    page.fonts = {
+        "Inter": "fonts/Inter.ttf" 
+    }
+    
     # --- CẤU HÌNH WINDOWS / MAC / MOBILE CHO FLET 0.82.2 ---
     if page.platform == ft.PagePlatform.MACOS:
         # Trên Mac: Ẩn thanh tiêu đề nhưng giữ lại 3 nút đèn giao thông (Apple chuẩn mực)
@@ -32,6 +37,7 @@ async def main(page: ft.Page):
     
     # Cấu hình thanh Status Bar cho Mobile
     page.theme = ft.Theme(
+        font_family="Inter",
         system_overlay_style=ft.SystemOverlayStyle(
             status_bar_color=theme_module.current_theme.surface_color, 
             status_bar_icon_brightness=theme_module.current_theme.text_main, 

@@ -1,0 +1,15 @@
+# Cơ sở hạ tầng FastAPI
+fastapi==0.135.1
+uvicorn==0.41.0
+pydantic==2.12.5
+
+# Xác thực & Cấu hình
+PyJWT==2.11.0
+python-dotenv==1.2.2
+
+# Tương tác Supabase & Database
+supabase==2.4.0
+SQLAlchemy==2.0.30
+asyncpg==0.29.0
+alembic==1.13.1
+pgvector==0.2.5
