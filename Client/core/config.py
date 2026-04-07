@@ -1,3 +1,4 @@
+# Client_App/core/config.py
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -12,6 +13,8 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "public")
 
+SERVER_API_URL = "http://127.0.0.1:8000/api" 
+
 def get_headers():
     return {
         "apikey": SUPABASE_KEY,
@@ -19,22 +22,18 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
-# core/config.py — Thêm connection pool singleton
-
 _shared_client: httpx.AsyncClient | None = None
 
 async def get_supabase_client() -> httpx.AsyncClient:
     global _shared_client
     if _shared_client is None or _shared_client.is_closed:
         _shared_client = httpx.AsyncClient(
-            base_url=f"{SUPABASE_URL}/rest/v1",
+            base_url=SERVER_API_URL, # <--- Trỏ về Server Cục bộ!
             headers=get_headers(),
-            # Giữ kết nối sống, tái dụng TCP connection
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
             timeout=httpx.Timeout(10.0)
         )
     return _shared_client
 
 def get_storage_url() -> str:
-    """URL gốc để truy cập các object public trong Storage."""
     return f"{SUPABASE_URL}/storage/v1/object/public"
