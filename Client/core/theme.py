@@ -28,7 +28,7 @@ class AppTheme:
             self.surface_variant = "#2D1B2E" if self.is_dark else "#FDF2F8"
 
         elif self.palette_type == "BLUE": # Xanh dương tươi (Mặc định)
-            self.primary = "#3B82F6" if self.is_dark else "#2563EB"    
+            self.primary = "#0556D7" if self.is_dark else "#2563EB"    
             # Dark Mode: Đổi từ xanh đen sậm sang Xanh da trời sáng
             self.secondary = "#93C5FD" if self.is_dark else "#1D4ED8" 
             self.accent = "#60A5FA" if self.is_dark else "#3B82F6"

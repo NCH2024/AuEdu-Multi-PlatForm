@@ -13,3 +13,10 @@ SQLAlchemy==2.0.30
 asyncpg==0.29.0
 alembic==1.13.1
 pgvector==0.2.5
+
+# --- CÁC THƯ VIỆN AI CORE ---
+torch==2.2.1
+torchvision==0.17.1
+opencv-python==4.9.0.80
+onnxruntime==1.17.1
+numpy==1.26.4

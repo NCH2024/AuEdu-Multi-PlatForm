@@ -2,9 +2,14 @@
 import os
 import httpx
 import datetime
-from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+import base64
+import cv2
+import numpy as np
+from app.ai.engine import face_engine 
 
 from app.db.session import get_db
 from app.db.models import SinhVien, ThoiKhoaBieu, TKBTiet, DiemDanh, ThongBao, Lop, HocPhan, HocKy, Tiet, TuanHoc, GiangVien, Khoa
@@ -172,6 +177,9 @@ async def get_tkb_tiet(tkb_id: str = None, thu: str = None, db: AsyncSession = D
         res.append(d)
     return res
 
+# ---------------------------------------------------------
+# API ĐIỂM DANH
+# ---------------------------------------------------------
 @router.get("/diemdanh")
 async def get_diemdanh(tkb_tiet_id: str = None, ngay_diem_danh: str = None, db: AsyncSession = Depends(get_db)):
     stmt = select(DiemDanh)
@@ -193,21 +201,55 @@ async def get_diemdanh(tkb_tiet_id: str = None, ngay_diem_danh: str = None, db: 
         d_dict["created_at"] = str(d.created_at) if d.created_at else None
         res.append(d_dict)
     return res
-
-@router.post("/diemdanh")
-async def ghi_nhan_diem_danh(data: dict, db: AsyncSession = Depends(get_db)):
+# ---------------------------------------------------------
+# WEBSOCKET: XỬ LÝ ĐIỂM DANH REAL-TIME BẰNG AI
+# ---------------------------------------------------------
+@router.websocket("/ws/attendance/{tkb_tiet_id}")
+async def websocket_attendance(websocket: WebSocket, tkb_tiet_id: int):
+    await websocket.accept()
+    print(f"[WebSocket] Mở kết nối điểm danh cho Tiết ID: {tkb_tiet_id}")
+    
     try:
-        diemdanh_moi = DiemDanh(
-            sv_id=data.get("sv_id"),
-            tkb_tiet_id=data.get("tkb_tiet_id"),
-            vitri=data.get("vitri", ""),
-            ngay_diem_danh=data.get("ngay_diem_danh"),
-            trang_thai=data.get("trang_thai", "Có mặt")
-        )
-        db.add(diemdanh_moi)
-        await db.commit()
-        await db.refresh(diemdanh_moi)
-        return model_to_dict(diemdanh_moi)
+        while True:
+            # 1. Nhận dữ liệu JSON từ App Client gửi lên (chứa base64 của ảnh)
+            data = await websocket.receive_json()
+            base64_img = data.get("image")
+            
+            if not base64_img:
+                continue
+
+            # 2. Giải mã Base64 thành mảng Numpy (cv2 image)
+            img_data = base64.b64decode(base64_img)
+            np_arr = np.frombuffer(img_data, np.uint8)
+            img_cv2 = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
+            # Chuyển BGR (OpenCV) sang RGB (chuẩn của PyTorch/AI)
+            img_rgb = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
+
+            # 3. AI BƯỚC 1: Chống giả mạo (Anti-Spoofing)
+            is_real = face_engine.detect_spoof(img_rgb)
+            if not is_real:
+                await websocket.send_json({
+                    "status": "spoof", 
+                    "message": "Phát hiện giả mạo khuôn mặt!"
+                })
+                continue
+
+            # 4. AI BƯỚC 2: Trích xuất Vector
+            embedding = face_engine.extract_embedding(img_rgb)
+            
+            # TODO: Lát nữa chúng ta sẽ viết câu lệnh so sánh pgvector ở đây!
+            # Tạm thời trả về kết quả thành công ảo để xem App phản ứng thế nào.
+            
+            await websocket.send_json({
+                "status": "success",
+                "message": "Hợp lệ",
+                "student_id": "SV_TEST_001",
+                "name": "Bé Mèo Nhỏ (Giả lập)",
+                "embedding_length": len(embedding)
+            })
+            
+    except WebSocketDisconnect:
+        print(f"[WebSocket] Đã đóng kết nối cho Tiết ID: {tkb_tiet_id}")
     except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=400, detail=f"Lỗi khi lưu điểm danh: {str(e)}")
+        print(f"[WebSocket Lỗi Kín] {e}")
