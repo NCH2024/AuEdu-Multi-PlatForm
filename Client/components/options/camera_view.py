@@ -2,15 +2,17 @@ import flet as ft
 import flet_camera 
 import asyncio
 import base64
+import platform 
 
 try:
     import cv2
-    import mediapipe as mp 
-    from mediapipe.python.solutions import face_detection as mp_face_detection # type: ignore
+    import mediapipe as mp
+    from mediapipe.python.solutions import face_detection as mp_face_detection 
 except ImportError:
     cv2 = None
     mp = None
     mp_face_detection = None
+
 
 class CameraView(ft.Container):
     def __init__(self, page: ft.Page, dd_camera: ft.Dropdown, is_visible=False, on_frame=None):
@@ -21,6 +23,7 @@ class CameraView(ft.Container):
         
         self.is_mobile = self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
         self.is_running = False 
+        self.is_paused = False
         
         if mp_face_detection:
             self.face_detection = mp_face_detection.FaceDetection(
@@ -40,17 +43,16 @@ class CameraView(ft.Container):
                     clip_behavior=ft.ClipBehavior.HARD_EDGE 
                 )
         else:
-            # FIX 1: Thêm tiền tố data URI chuẩn cho Flet
             empty_black_image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-            self.camera_module = ft.Image(src=empty_black_image, fit=ft.BoxFit.CONTAIN, gapless_playback=True)
+            self.camera_module = ft.Image(src=empty_black_image, fit=ft.BoxFit.FILL, gapless_playback=True)
             
             if is_visible:
                 self.camera_module.expand = True
-                self.content = ft.Container(expand=True, bgcolor=ft.Colors.BLACK, alignment=ft.Alignment(0, 0), content=self.camera_module)
+                self.content = ft.Container(expand=True, alignment=ft.Alignment(0, 0), content=self.camera_module)
             else:
                 self.camera_module.expand = False
                 self.content = ft.Container(width=1, height=1, content=self.camera_module, clip_behavior=ft.ClipBehavior.HARD_EDGE)
-            self.cap = None 
+            self.cap = None
             
         if is_visible:
             self.expand = True
@@ -100,12 +102,15 @@ class CameraView(ft.Container):
                     self.cap.release()
                     
                 if not self.is_mobile and cv2:
-                    print(f"🔄 App đang gọi Camera số {selected_idx} (giống hệt file test)...")
-                    # FIX 2: Gọi cực kỳ đơn giản giống file test_cam.py
-                    self.cap = cv2.VideoCapture(selected_idx)
+                    # Chọn backend ổn định cho các hệ điều hành
+                    backend = cv2.CAP_ANY
+                    if platform.system() == "Windows":
+                        # Trên Windows default thường thất bại → dùng DirectShow
+                        backend = cv2.CAP_DSHOW
+                    # FIX 2: Gọi cực kỳ đơn giản giống file test_cam.py nhưng có backend phù hợp
+                    self.cap = cv2.VideoCapture(selected_idx, backend)
 
                     if self.cap.isOpened():
-                        print("App đã mở Camera thành công! Đang làm nóng ống kính...")
                         for _ in range(3):
                             self.cap.read()
                             await asyncio.sleep(0.1)
@@ -127,11 +132,31 @@ class CameraView(ft.Container):
         else:
             if getattr(self, 'cap', None) and self.cap.isOpened():
                 self.cap.release()
-                print("🛑 Đã đóng Camera trên App.")
+                
+    async def set_pause(self, paused: bool):
+        self.is_paused = paused
+        if paused:
+            if self.is_mobile:
+                try: await self.camera_module.pause_preview()
+                except: pass
+            else:
+                # Trả về màn đen khi tạm dừng
+                empty_black_image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+                self.camera_module.src = empty_black_image
+                if self.page:
+                    try: self.camera_module.update()
+                    except: pass
+        else:
+            if self.is_mobile:
+                try: await self.camera_module.resume_preview()
+                except: pass
 
     async def _desktop_camera_loop(self):
-        print("▶️ Bắt đầu luồng đọc và vẽ UI Camera...")
         while self.is_running:
+            if getattr(self, 'is_paused', False):
+                await asyncio.sleep(0.1)
+                continue # Nếu đang dừng thì bỏ qua việc đọc khung hình
+            
             if getattr(self, 'cap', None) and self.cap.isOpened():
                 ret, frame = self.cap.read()
                 if ret:
@@ -165,18 +190,18 @@ class CameraView(ft.Container):
                     _, buffer_display = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
                     b64_str = base64.b64encode(buffer_display).decode('utf-8')
                     
-                    # FIX 1 (QUAN TRỌNG): Nối tiền tố vào src
+
                     self.camera_module.src = f"data:image/jpeg;base64,{b64_str}"
                     
                     try:
                         self.camera_module.update()
                     except Exception as e:
-                        print(f"⚠️ Lỗi update Flet UI: {e}")
+                        print(f"Lỗi update Flet UI: {e}")
                         
                     if face_crop_base64 and self.on_frame:
                         await self.on_frame(face_crop_base64)
                 else:
-                    print("⚠️ Không đọc được frame từ Camera!")
+                    print("Không đọc được frame từ Camera!")
             await asyncio.sleep(0.06) 
 
     async def test_sensor(self):
@@ -192,11 +217,12 @@ class CameraView(ft.Container):
                 if pic_bytes: success = True
                 await self.camera_module.pause_preview()
             else:
-                if cv2:
-                    print(f"🔄 Test: Đang gọi Camera số {selected_idx}...")
-                    cap = cv2.VideoCapture(selected_idx)
+                 if cv2:
+                    backend = cv2.CAP_ANY
+                    if platform.system() == "Windows":
+                        backend = cv2.CAP_DSHOW
+                    cap = cv2.VideoCapture(selected_idx, backend)
                     if cap.isOpened():
-                        print("✅ Test: Camera mở thành công!")
                         for _ in range(5):
                             ret, frame = cap.read()
                             if ret: 
@@ -205,7 +231,7 @@ class CameraView(ft.Container):
                             await asyncio.sleep(0.1)
                         cap.release()
                     else:
-                        print("❌ Test: Không mở được camera.")
+                        print("Test: Không mở được camera.")
             return success
         except Exception as e:
             print(f"Lỗi khi test sensor: {e}")

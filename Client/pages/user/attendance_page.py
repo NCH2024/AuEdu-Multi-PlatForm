@@ -145,7 +145,11 @@ class AttendancePage(ft.Container):
             self.dd_camera,
             ft.Container(content=self.camera_view, border_radius=8, clip_behavior=ft.ClipBehavior.HARD_EDGE),
             ft.Row([
-                ft.Button(content=ft.Text("Lưu", color=ft.Colors.WHITE, size=12), bgcolor=current_theme.accent, expand=True, style=btn_style_menu),
+                ft.Button(
+                    content=ft.Text("Lưu", color=ft.Colors.WHITE, size=12), 
+                    bgcolor=current_theme.accent, expand=True, style=btn_style_menu,
+                    on_click=self.handle_save_camera
+                ),
                 ft.Button(content=ft.Text("Kiểm tra", color=ft.Colors.WHITE, size=12), bgcolor=current_theme.secondary, expand=True, on_click=self.handle_test_camera, style=btn_style_menu)
             ], spacing=8),
             self.test_progress, self.test_status_text,
@@ -488,6 +492,15 @@ class AttendancePage(ft.Container):
             except: pass
 
         self.app_page.run_task(run_test)
+        
+    async def handle_save_camera(self, e):
+        if not self.dd_camera.value:
+            return
+        prefs = ft.SharedPreferences()
+        await prefs.set("selected_camera", str(self.dd_camera.value))
+        # Hiển thị thông báo 
+        show_top_notification(self.app_page, "AuEdu", "Đã lưu cài đặt Camera mặc định!", color=ft.Colors.GREEN_600, sound=None)
+        self.app_page.update()
 
     def _show_error_snackbar(self, message: str):
         self.app_page.overlay.append(ft.SnackBar(content=ft.Text(message), bgcolor=ft.Colors.RED_700, open=True))
