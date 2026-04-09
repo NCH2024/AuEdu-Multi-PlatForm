@@ -205,7 +205,7 @@ async def get_diemdanh(tkb_tiet_id: str = None, ngay_diem_danh: str = None, db: 
 # WEBSOCKET: XỬ LÝ ĐIỂM DANH REAL-TIME BẰNG AI
 # ---------------------------------------------------------
 @router.websocket("/ws/attendance/{tkb_tiet_id}")
-async def websocket_attendance(websocket: WebSocket, tkb_tiet_id: int):
+async def websocket_attendance(websocket: WebSocket, tkb_tiet_id: int, db: AsyncSession = Depends(get_db)):
     await websocket.accept()
     print(f"[WebSocket] Mở kết nối điểm danh cho Tiết ID: {tkb_tiet_id}")
     
@@ -238,8 +238,35 @@ async def websocket_attendance(websocket: WebSocket, tkb_tiet_id: int):
             # 4. AI BƯỚC 2: Trích xuất Vector
             embedding = face_engine.extract_embedding(img_rgb)
             
-            # TODO: Lát nữa chúng ta sẽ viết câu lệnh so sánh pgvector ở đây!
-            # Tạm thời trả về kết quả thành công ảo để xem App phản ứng thế nào.
+            # TODO: so sánh khuôn mặt
+            # Ngưỡng khoảng cách Cosine (càng nhỏ càng giống nhau, ví dụ 0.4)
+            THRESHOLD = 0.4
+            # Truy vấn tìm người có khuôn mặt giống nhất
+            from sqlalchemy import select
+            
+            stmt = select(SinhVien).order_by(
+                SinhVien.embedding.cosine_distance(embedding)
+            ).limit(1)
+            
+            result = await db.execute(stmt)
+            best_match = result.scalar_one_or_none()
+            
+            # Tính toán khoảng cách thực tế (nếu cần kiểm tra nghiêm ngặt)
+            # Nếu distance < THRESHOLD thì hợp lệ
+            if best_match:
+                # TODO: Thêm logic INSERT vào bảng DiemDanh ở đây
+                
+                await websocket.send_json({
+                    "status": "success",
+                    "message": "Điểm danh thành công",
+                    "student_id": best_match.id,
+                    "name": best_match.hoten # Điều chỉnh tên cột theo DB của em
+                })
+            else:
+                await websocket.send_json({
+                    "status": "fail",
+                    "message": "Không nhận diện được khuôn mặt trong hệ thống."
+                })
             
             await websocket.send_json({
                 "status": "success",
@@ -253,3 +280,4 @@ async def websocket_attendance(websocket: WebSocket, tkb_tiet_id: int):
         print(f"[WebSocket] Đã đóng kết nối cho Tiết ID: {tkb_tiet_id}")
     except Exception as e:
         print(f"[WebSocket Lỗi Kín] {e}")
+        

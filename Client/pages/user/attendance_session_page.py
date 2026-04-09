@@ -1,4 +1,5 @@
 import flet as ft
+import json
 import asyncio
 from core.theme import PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR, get_glass_container
 from components.options.camera_view import CameraView
@@ -19,8 +20,13 @@ class AttendanceSessionPage(ft.Container):
             options=[], 
             on_change=self.handle_camera_change 
         )
-        self.camera_view = CameraView(page=self.app_page, dd_camera=self.dd_camera, is_visible=True)
-
+        self.camera_view = CameraView(
+            page=self.app_page, 
+            dd_camera=self.dd_camera, 
+            is_visible=True,
+            on_frame=self.send_frame_to_server
+            )
+        
         self.settings_sheet = ft.BottomSheet(
             content=ft.Container(
                 padding=ft.Padding(20, 30, 20, 30),
@@ -43,6 +49,17 @@ class AttendanceSessionPage(ft.Container):
         )
         self.app_page.overlay.append(self.settings_sheet)
         self.content = self.build_ui()
+        
+
+    async def send_frame_to_server(self, frame_base64: str):
+        # Chỉ khi MediaPipe ở CameraView tìm thấy mặt và cắt ra, hàm này mới chạy!
+        try:
+            if hasattr(self, 'ws') and self.ws:
+                await self.ws.send_async(json.dumps({"image": frame_base64}))
+                # In ra Terminal App để theo dõi
+                print(f"🚀 Đã bắn 1 KHUÔN MẶT lên Server (Dung lượng: {len(frame_base64)} bytes)")
+        except Exception as e:
+            print(f"Lỗi khi gửi ảnh lên Server: {e}")
 
     def did_mount(self):
         async def delayed_init():
