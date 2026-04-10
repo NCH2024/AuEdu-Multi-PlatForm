@@ -7,9 +7,9 @@ Dự án được thiết kế theo mô hình **Client – Server – AI Core**,
 
 ---
 # REVIEW UI/UX
-![Home page](review\image.png)
+![Home page](https://github.com/NCH2024/AuEdu-Multi-PlatForm/blob/main/review/image.png)
 
-![Attendent Page](review\image2.png)
+![Attendent Page](https://github.com/NCH2024/AuEdu-Multi-PlatForm/blob/main/review/image2.png)
 
 ---
 
