@@ -6,6 +6,12 @@ Dự án được thiết kế theo mô hình **Client – Server – AI Core**,
 Ứng dụng cho phép giảng viên thực hiện điểm danh nhanh chóng bằng camera, đồng thời sử dụng **AI chống giả mạo (Face Anti-Spoofing)** để đảm bảo tính xác thực của khuôn mặt.
 
 ---
+# REVIEW UI/UX
+![Home page](review\image.png)
+
+![Attendent Page](review\image2.png)
+
+---
 
 # 📌 Mục tiêu dự án
 
