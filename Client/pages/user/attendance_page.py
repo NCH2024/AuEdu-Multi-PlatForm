@@ -5,6 +5,7 @@ import asyncio
 from components.options.custom_dropdown import CustomDropdown
 from components.options.camera_view import CameraView
 from components.options.top_notification import show_top_notification
+from components.options.alert_dialog import show_alert_dialog
 from core.theme import current_theme
 from core.config import get_supabase_client
 from core.helper import safe_json_load
@@ -131,7 +132,14 @@ class AttendancePage(ft.Container):
 
         nang_cao_content = ft.Column([
             ft.Button(content=ft.Text("Lịch sử điểm danh", color=ft.Colors.WHITE, size=12), bgcolor=ft.Colors.BLUE_GREY_600, expand=True, style=btn_style_menu),
-            ft.Button(content=ft.Text("Tra cứu sinh viên", color=ft.Colors.WHITE, size=12), bgcolor=ft.Colors.BLUE_GREY_600, expand=True, style=btn_style_menu)
+            ft.Button(content=ft.Text("Tra cứu sinh viên", color=ft.Colors.WHITE, size=12), bgcolor=ft.Colors.BLUE_GREY_600, expand=True, style=btn_style_menu),
+            ft.Button(
+                content=ft.Text("Đào tạo khuôn mặt", color=ft.Colors.WHITE, size=12), 
+                bgcolor=current_theme.secondary, 
+                expand=True, 
+                style=btn_style_menu,
+                on_click=self.handle_start_trainning
+            )
         ], horizontal_alignment=ft.CrossAxisAlignment.STRETCH, spacing=8)
         nang_cao_tile = ft.ExpansionTile(title=ft.Text("Chức năng nâng cao", weight=ft.FontWeight.BOLD, size=13), controls=[ft.Container(content=nang_cao_content, padding=15)], collapsed_text_color=current_theme.secondary, text_color=current_theme.secondary, icon_color=current_theme.secondary, collapsed_icon_color=current_theme.secondary)
 
@@ -461,6 +469,16 @@ class AttendancePage(ft.Container):
         await prefs.set("attendance_mode", str(mode))
         await self.camera_view.stop_camera()
         await self.app_page.push_route("/user/attendance/session")
+        
+    async def handle_start_trainning(self, e):
+        # is_mobile = (self.app_page.width and self.app_page.width < 768) or self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+        # if is_mobile:
+        #     show_alert_dialog( self, "AuEdu Thông báo", ft.Text("Chức năng 'ĐÀO TẠO DỮ LIỆU' chỉ khả dụng trên nền tảng Desktop (Windows/MaxOS)!\nVui lòng liên hệ quản trị nếu khuôn mặt sinh viên không khớp, hoặc bạn có thể dùng AuEdu trên PC để sữ dụng tính năng này.", size=13, color=current_theme.text_main))
+        #     return
+        if not getattr(self, "page", None): return
+        e.control.disabled = True
+        e.control.update()
+        await self.app_page.push_route("/user/attendance/training")
 
     async def handle_start_session_mobile(self, e):
         if not getattr(self, "page", None): return

@@ -1,7 +1,6 @@
 # components/options/open_browser.py
 import flet as ft
 from flet import UrlLauncher
-from components.options.top_notification import TopNotification
 
 async def open_browser(page: ft.Page, url: str, title: str = "Trình duyệt"):
     print(f"[DEBUG - Browser] Yêu cầu mở URL: {url} | Tiêu đề: {title}")

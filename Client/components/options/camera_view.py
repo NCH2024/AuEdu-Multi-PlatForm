@@ -25,6 +25,10 @@ class CameraView(ft.Container):
         self.is_running = False 
         self.is_paused = False
         
+        # Bổ sung 2 dòng này để CameraView tự bung và có viền đen tránh chớp sáng
+        self.expand = True 
+        self.bgcolor = ft.Colors.BLACK 
+        
         if mp_face_detection:
             self.face_detection = mp_face_detection.FaceDetection(
                 model_selection=0, min_detection_confidence=0.6
@@ -44,22 +48,26 @@ class CameraView(ft.Container):
                 )
         else:
             empty_black_image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-            self.camera_module = ft.Image(src=empty_black_image, fit=ft.BoxFit.FILL, gapless_playback=True)
+            # QUAN TRỌNG: Gắn expand=True vào trực tiếp thẻ Image
+            self.camera_module = ft.Image(
+                src=empty_black_image, 
+                fit=ft.BoxFit.COVER, 
+                gapless_playback=True,
+                expand=True 
+            )
             
             if is_visible:
-                self.camera_module.expand = True
-                self.content = ft.Container(expand=True, alignment=ft.Alignment(0, 0), content=self.camera_module)
+                # QUAN TRỌNG: Ép thẻ Image bung hết chiều dọc bằng STRETCH
+                self.content = ft.Row(
+                    controls=[self.camera_module],
+                    expand=True,
+                    vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+                    spacing=0
+                )
             else:
                 self.camera_module.expand = False
                 self.content = ft.Container(width=1, height=1, content=self.camera_module, clip_behavior=ft.ClipBehavior.HARD_EDGE)
             self.cap = None
-            
-        if is_visible:
-            self.expand = True
-            self.opacity = 1
-        else:
-            self.expand = False
-            self.width, self.height, self.opacity = 1, 1, 0
             
         self.margin = self.padding = 0
         self.alignment = ft.Alignment(0, 0)

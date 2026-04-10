@@ -1,115 +1,90 @@
 import flet as ft
-import flet_audio as fta
 import asyncio
+import flet_audio as fta
 from core.theme import current_theme
 
-class TopNotification(ft.Container):
-    def __init__(self, page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=None):
-        super().__init__()
-        self.app_page = page
-        self.top = -100 
-        self.left = 0
-        self.right = 0
-        
-        self.animate_position = ft.Animation(duration=500, curve=ft.AnimationCurve.EASE_OUT_BACK)
-        self.animate_opacity = ft.Animation(duration=400, curve=ft.AnimationCurve.EASE_IN_OUT)
-        self.opacity = 0
-        self.duration_ms = duration_ms
+def show_top_notification(page: ft.Page, title: str, message: str, color=None, duration_ms: int = 3000, sound=None):
+    """
+    Hệ thống Top Notification thiết kế phẳng (Flat Design), không Shadow.
+    Sử dụng màu viền và Icon để báo hiệu, đảm bảo chữ luôn dễ đọc trên mọi Theme.
+    """
+    # 1. Phát âm thanh (Nếu có)
+    if sound:
+        sound_path = "assets/sounds/sound-success.mp3" if sound == "S" else "assets/sounds/sound-error.mp3"
+        audio = fta.Audio(src=sound_path, autoplay=True)
+        if hasattr(page, 'services'):
+            page.services.append(audio)
+        else:
+            page.overlay.append(audio)
 
-        theme_color = color if color else current_theme.primary
-        noti_width = (self.app_page.width - 40) if (self.app_page.width and self.app_page.width < 450) else 400
-
-        # Xử lý màu chữ thông minh tương phản với màu nền của thông báo
-        is_light_bg = theme_color in [ft.Colors.YELLOW, ft.Colors.AMBER, "#FBCFE8", "#93C5FD", "#6EE7B7", "#FFFFFF", "#D1D5DB", "#A7F3D0", "#F3F4F6", ft.Colors.WHITE]
-        text_color = ft.Colors.BLACK_87 if is_light_bg else ft.Colors.WHITE
-
-        self.content = ft.Row(
-            alignment=ft.MainAxisAlignment.CENTER,
-            controls=[
-                ft.Container(
-                    width=noti_width, padding=15,
-                    bgcolor=theme_color,  # Sử dụng màu sắc làm nền chính luôn
-                    border_radius=15,
-                    shadow=ft.BoxShadow(spread_radius=1, blur_radius=20, color=ft.Colors.with_opacity(0.4, theme_color), offset=ft.Offset(0, 5)),
-                    content=ft.Row(
-                        spacing=15,
-                        controls=[
-                            ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_ROUNDED, color=text_color, size=26),
-                            ft.Column(
-                                expand=True, spacing=2,
-                                controls=[
-                                    ft.Text(title, weight=ft.FontWeight.BOLD, color=text_color, size=14),
-                                    ft.Text(message, color=ft.Colors.with_opacity(0.9, text_color), size=12)
-                                ]
-                            )
-                        ]
-                    )
-                )
-            ]
-        )
-
-    def did_mount(self): self.app_page.run_task(self.show_and_hide)
-
-    async def show_and_hide(self):
-        await asyncio.sleep(0.1)
-        if not self.page: return 
-        self.top = 30
-        self.opacity = 1
-        try: self.update()
-        except: pass
-
-        await asyncio.sleep(self.duration_ms / 1000.0)
-
-        if not self.page: return 
-        self.top = -100
-        self.opacity = 0
-        try: self.update()
-        except: pass
-        
-        await asyncio.sleep(0.6)
-        try:
-            if self in self.app_page.overlay:
-                self.app_page.overlay.remove(self)
-                self.app_page.update()
-        except: pass
-        
-def play_sound_success(page):
-    audio = fta.Audio(src="assets/sounds/sound-success.mp3", autoplay=True)
-    if hasattr(page, 'services'): page.services.append(audio)
-    else: page.overlay.append(audio) 
-        
-    async def clean_up_audio():
-        await asyncio.sleep(2) 
-        try:
-            if hasattr(page, 'services') and audio in page.services:
-                page.services.remove(audio)
-                page.update()
-            elif audio in page.overlay:
-                page.overlay.remove(audio)
-                page.update()
-        except: pass
-    page.run_task(clean_up_audio)
+    # 2. Xử lý màu sắc tinh tế theo Theme
+    theme_color = color if color else current_theme.primary
     
-def play_sound_error(page):
-    audio = fta.Audio(src="assets/sounds/sound-error.mp3", autoplay=True)
-    if hasattr(page, 'services'): page.services.append(audio)
-    else: page.overlay.append(audio) 
-        
-    async def clean_up_audio():
-        await asyncio.sleep(2) 
-        try:
-            if hasattr(page, 'services') and audio in page.services:
-                page.services.remove(audio)
-                page.update()
-            elif audio in page.overlay:
-                page.overlay.remove(audio)
-                page.update()
-        except: pass
-    page.run_task(clean_up_audio)
+    icon_noti = ft.Icons.CHECK_CIRCLE if theme_color in [ft.Colors.GREEN_600, ft.Colors.GREEN] else ft.Icons.INFO
+    if sound == "E" or theme_color in [ft.Colors.RED_500, ft.Colors.RED]:
+         icon_noti = ft.Icons.ERROR
 
-def show_top_notification(page: ft.Page, title: str, message: str, duration_ms: int = 3000, color=None, sound=None):
-    notif = TopNotification(page, title, message, duration_ms, color)
-    page.overlay.append(notif)
-    if sound == "S": play_sound_success(page)
-    elif sound == "E": play_sound_error(page)
+    # 3. Giao diện phẳng (Flat Toast)
+    toast = ft.Container(
+        content=ft.Row([
+            ft.Icon(icon_noti, color=theme_color, size=24),
+            ft.Column([
+                ft.Text(title, weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=14),
+                ft.Text(message, color=current_theme.text_muted, size=12),
+            ], spacing=2, expand=True)
+        ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        
+        bgcolor=current_theme.surface_color,          
+        border=ft.Border.all(1.5, theme_color),       
+        padding=15, # FIX CẢNH BÁO: Dùng padding nguyên khối để tránh lỗi DeprecationWarning
+        border_radius=12,
+        width=350, 
+        
+        opacity=0, 
+        animate_opacity=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
+        animate_position=ft.Animation(400, ft.AnimationCurve.EASE_OUT_BACK), 
+        top=-100, 
+    )
+
+    def center_toast():
+        # FIX LỖI WINDOW: Lấy kích thước theo chuẩn Flet 0.8x an toàn
+        try:
+            screen_width = page.window.width
+        except AttributeError:
+            screen_width = page.width
+            
+        if screen_width:
+            toast.left = (screen_width - 350) / 2
+        else:
+            toast.left = 50 
+
+    center_toast()
+    page.overlay.append(toast)
     page.update()
+
+    # 4. Luồng Animation bất đồng bộ
+    async def animate_toast():
+        toast.top = 20
+        toast.opacity = 1
+        page.update()
+
+        await asyncio.sleep(duration_ms / 1000.0)
+
+        toast.top = -100
+        toast.opacity = 0
+        page.update()
+
+        await asyncio.sleep(0.5)
+        if toast in page.overlay:
+            page.overlay.remove(toast)
+            page.update()
+            
+        if sound:
+            try:
+                if hasattr(page, 'services') and audio in page.services:
+                    page.services.remove(audio)
+                elif audio in page.overlay:
+                    page.overlay.remove(audio)
+            except: pass
+
+    page.run_task(animate_toast)

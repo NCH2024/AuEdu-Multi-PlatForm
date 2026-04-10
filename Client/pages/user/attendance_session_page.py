@@ -22,12 +22,12 @@ class AttendanceSessionPage(ft.Container):
         self.dd_camera = CustomDropdown(label="Chọn nguồn Camera", options=[], on_change=self.handle_camera_change)
         self.camera_view = CameraView(page=self.app_page, dd_camera=self.dd_camera, is_visible=True, on_frame=self.send_frame_to_server)
         
-        # OVERLAY: Thêm thuộc tính ép tràn viền (left=0, right=0, top=0, bottom=0)
+        # OVERLAY: Màn đen phủ lên khi tạm dừng
         self.pause_overlay = ft.Container(
             left=0, right=0, top=0, bottom=0,
-            bgcolor=ft.Colors.BLACK_87,
+            bgcolor=ft.Colors.BLACK_87, # Sử dụng đúng chuẩn màu của bạn
             visible=False,
-            alignment=ft.Alignment.CENTER,
+            alignment=ft.Alignment.CENTER, # Sử dụng đúng chuẩn Căn lề của bạn
             content=ft.Column(
                 controls=[
                     ft.Icon(ft.Icons.MOTION_PHOTOS_PAUSE, color=ft.Colors.WHITE, size=50),
@@ -91,8 +91,6 @@ class AttendanceSessionPage(ft.Container):
     async def handle_camera_change(self, e=None):
         prefs = ft.SharedPreferences()
         await prefs.set("selected_camera", str(self.dd_camera.value))
-        
-        # Lỗi cũ: Đổi cam tự động phát. Fix: Chỉ phát nếu KHÔNG ĐANG TẠM DỪNG
         if not self.is_paused:
             await self.camera_view.stop_camera()
             await self.camera_view.start_camera()
@@ -118,7 +116,6 @@ class AttendanceSessionPage(ft.Container):
         self.pause_overlay.visible = self.is_paused
         self.pause_overlay.update()
 
-        # LOGIC MỚI: Tắt hẳn camera khi tạm dừng để tiết kiệm tài nguyên
         if self.is_paused:
             await self.camera_view.stop_camera()
         else:
@@ -166,7 +163,7 @@ class AttendanceSessionPage(ft.Container):
             elif st == 3: bg, border, txt = ft.Colors.AMBER_400, None, current_theme.text_main
 
             grid_items.append(ft.Container(
-                width=35, height=35, border_radius=20, bgcolor=bg, border=border, alignment=ft.Alignment(0, 0),
+                width=35, height=35, border_radius=20, bgcolor=bg, border=border, alignment=ft.Alignment.CENTER,
                 content=ft.Text(str(idx), color=txt, weight=ft.FontWeight.BOLD, size=12)
             ))
         return ft.GridView(runs_count=5 if self.is_desktop else 6, max_extent=40, spacing=8, run_spacing=8, controls=grid_items)
@@ -192,33 +189,35 @@ class AttendanceSessionPage(ft.Container):
         return scanned_list
 
     def build_ui(self):
-        # 1. BỌC CAMERA & LỚP PHỦ VÀO STACK ÉP TRÀN VIỀN
+        # 1. KHU VỰC CAMERA
+        # Ép trực tiếp CameraView bám chặt 4 góc của Stack
+        self.camera_view.left = 0
+        self.camera_view.right = 0
+        self.camera_view.top = 0
+        self.camera_view.bottom = 0
+
         camera_stack = ft.Stack(
             expand=True,
             controls=[
-                # Ép Camera tràn viền mọi góc
-                ft.Container(content=self.camera_view, left=0, right=0, top=0, bottom=0),
+                self.camera_view, 
                 self.pause_overlay 
             ]
         )
 
         camera_card = get_flat_container(
-            content=ft.Container(
-                content=camera_stack,
-                alignment=ft.Alignment.CENTER, 
-                clip_behavior=ft.ClipBehavior.HARD_EDGE,
-                border_radius=12, expand=True
-            ),
+            content=camera_stack,
             padding=0, expand=True
         )
+        # Rất quan trọng: Cắt phần hình ảnh dư thừa nếu nó tràn ra khỏi viền bo góc
+        camera_card.clip_behavior = ft.ClipBehavior.HARD_EDGE 
 
-        # 2. THANH NAVIGATION DƯỚI CÙNG (Fix lỗi bị cắt chữ bằng expand=True và giảm padding)
+        # 2. THANH NAVIGATION DƯỚI CÙNG
         def create_nav_btn(icon_name, label, color, on_click_event):
             return ft.Container(
-                on_click=on_click_event, ink=True, border_radius=8, 
-                padding=ft.Padding(2, 5, 2, 5), expand=True, # Expand giúp tự động thu nhỏ vừa khít
+                on_click=on_click_event, ink=True, border_radius=0, 
+                padding=ft.Padding(0,0,0,0), expand=True,
                 content=ft.Column([
-                    ft.Icon(icon_name, color=color, size=24), # Giảm size icon chút xíu để cân bằng
+                    ft.Icon(icon_name, color=color, size=24),
                     ft.Text(label, size=11, color=color, weight=ft.FontWeight.BOLD)
                 ], spacing=2, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
             )
@@ -237,12 +236,13 @@ class AttendanceSessionPage(ft.Container):
             self.btn_pause_container,
             create_nav_btn(ft.Icons.EXIT_TO_APP_ROUNDED, "Thoát", ft.Colors.RED_500, self.handle_exit)
         ]
+        
         if not self.is_desktop:
             nav_buttons.insert(1, create_nav_btn(ft.Icons.FLIP_CAMERA_ANDROID, "Đổi Cam", current_theme.text_muted, self.handle_flip_camera))
 
         bottom_nav = get_flat_container(
             content=ft.Row(alignment=ft.MainAxisAlignment.SPACE_EVENLY, controls=nav_buttons),
-            padding=ft.Padding(5, 5, 5, 5), expand=False
+            padding=ft.Padding(0,0,0,0), expand=False
         )
 
         # 3. PANEL BÊN CHỨA DANH SÁCH & GRID
@@ -253,14 +253,15 @@ class AttendanceSessionPage(ft.Container):
         ], expand=True)
 
         if self.is_desktop:
+            # GIAO DIỆN PC
             desktop_top_bar = ft.WindowDragArea(
                 ft.Container(
-                    height=45, bgcolor=current_theme.bg_color, border_radius=8,
-                    padding=ft.Padding(15, 0, 5, 0),
+                    height=32, bgcolor=current_theme.bg_color, border_radius=8,
+                    padding=ft.Padding(10, 0, 5, 0),
                     content=ft.Row(
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         controls=[
-                            ft.Row([ft.Icon(ft.Icons.CAMERA_ALT_ROUNDED, size=16, color=current_theme.accent), ft.Text("Camera Điểm Danh", color=current_theme.text_main, weight=ft.FontWeight.BOLD, size=13)]),
+                            ft.Row([ft.Icon(ft.Icons.CAMERA_ALT_ROUNDED, size=16, color=current_theme.accent), ft.Text("AUEDU - CAMERA [Điểm danh]", color=current_theme.text_main, weight=ft.FontWeight.BOLD, size=13)]),
                             ft.Row([
                                 ft.IconButton(ft.Icons.MINIMIZE, icon_size=16, icon_color=current_theme.text_muted, on_click=self.minimize_window, tooltip="Thu nhỏ"),
                                 ft.IconButton(ft.Icons.CROP_SQUARE, icon_size=16, icon_color=current_theme.text_muted, on_click=self.toggle_maximize, tooltip="Phóng to"),
@@ -271,31 +272,32 @@ class AttendanceSessionPage(ft.Container):
                 )
             )
 
-            left_panel = get_flat_container(content=panel_content, padding=15, expand=False)
-            left_panel.width = 320
+            left_panel = get_flat_container(content=panel_content, padding=5, expand=False)
+            left_panel.width = 350
 
             main_layout = ft.Column([
                 desktop_top_bar,
-                ft.Row([left_panel, ft.Column([camera_card, bottom_nav], expand=True)], expand=True, spacing=15)
-            ], expand=True, spacing=10)
+                ft.Row([
+                    left_panel, 
+                    ft.Column([camera_card, bottom_nav], expand=True) 
+                ], expand=True, spacing=10)
+            ], expand=True, spacing=5)
         else:
-            bottom_panel = get_flat_container(content=panel_content, padding=15, expand=False)
-            bottom_panel.height = 320 
+            # GIAO DIỆN MOBILE
+            bottom_panel = get_flat_container(content=panel_content, padding=5, expand=False)
+            bottom_panel.height = 250
 
             main_layout = ft.Column([
-                camera_card,
-                bottom_panel,
-                bottom_nav
-            ], expand=True, spacing=10)
+                camera_card,   
+                bottom_panel,  
+                bottom_nav     
+            ], expand=True, spacing=2)
 
-        return ft.Container(content=main_layout, padding=10 if self.is_desktop else 15, expand=True)
+        return ft.Container(content=main_layout, padding=2 if self.is_desktop else 5, expand=True)
     
     async def send_frame_to_server(self, frame_base64: str):
-        # Chỉ khi MediaPipe ở CameraView tìm thấy mặt và cắt ra, hàm này mới chạy!
         try:
             if hasattr(self, 'ws') and self.ws:
                 await self.ws.send_async(json.dumps({"image": frame_base64}))
-                # In ra Terminal App để theo dõi
-                print(f"Đã bắn 1 KHUÔN MẶT lên Server (Dung lượng: {len(frame_base64)} bytes)")
         except Exception as e:
-            print(f"Lỗi khi gửi ảnh lên Server: {e}")
+            pass

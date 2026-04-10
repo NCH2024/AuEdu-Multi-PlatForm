@@ -10,13 +10,19 @@ from components.options.news_image import build_news_image
 from core.theme import current_theme
 from core.config import get_supabase_client
 
-
 class UserHomePage(ft.Container):
     def __init__(self, page: ft.Page):
         super().__init__()
         self.app_page = page
         self.expand = True
         self.padding = 0
+
+        # Kiểm tra nền tảng để quyết định hiển thị Layout Desktop hay Mobile
+        self.is_desktop = self.app_page.platform in [
+            ft.PagePlatform.WINDOWS,
+            ft.PagePlatform.MACOS,
+            ft.PagePlatform.LINUX,
+        ]
 
         self.gv_name = "Giảng viên"
         self.gv_id = "N/A"
@@ -25,25 +31,16 @@ class UserHomePage(ft.Container):
         self.today_data = None
         self.is_loading = True
 
-        # Tham chiếu để cập nhật tên giảng viên ngay khi có session (trước khi API về)
         self._name_text = None
 
         self.content = self.build_ui()
         self.app_page.run_task(self.load_data)
 
-    # ══════════════════════════════════════════════════════════════════
-    # APPLY THEME: Rebuild UI từ data đã có trong memory (không fetch mạng)
-    # build_ui() giờ chỉ dựng control từ self.thongbao_data / tkb_data / today_data
-    # nên rất nhanh — hoàn toàn an toàn để gọi lại khi đổi theme
-    # ══════════════════════════════════════════════════════════════════
     def apply_theme(self):
         self.content = self.build_ui()
         if self.page:
             self.update()
 
-    # ══════════════════════════════════════════════════════════════════
-    # BUILD UI: Chỉ gọi 1 lần duy nhất (hoặc khi cần full rebuild)
-    # ══════════════════════════════════════════════════════════════════
     def create_skeleton(self, width=None, height=20, expand=False, is_circle=False, border_radius=4):
         return ft.Container(
             width=width, height=height, expand=expand,
@@ -58,7 +55,6 @@ class UserHomePage(ft.Container):
                 has_link = bool(link and str(link).strip() not in ("", "None"))
 
                 if has_link:
-                    from components.options.open_browser import open_browser
                     await open_browser(self.app_page, link, item.get("tieu_de", "Thông báo"))
                 else:
                     def close_dlg(ev):
@@ -69,7 +65,7 @@ class UserHomePage(ft.Container):
 
                     dlg = ft.AlertDialog(
                         title=ft.Text(item.get("tieu_de", ""), weight=ft.FontWeight.BOLD, size=16, color=current_theme.secondary),
-                        scrollable=True, # CHUẨN FLET 0.82.2
+                        scrollable=True,
                         content=ft.Container(
                             width=340,
                             content=ft.Column(
@@ -96,7 +92,6 @@ class UserHomePage(ft.Container):
         return on_click
 
     def _build_timeline_controls(self):
-        """Trả về list controls cho today_timeline — gọi riêng để dễ rebuild."""
         controls = []
         if self.is_loading:
             for _ in range(2):
@@ -183,7 +178,6 @@ class UserHomePage(ft.Container):
         return controls
 
     def _build_news_controls(self):
-        """Trả về list controls cho news_list — gọi riêng để dễ rebuild."""
         controls = []
         if self.is_loading:
             for _ in range(3):
@@ -201,9 +195,7 @@ class UserHomePage(ft.Container):
 
         if self.thongbao_data:
             for item in self.thongbao_data:
-                # ✅ build_news_image: kích thước cố định, có fallback, bo góc sắc nét
-                img_widget = build_news_image(item.get("hinh_anh"),
-                                              width=80, height=80, border_radius=8)
+                img_widget = build_news_image(item.get("hinh_anh"), width=80, height=80, border_radius=8)
                 has_link = bool(item.get("link_web") and str(item.get("link_web")).strip() not in ("", "None"))
                 created_at = item.get("created_at", "")
                 date_str = str(created_at)[:10] if created_at and len(str(created_at)) >= 10 else "N/A"
@@ -235,6 +227,113 @@ class UserHomePage(ft.Container):
 
         return controls
 
+    def _build_desktop_insights(self):
+        """Khối dữ liệu phân tích chỉ hiển thị trên nền tảng Desktop"""
+        
+        # Đếm số lượng môn học độc lập đang dạy trong kỳ
+        mon_hoc_set = set()
+        lop_hoc_set = set()
+        if self.tkb_data:
+            for item in self.tkb_data:
+                mon_hoc_set.add(item.get("hocphan", {}).get("tenhocphan", ""))
+                lop_hoc_set.add(item.get("lop", {}).get("tenlop", ""))
+
+        def mini_stat(icon, title, value, color):
+            return ft.Container(
+                expand=True, padding=15, border_radius=12,
+                bgcolor=current_theme.surface_variant,
+                content=ft.Row([
+                    ft.Icon(icon, color=color, size=24),
+                    ft.Column([
+                        ft.Text(title, size=11, color=current_theme.text_muted, weight=ft.FontWeight.BOLD),
+                        ft.Text(str(value), size=18, color=current_theme.text_main, weight=ft.FontWeight.W_800)
+                    ], spacing=2)
+                ], alignment=ft.MainAxisAlignment.START, spacing=15)
+            )
+
+        return self.make_pro_card(ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.PIE_CHART_ROUNDED, color=current_theme.primary, size=20),
+                ft.Text("TỔNG QUAN HỌC KỲ (DESKTOP INSIGHTS)", weight=ft.FontWeight.BOLD, color=current_theme.primary, size=14)
+            ]),
+            ft.Divider(color=current_theme.divider_color, height=20),
+            ft.Row([
+                mini_stat(ft.Icons.LIBRARY_BOOKS_ROUNDED, "Học phần phụ trách", len(mon_hoc_set) if not self.is_loading else "-", current_theme.primary),
+                mini_stat(ft.Icons.SUPERVISOR_ACCOUNT_ROUNDED, "Lớp học phụ trách", len(lop_hoc_set) if not self.is_loading else "-", ft.Colors.ORANGE_500),
+                mini_stat(ft.Icons.FACT_CHECK_ROUNDED, "Tuân thủ điểm danh", "100%", ft.Colors.GREEN_500), # Mock data cho trực quan
+            ], spacing=15)
+        ], spacing=0))
+
+    # Đã gỡ bỏ shadow để giữ đúng nguyên tắc thiết kế phẳng (Flat Design)
+    def make_pro_card(self, content, padding=20, ink=False, on_click=None):
+        return ft.Container(
+            content=content, padding=padding, border_radius=12,
+            bgcolor=current_theme.surface_color,
+            border=ft.Border.all(1, current_theme.divider_color),
+            ink=ink, on_click=on_click
+        )
+        
+    def _build_desktop_class_table(self):
+        """Bảng danh sách lớp học phụ trách - Chỉ hiển thị trên Desktop"""
+        
+        # Nếu đang tải hoặc không có dữ liệu thì ẩn khối này đi cho gọn
+        if self.is_loading or not self.tkb_data:
+            return ft.Container()
+
+        # Tạo các hàng (Rows) cho bảng từ dữ liệu TKB đã fetch
+        rows = []
+        for item in self.tkb_data:
+            ten_hp = item.get("hocphan", {}).get("tenhocphan", "N/A")
+            so_buoi = item.get("hocphan", {}).get("sobuoi", "N/A")
+            ten_lop = item.get("lop", {}).get("tenlop", "N/A")
+
+            rows.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(ten_hp, weight=ft.FontWeight.W_600, color=current_theme.text_main)),
+                        ft.DataCell(ft.Text(ten_lop, color=current_theme.text_muted)),
+                        ft.DataCell(ft.Text(f"{so_buoi} buổi", color=current_theme.text_muted)),
+                    ]
+                )
+            )
+
+        # Khởi tạo DataTable
+        class_table = ft.DataTable(
+            expand=True,
+            columns=[
+                ft.DataColumn(ft.Text("HỌC PHẦN", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=12)),
+                ft.DataColumn(ft.Text("LỚP HỌC", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=12)),
+                ft.DataColumn(ft.Text("THỜI LƯỢNG", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=12)),
+            ],
+            rows=rows,
+            heading_row_height=40,
+            data_row_max_height=50,
+            column_spacing=40,
+            horizontal_margin=20,
+            divider_thickness=1,
+            # Bỏ bóng và dùng màu nền phẳng
+            heading_row_color=current_theme.surface_variant,
+            border=ft.Border.all(1, current_theme.divider_color),
+            border_radius=8,
+        )
+
+        return self.make_pro_card(
+            padding=0, # Set padding 0 để bảng tràn đẹp ra sát viền card
+            content=ft.Column([
+                ft.Container(
+                    padding=ft.Padding(20, 20, 20, 5),
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color=current_theme.primary, size=20),
+                        ft.Text("DANH SÁCH HỌC PHẦN GIẢNG DẠY KỲ NÀY", weight=ft.FontWeight.BOLD, color=current_theme.primary, size=14)
+                    ])
+                ),
+                ft.Container(
+                    padding=ft.Padding(20, 10, 20, 20),
+                    content=ft.Row([class_table], scroll=ft.ScrollMode.AUTO) # Bọc trong Row scroll để an toàn nếu màn hình nhỏ lại
+                )
+            ], spacing=0)
+        )
+
     def build_ui(self):
         now = datetime.datetime.now()
         greeting = "Chào buổi sáng" if now.hour < 12 else "Chào buổi chiều" if now.hour < 18 else "Chào buổi tối"
@@ -245,15 +344,6 @@ class UserHomePage(ft.Container):
         news_count = len(self.thongbao_data) if self.thongbao_data else 0
         progress_val = (today_done / today_total) if today_total > 0 else 1.0
         progress_text = f"Hoàn thành {today_done}/{today_total} ca dạy" if today_total > 0 else "Hôm nay bạn được nghỉ ngơi!"
-
-        def make_pro_card(content, padding=20, ink=False, on_click=None):
-            return ft.Container(
-                content=content, padding=padding, border_radius=16,
-                bgcolor=current_theme.surface_color,
-                border=ft.Border.all(1, current_theme.divider_color),
-                shadow=ft.BoxShadow(spread_radius=0, blur_radius=10, color=ft.Colors.with_opacity(0.03, ft.Colors.BLACK), offset=ft.Offset(0, 4)),
-                ink=ink, on_click=on_click
-            )
 
         # ── Header ──
         self._name_text = ft.Text(f"GV. {self.gv_name}", size=24, weight=ft.FontWeight.W_800, color=current_theme.text_main)
@@ -269,7 +359,7 @@ class UserHomePage(ft.Container):
         def create_stat_card(icon, title, value, color_theme, route):
             return ft.Container(
                 col={"xs": 6, "sm": 6, "md": 3, "lg": 3},
-                content=make_pro_card(
+                content=self.make_pro_card(
                     padding=15, ink=True,
                     on_click=lambda e, r=route: self.app_page.run_task(self.app_page.push_route, r),
                     content=ft.Column([
@@ -297,7 +387,7 @@ class UserHomePage(ft.Container):
             create_stat_card(ft.Icons.EVENT_NOTE_ROUNDED, "Ca dạy hôm nay", today_total, ft.Colors.ORANGE_500, "/user/attendance"),
             create_stat_card(ft.Icons.CHECK_CIRCLE_OUTLINE, "Đã điểm danh", today_done, ft.Colors.GREEN_500, "/user/stats"),
             create_stat_card(ft.Icons.CAMPAIGN_OUTLINED, "Thông báo mới", news_count, ft.Colors.RED_400, "/user/news"),
-        ], run_spacing=15, spacing=15)
+        ], run_spacing=5, spacing=5)
 
         # ── Progress ──
         progress_label = ft.Text(f"{int(progress_val * 100)}%", size=13, weight=ft.FontWeight.BOLD, color=current_theme.secondary)
@@ -316,7 +406,7 @@ class UserHomePage(ft.Container):
         # ── Timeline ──
         today_timeline = ft.Column(controls=self._build_timeline_controls(), spacing=0)
 
-        timeline_section = make_pro_card(ft.Column([
+        timeline_section = self.make_pro_card(ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.MAP_ROUNDED, color=current_theme.secondary, size=20),
                 ft.Text("LỊCH TRÌNH TRONG NGÀY", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=14)
@@ -342,7 +432,7 @@ class UserHomePage(ft.Container):
                 )
             )
 
-        quick_actions_section = make_pro_card(ft.Column([
+        quick_actions_section = self.make_pro_card(ft.Column([
             ft.Row([
                 ft.Icon(ft.Icons.BOLT_ROUNDED, color=ft.Colors.AMBER_500, size=20),
                 ft.Text("TRUY CẬP NHANH", weight=ft.FontWeight.BOLD, color=current_theme.text_main, size=14)
@@ -353,13 +443,13 @@ class UserHomePage(ft.Container):
                 create_action_btn(ft.Icons.EDIT_CALENDAR_ROUNDED, "Lịch giảng dạy", current_theme.surface_color, current_theme.secondary, "/user/schedule"),
                 create_action_btn(ft.Icons.ANALYTICS_ROUNDED, "Báo cáo tiến độ", current_theme.surface_color, current_theme.secondary, "/user/stats"),
                 create_action_btn(ft.Icons.MANAGE_ACCOUNTS_ROUNDED, "Hồ sơ của tôi", current_theme.surface_color, current_theme.secondary, "/user/profile"),
-            ], run_spacing=10, spacing=10)
-        ], spacing=5))
+            ], run_spacing=5, spacing=5)
+        ], spacing=0))
 
         # ── News ──
         news_list = ft.Column(controls=self._build_news_controls(), spacing=0)
 
-        news_section = make_pro_card(ft.Column([
+        news_section = self.make_pro_card(ft.Column([
             ft.Row([
                 ft.Row([
                     ft.Icon(ft.Icons.CAMPAIGN_ROUNDED, color=ft.Colors.RED_400, size=20),
@@ -370,19 +460,34 @@ class UserHomePage(ft.Container):
             news_list
         ], spacing=0))
 
-        dashboard_layout = ft.Column([
+        # ── MAIN LAYOUT BUILDER ──
+        layout_controls = [
             header_section,
-            ft.Container(height=10),
+            ft.Container(height=5),
             stats_row,
-            ft.Container(height=10),
+            ft.Container(height=5),
+        ]
+
+        # Xây dựng cột bên trái (Chứa Lịch trình, NẾU là desktop thì thêm Bảng danh sách lớp)
+        left_col_controls = [timeline_section]
+        if self.is_desktop:
+            left_col_controls.append(self._build_desktop_class_table())
+
+        # Xây dựng cột bên phải (Chứa Truy cập nhanh và Bảng tin)
+        right_col_controls = [quick_actions_section,  news_section]
+
+        # Layout cột linh hoạt cho Timeline & Quick Actions
+        layout_controls.append(
             ft.ResponsiveRow([
-                ft.Column([timeline_section], col={"xs": 12, "md": 12, "lg": 7, "xl": 8}),
-                ft.Column([quick_actions_section, ft.Container(height=10), news_section], col={"xs": 12, "md": 12, "lg": 5, "xl": 4}),
-            ], spacing=20, run_spacing=20)
-        ], spacing=0)
+                ft.Column(left_col_controls, col={"xs": 12, "md": 12, "lg": 7, "xl": 8}),
+                ft.Column(right_col_controls, col={"xs": 12, "md": 12, "lg": 5, "xl": 4}),
+            ], spacing=5, run_spacing=5)
+        )
+
+        dashboard_layout = ft.Column(layout_controls, spacing=0)
 
         return ft.Column(
-            [ft.Container(height=10), dashboard_layout, ft.Container(height=40)],
+            [dashboard_layout],
             scroll=ft.ScrollMode.AUTO, expand=True
         )
 
@@ -392,6 +497,8 @@ class UserHomePage(ft.Container):
         self.today_data = today
         self.is_loading = False
         self.apply_theme()
+
+
 
     # ══════════════════════════════════════════════════════════════════
     # CÁC HÀM FETCH RIÊNG BIỆT — để asyncio.gather chạy song song

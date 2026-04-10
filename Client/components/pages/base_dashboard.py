@@ -1,5 +1,10 @@
 import flet as ft
+import flet_geolocator as ftg
 import json
+import asyncio
+import datetime
+import httpx 
+import flet_geolocator as geo
 import core.theme as theme_module
 from components.options.confirm_dialog import show_confirm_dialog 
 
@@ -19,10 +24,51 @@ class BaseDashboard(ft.Container):
         ]
 
         self.user_name_text = ft.Text("Đang tải...", size=13, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
-        self.page_title_text = ft.Text("TỔNG QUAN", size=15, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.primary)
         
-        # Sửa thành padding số nguyên an toàn cho Flet 0.82+
-        self.content_area = ft.Container(expand=True, padding=10, alignment=ft.Alignment.TOP_CENTER)
+        # ___ Khởi tạo quyền truy cập vị trí _____
+        self.geo = ftg.Geolocator(
+            on_error=lambda e: print(f"[Geolocator Error] {e.data}")
+        )
+        # ─── KHỐI TIÊU ĐỀ TRANG ───
+        self._page_title_raw_text = ft.Text(
+            "TỔNG QUAN", size=13, 
+            weight=ft.FontWeight.BOLD, 
+            color=theme_module.current_theme.surface_color 
+        )
+        self.page_title_container = ft.Container(
+            content=self._page_title_raw_text,
+            bgcolor=theme_module.current_theme.primary, 
+            padding=ft.Padding(12, 6, 12, 6),
+            border_radius=16, 
+            alignment=ft.Alignment(0, 0)
+        )
+        
+        # ─── KHỐI THỜI GIAN & VỊ TRÍ (CỤM PILL) ───
+        self.clock_text = ft.Text("00:00:00", size=13, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.primary)
+        self.location_text = ft.Text("Đang định vị...", size=12, color=theme_module.current_theme.text_muted)
+        
+        # Các thành phần trang trí bên trong cụm
+        self.clock_icon = ft.Icon(ft.Icons.ACCESS_TIME_ROUNDED, size=16, color=theme_module.current_theme.primary)
+        self.loc_icon = ft.Icon(ft.Icons.LOCATION_ON_ROUNDED, size=15, color=theme_module.current_theme.text_muted)
+        self.time_loc_divider = ft.Container(width=1, height=14, bgcolor=theme_module.current_theme.divider_color, margin=ft.Margin(6, 0, 6, 0))
+        
+        # Container bọc toàn bộ lại
+        self.time_location_container = ft.Container(
+            content=ft.Row([
+                self.clock_icon,
+                self.clock_text,
+                self.time_loc_divider,
+                self.loc_icon,
+                self.location_text
+            ], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=theme_module.current_theme.surface_variant,
+            border=ft.Border.all(1, theme_module.current_theme.divider_color),
+            padding=ft.Padding(12, 6, 12, 6),
+            border_radius=20, # Bo tròn viên thuốc
+            visible=False # Mặc định ẩn, sẽ bật lên khi ở trên Desktop
+        )
+
+        self.content_area = ft.Container(expand=True, padding=5, alignment=ft.Alignment.TOP_CENTER)
         
         self.sidebar_controls = []
         self.bottom_nav_controls = []
@@ -31,7 +77,76 @@ class BaseDashboard(ft.Container):
 
     def did_mount(self):
         self.app_page.run_task(self.init_app_settings)
+        self.app_page.run_task(self._update_clock)
+        
+        if self._is_desktop_platform():
+            self.app_page.run_task(self._update_location)
 
+    def _is_desktop_platform(self):
+        return self.app_page.platform in [
+            ft.PagePlatform.WINDOWS,
+            ft.PagePlatform.MACOS,
+            ft.PagePlatform.LINUX,
+        ]
+
+    async def _update_clock(self):
+        while True:
+            # Chỉ cập nhật nếu cụm time_location đang hiển thị
+            if getattr(self, "page", None) and self.time_location_container.visible:
+                now = datetime.datetime.now()
+                self.clock_text.value = now.strftime("%H:%M:%S")
+                try:
+                    self.clock_text.update()
+                except Exception:
+                    pass
+            await asyncio.sleep(1)
+
+    async def _update_location(self):
+        """Lấy vị trí chính xác bằng ftg.Geolocator + Nominatim"""
+        await asyncio.sleep(2)
+        
+        headers = {"User-Agent": "AuEdu_PC_App (hiepnc.software@gmail.com)"}
+        NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=12"
+
+        try:
+            # 1. Kiểm tra dịch vụ vị trí hệ thống
+            if not await self.geo.is_location_service_enabled():
+                self.location_text.value = "GPS đang tắt"
+                self.location_text.update()
+                return
+
+            # 2. Kiểm tra và xin quyền
+            p = await self.geo.get_permission_status()
+            if p != ftg.GeolocatorPermissionStatus.ALWAYS and p != ftg.GeolocatorPermissionStatus.WHILE_IN_USE:
+                p = await self.geo.request_permission()
+            
+            if p not in [ftg.GeolocatorPermissionStatus.ALWAYS, ftg.GeolocatorPermissionStatus.WHILE_IN_USE]:
+                self.location_text.value = "Cần cấp quyền"
+                self.location_text.update()
+                return
+
+            # 3. Lấy tọa độ hiện tại
+            pos = await self.geo.get_current_position()
+            if not pos: return
+
+            # 4. Reverse Geocode để lấy tên địa danh
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.get(NOMINATIM_URL.format(lat=pos.latitude, lon=pos.longitude), headers=headers)
+                if res.status_code == 200:
+                    addr = res.json().get("address", {})
+                    # Ưu tiên Huyện/Xã -> Tỉnh
+                    district = addr.get("city_district") or addr.get("district") or addr.get("suburb") or addr.get("town") or addr.get("village")
+                    state = addr.get("city") or addr.get("state")
+                    
+                    location_str = f"{district}, {state}" if district and state else (district or state or "Việt Nam")
+                    self.location_text.value = location_str
+                    self.location_text.update()
+
+        except Exception as e:
+            print(f"Lỗi định vị: {e}")
+            self.location_text.value = "Lỗi định vị"
+            self.location_text.update()
+    
     async def init_app_settings(self):
         prefs = ft.SharedPreferences()
         is_dark = await prefs.get("app_is_dark") == "True"
@@ -43,12 +158,23 @@ class BaseDashboard(ft.Container):
         self.app_page.bgcolor = theme_module.current_theme.bg_color
         
         self.user_name_text.color = theme_module.current_theme.text_main
-        self.page_title_text.color = theme_module.current_theme.primary
+        
+        # Cập nhật màu Title
+        self._page_title_raw_text.color = theme_module.current_theme.surface_color
+        self.page_title_container.bgcolor = theme_module.current_theme.primary
+        
+        # Cập nhật màu cụm Thời gian - Vị trí
+        self.clock_text.color = theme_module.current_theme.primary
+        self.clock_icon.color = theme_module.current_theme.primary
+        self.location_text.color = theme_module.current_theme.text_muted
+        self.loc_icon.color = theme_module.current_theme.text_muted
+        self.time_loc_divider.bgcolor = theme_module.current_theme.divider_color
+        
+        self.time_location_container.bgcolor = theme_module.current_theme.surface_variant
+        self.time_location_container.border = ft.Border.all(1, theme_module.current_theme.divider_color)
 
         saved_content = self.content_area.content
-
         self.content = self.build_layout()
-
         if saved_content is not None:
             self.content_area.content = saved_content
 
@@ -129,7 +255,7 @@ class BaseDashboard(ft.Container):
         self.app_page.update()
 
     def set_content(self, title: str, new_content: ft.Control, route: str):
-        self.page_title_text.value = title.upper()
+        self._page_title_raw_text.value = title.upper() 
         self.content_area.content = new_content
         self.active_route = route
         self.build_navigation()
@@ -178,13 +304,8 @@ class BaseDashboard(ft.Container):
             self.app_page.update()
 
         async def handle_maximize(e):
-            # 1. Đảo ngược trạng thái phóng to cửa sổ
             self.app_page.window.maximized = not self.app_page.window.maximized
-            
-            # 2. Đổi icon: Nếu đang phóng to thì hiện 2 ô vuông lồng nhau, ngược lại hiện 1 ô vuông
             e.control.icon = ft.Icons.FILTER_NONE if self.app_page.window.maximized else ft.Icons.CROP_SQUARE
-            
-            # 3. Cập nhật lại giao diện nút và trang
             e.control.update()
             self.app_page.update()
 
@@ -243,6 +364,9 @@ class BaseDashboard(ft.Container):
             on_click=self.toggle_sidebar, visible=not is_mobile
         )
         self.user_name_text.visible = not is_mobile
+        
+        # Hiển thị khối thời gian & vị trí nếu không phải mobile
+        self.time_location_container.visible = not is_mobile
 
         popup_items = [
             ft.PopupMenuItem(
@@ -274,12 +398,20 @@ class BaseDashboard(ft.Container):
             content=ft.Row(
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 controls=[
+                    # Cột trái (Nút menu và Tiêu đề)
                     ft.Row(spacing=5, controls=[
                         self.btn_menu_toggle,
                         ft.Container(width=5),
-                        self.page_title_text
-                    ]),
-                    ft.Row(spacing=5, controls=[
+                        self.page_title_container
+                    ], expand=1),
+                    
+                    # Cột giữa (Hiển thị nguyên 1 viên thuốc chứa CẢ thời gian và vị trí)
+                    ft.Row([
+                        self.time_location_container 
+                    ], alignment=ft.MainAxisAlignment.CENTER, expand=1),
+                    
+                    # Cột phải (Avatar và Menu tùy chọn)
+                    ft.Row(spacing=5, alignment=ft.MainAxisAlignment.END, controls=[
                         ft.Container(
                             ink=True, on_click=go_to_profile, border_radius=50,
                             padding=ft.Padding(3, 3, 3, 3),
@@ -294,7 +426,7 @@ class BaseDashboard(ft.Container):
                             icon=ft.Icons.MORE_VERT, icon_color=theme_module.current_theme.text_main, icon_size=25,
                             items=popup_items
                         )
-                    ])
+                    ], expand=1)
                 ]
             )
         )
@@ -308,11 +440,6 @@ class BaseDashboard(ft.Container):
                 padding=10,
                 alignment=ft.Alignment.TOP_CENTER
             )
-
-        # -------------------------------------------------------------
-        # FIX CỐT LÕI: Đưa trực tiếp self.content_area vào Column
-        # KHÔNG DÙNG scroll_wrapper có scroll=AUTO bọc bên ngoài nữa!
-        # -------------------------------------------------------------
         main_view_stack = ft.Column(
             expand=True, spacing=0,
             controls=[top_bar_area, self.content_area]
@@ -438,10 +565,12 @@ class BaseDashboard(ft.Container):
             self.content.content = self.mobile_layout
             self.btn_menu_toggle.visible = False
             self.user_name_text.visible = False
+            self.time_location_container.visible = False # Ẩn toàn bộ khối thời gian/vị trí trên Mobile
         else:
             self.content.content = self.desktop_layout
             self.btn_menu_toggle.visible = True
             self.user_name_text.visible = True
+            self.time_location_container.visible = True # Bật toàn bộ khối trên PC
 
         if getattr(self, "page", None):
             self.update()

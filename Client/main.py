@@ -2,7 +2,6 @@ import flet as ft
 import json
 import asyncio
 
-# Import các View
 from components.pages.base_dashboard import BaseDashboard
 from pages.splash_page import SplashPage
 from pages.user.home_page import UserHomePage
@@ -14,6 +13,8 @@ from pages.user.stats_page import StatsPage
 from pages.about_page import AboutPage
 from pages.user.profile_page import ProfilePage
 from pages.user.attendance_session_page import AttendanceSessionPage
+from pages.user.face_training_page import FaceTrainingPage
+
 
 import core.theme as theme_module
 
@@ -123,6 +124,8 @@ async def main(page: ft.Page):
                     dashboard.set_content("THÔNG TIN PHẦN MỀM", AboutPage(page), current_route)
                 elif current_route == "/user/profile":
                     dashboard.set_content("HỒ SƠ TÀI KHOẢN", ProfilePage(page), current_route)
+                elif current_route == "/user/attendance/training":
+                    dashboard.set_content("ĐÀO TẠO DỮ LIỆU", FaceTrainingPage(page), current_route)
 
             page.update()
             
