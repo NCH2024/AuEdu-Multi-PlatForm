@@ -105,6 +105,10 @@ class CameraView(ft.Container):
             # --- CỜ KIỂM SOÁT BĂNG THÔNG ---
             self.is_sending_frame = False
             
+            # --- KIỂM SOÁT FPS
+            self._last_ui_update = 0.0
+            self._ui_min_interval = 0.06
+            
         self.margin = self.padding = 0
         self.alignment = ft.Alignment(0, 0)
         self.available_cameras = []
@@ -149,6 +153,12 @@ class CameraView(ft.Container):
                         backend = cv2.CAP_DSHOW
                     
                     self.cap = cv2.VideoCapture(selected_idx, backend)
+                    
+                    # --- TỐI ƯU: ÉP CAMERA LẤY ẢNH NHỎ 640x480 & 30 FPS ---
+                    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    self.cap.set(cv2.CAP_PROP_FPS, 30)
+                    
                     if self.cap.isOpened():
                         self.is_running = True
                         self.app_page.run_task(self._desktop_camera_loop)
@@ -285,55 +295,54 @@ class CameraView(ft.Container):
                 continue
             
             try:
-                # Chỉ lấy frame MỚI NHẤT từ hàng đợi (chờ tối đa 0.1s, nếu không có thì bỏ qua vòng này)
-                frame = self.frame_queue.get(timeout=0.1)
+                frame = self.frame_queue.get(timeout=0.05)
             except queue.Empty:
                 await asyncio.sleep(0.01)
                 continue
-    
+
             self.current_frame = frame.copy() 
             face_crop_base64 = None
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             ih, iw, _ = frame.shape
             
-            # ==== CHẾ ĐỘ 1: ĐIỂM DANH (ATTENDANCE) - VẼ GÓC BẢO VỆ ====
+            # --- TỐI ƯU 2: THU NHỎ ẢNH CHỈ CÒN 480P ĐỂ AI XỬ LÝ SIÊU TỐC ---
+            small_h = 480
+            small_w = int(iw * small_h / ih) if ih > 0 else 640
+            small_frame = cv2.resize(frame, (small_w, small_h))
+            rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            
+            # ==== CHẾ ĐỘ 1: ĐIỂM DANH (ATTENDANCE) ====
             if self.view_mode == "attendance" and hasattr(self, 'face_detection'):
-                results = self.face_detection.process(rgb_frame)
-                has_face = False # Cờ đánh dấu có người trong khung hình
+                # --- TỐI ƯU 3: CHO AI CHẠY NGẦM BẰNG to_thread ĐỂ KHÔNG BLOCK GIAO DIỆN ---
+                results = await asyncio.to_thread(self.face_detection.process, rgb_small)
                 
-                if results.detections:
-                    has_face = True
+                if results and results.detections:
                     for detection in results.detections:
+                        # Tọa độ trả về là tỷ lệ phần trăm (0.0 -> 1.0), nên ta nhân lại với iw, ih của khung hình GỐC
                         bboxC = detection.location_data.relative_bounding_box
                         x, y = int(bboxC.xmin * iw), int(bboxC.ymin * ih)
                         w, h = int(bboxC.width * iw), int(bboxC.height * ih)
                         
-                        # Đảm bảo toạ độ không bị âm
                         x, y = max(0, x), max(0, y)
                         w, h = min(iw - x, w), min(ih - y, h)
                         
-                        # Vẽ UI Box hiện đại màu Accent
                         self._draw_flat_bounding_box(frame, x, y, w, h, color=(100, 200, 50))
                         
-                # Cập nhật UI Camera
-                _, buffer_display = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
-                b64_str = base64.b64encode(buffer_display).decode('utf-8')
-                self.camera_module.src = f"data:image/jpeg;base64,{b64_str}"
-                
-                try: self.camera_module.update()
-                except Exception: pass
-                    
-                # QUAN TRỌNG: Chỉ gửi FULL FRAME GỐC lên Server nếu có mặt người
-                if has_face and self.on_frame:
-                    _, buffer_ws = cv2.imencode('.jpg', self.current_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
-                    full_frame_b64 = base64.b64encode(buffer_ws).decode('utf-8')
-                    await self.on_frame(f"data:image/jpeg;base64,{full_frame_b64}")
+                        pad_x, pad_y = int(w * 0.15), int(h * 0.15)
+                        start_y, end_y = max(0, y - pad_y), min(ih, y + h + pad_y)
+                        start_x, end_x = max(0, x - pad_x), min(iw, x + w + pad_x)
+                        
+                        face_crop = self.current_frame[start_y:end_y, start_x:end_x]
+                        if face_crop.size > 0:
+                            _, buffer = cv2.imencode('.jpg', face_crop, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                            face_crop_base64 = base64.b64encode(buffer).decode('utf-8')
                             
-            # ==== CHẾ ĐỘ 2: ĐÀO TẠO (TRAINING) - VẼ LƯỚI CHI TIẾT ====
+            # ==== CHẾ ĐỘ 2: ĐÀO TẠO (TRAINING) ====
             elif self.view_mode == "training" and hasattr(self, 'face_mesh'):
-                results = self.face_mesh.process(rgb_frame)
-                if results.multi_face_landmarks:
+                # Tương tự, đưa FaceMesh vào luồng ngầm
+                results = await asyncio.to_thread(self.face_mesh.process, rgb_small)
+                if results and results.multi_face_landmarks:
                     for face_landmarks in results.multi_face_landmarks:
+                        # Vẽ lưới trực tiếp lên khung hình gốc
                         mp.solutions.drawing_utils.draw_landmarks(
                             image=frame,
                             landmark_list=face_landmarks,
@@ -342,52 +351,52 @@ class CameraView(ft.Container):
                             connection_drawing_spec=mp.solutions.drawing_styles.get_default_face_mesh_tesselation_style()
                         )
                         
-                        # 2. LẤY KÍCH THƯỚC ẢNH VÀ TÍNH TOÁN TƯ THẾ (POSE) Ở ĐÂY
-                        ih, iw, _ = frame.shape
                         self.current_pose = self._get_current_pose(face_landmarks.landmark, iw, ih)
                         
-                        # 3. Cắt khuôn mặt để gửi qua API
                         x_min = int(min([lm.x for lm in face_landmarks.landmark]) * iw)
                         x_max = int(max([lm.x for lm in face_landmarks.landmark]) * iw)
                         y_min = int(min([lm.y for lm in face_landmarks.landmark]) * ih)
                         y_max = int(max([lm.y for lm in face_landmarks.landmark]) * ih)
                         
-                        # Tính toán padding an toàn
                         pad_x, pad_y = int((x_max - x_min)*0.2), int((y_max - y_min)*0.2)
                         start_y, end_y = max(0, y_min - pad_y), min(ih, y_max + pad_y)
                         start_x, end_x = max(0, x_min - pad_x), min(iw, x_max + pad_x)
                         
-                        face_crop = self.current_frame[start_y:end_y, start_x:end_x] # Cắt từ ảnh gốc chưa có lưới trắng
+                        face_crop = self.current_frame[start_y:end_y, start_x:end_x] 
                         if face_crop.size > 0:
                             _, buffer = cv2.imencode('.jpg', face_crop, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                             face_crop_base64 = base64.b64encode(buffer).decode('utf-8')
-            # ================= CẬP NHẬT GIAO DIỆN =================
-            _, buffer_display = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
-            b64_str = base64.b64encode(buffer_display).decode('utf-8')
-            self.camera_module.src = f"data:image/jpeg;base64,{b64_str}"
-            
-            try:
-                self.camera_module.update()
-            except Exception:
-                pass
+                            
+            # ================= CẬP NHẬT GIAO DIỆN CÓ KIỂM SOÁT =================
+            import time
+            now = time.time()
+            # --- TỐI ƯU: CHỈ CẬP NHẬT GIAO DIỆN ~15 LẦN/GIÂY ---
+            if now - getattr(self, '_last_ui_update', 0) >= self._ui_min_interval:
+                # Ép chất lượng JPEG hiển thị xuống 30 để Flet nhai nhẹ nhàng hơn
+                _, buffer_display = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 30])
+                b64_str = base64.b64encode(buffer_display).decode('utf-8')
+                self.camera_module.src = f"data:image/jpeg;base64,{b64_str}"
                 
-            # Bắn qua WebSocket CÓ KIỂM SOÁT (Chống giật lag)
+                try:
+                    self.camera_module.update()
+                except Exception:
+                    pass
+                self._last_ui_update = now
+                
+            # --- Bắn qua WebSocket lên Server (Vẫn giữ lá cờ chống Spam của mình) ---
             if face_crop_base64 and self.on_frame and not getattr(self, 'is_sending_frame', False):
-                self.is_sending_frame = True # Kéo thanh chắn xuống
-                
+                self.is_sending_frame = True 
                 async def send_and_release():
                     try:
-                        await self.on_frame(face_crop_base64) # Gửi ảnh
+                        await self.on_frame(face_crop_base64)
                     finally:
-                        # Điểm danh thì 0.5s - 1s quét 1 lần là chuẩn, giúp máy cực mát
                         await asyncio.sleep(0.5) 
-                        self.is_sending_frame = False # Mở thanh chắn lên cho ảnh tiếp theo
-                
-                # Khởi tạo Task gửi an toàn
+                        self.is_sending_frame = False 
                 asyncio.create_task(send_and_release())
                 
-            # Giảm thời gian chờ xuống còn 0.03s (~30fps) cho UI cực mượt
-            await asyncio.sleep(0.03) 
+            # --- TỐI ƯU: XÓA FRAME RA KHỎI BỘ NHỚ RAM NGAY LẬP TỨC ---
+            self.current_frame = None 
+            await asyncio.sleep(0.01)
 
     async def test_sensor(self):
         try:
