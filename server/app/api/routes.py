@@ -4,26 +4,33 @@ import httpx
 import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
+from sqlalchemy import or_, cast, String, text
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 import base64
 import cv2
 import numpy as np
 from app.ai.engine import face_engine 
-
+from pydantic import BaseModel
+from sqlalchemy.dialects.postgresql import insert
 from app.db.session import get_db
-from app.db.models import SinhVien, ThoiKhoaBieu, TKBTiet, DiemDanh, ThongBao, Lop, HocPhan, HocKy, Tiet, TuanHoc, GiangVien, Khoa
+from app.db.models import SinhVien, ThoiKhoaBieu, TKBTiet, DiemDanh, ThongBao, Lop, HocPhan, HocKy, Tiet, TuanHoc, GiangVien, Khoa, FaceEmbedding
 
 router = APIRouter()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+# Định nghĩa Schema cho Request gửi lên
+class FaceEnrollRequest(BaseModel):
+    sv_id: int
+    gv_id: int
+    images: list[str]
+
 def model_to_dict(model_obj):
     return {c.name: getattr(model_obj, c.name) for c in model_obj.__table__.columns}
 
 # ---------------------------------------------------------
-# 1. API ĐĂNG NHẬP (Proxy chuyển tiếp lên Supabase)
+# API ĐĂNG NHẬP (Proxy chuyển tiếp lên Supabase)
 # ---------------------------------------------------------
 @router.post("/auth/v1/token")
 async def login_proxy(request: Request):
@@ -43,7 +50,7 @@ async def login_proxy(request: Request):
         return res.json()
 
 # ---------------------------------------------------------
-# 2. API QUẢN LÝ GIẢNG VIÊN (Lồng tên Khoa)
+# API QUẢN LÝ GIẢNG VIÊN (Lồng tên Khoa)
 # ---------------------------------------------------------
 @router.get("/giangvien")
 async def get_giangvien(id: str = None, auth_id: str = None, db: AsyncSession = Depends(get_db)):
@@ -69,7 +76,7 @@ async def get_giangvien(id: str = None, auth_id: str = None, db: AsyncSession = 
     return res
 
 # ---------------------------------------------------------
-# 3. API TUẦN HỌC
+# API TUẦN HỌC
 # ---------------------------------------------------------
 @router.get("/tuan_hoc")
 async def get_tuan_hoc(db: AsyncSession = Depends(get_db)):
@@ -84,7 +91,7 @@ async def get_tuan_hoc(db: AsyncSession = Depends(get_db)):
     return res
 
 # ---------------------------------------------------------
-# 4. API SINH VIÊN
+# API SINH VIÊN
 # ---------------------------------------------------------
 @router.get("/sinhvien")
 async def get_danh_sach_sinh_vien(class_id: str = None, db: AsyncSession = Depends(get_db)):
@@ -102,7 +109,7 @@ async def get_danh_sach_sinh_vien(class_id: str = None, db: AsyncSession = Depen
     return res
 
 # ---------------------------------------------------------
-# 5. CÁC API CŨ (Thông báo, TKB, Tiết, Điểm danh)
+# CÁC API CŨ LẤY THÔNG BÁO
 # ---------------------------------------------------------
 @router.get("/thongbao")
 async def get_thongbao(limit: int = 3, db: AsyncSession = Depends(get_db)):
@@ -202,7 +209,7 @@ async def get_diemdanh(tkb_tiet_id: str = None, ngay_diem_danh: str = None, db: 
         res.append(d_dict)
     return res
 # ---------------------------------------------------------
-# WEBSOCKET: XỬ LÝ ĐIỂM DANH REAL-TIME BẰNG AI
+# API - WEBSOCKET: XỬ LÝ ĐIỂM DANH REAL-TIME BẰNG AI
 # ---------------------------------------------------------
 @router.websocket("/ws/attendance/{tkb_tiet_id}")
 async def websocket_attendance(websocket: WebSocket, tkb_tiet_id: int, db: AsyncSession = Depends(get_db)):
@@ -281,3 +288,140 @@ async def websocket_attendance(websocket: WebSocket, tkb_tiet_id: int, db: Async
     except Exception as e:
         print(f"[WebSocket Lỗi Kín] {e}")
         
+# =========================================================
+# API DÀNH RIÊNG CHO TRANG ĐÀO TẠO KHUÔN MẶT (FACE TRAINING)
+# =========================================================
+
+from sqlalchemy import or_
+from app.db.models import FaceEmbedding
+
+# 1. Lấy danh sách các lớp mà Giảng viên phụ trách
+@router.get("/training/giangvien/{gv_id}/lophoc")
+async def get_lop_giang_day(gv_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Truy vấn bảng ThoiKhoaBieu để tìm các lớp giảng viên đang dạy.
+    Sử dụng distinct() để không bị trùng lặp lớp nếu dạy nhiều môn.
+    """
+    stmt = select(Lop).join(
+        ThoiKhoaBieu, Lop.id == ThoiKhoaBieu.lop_id
+    ).where(
+        ThoiKhoaBieu.giangvien_id == gv_id,
+        ThoiKhoaBieu.deleted_at.is_(None) # Bỏ qua các TKB đã bị xóa mềm
+    ).distinct()
+    
+    result = await db.execute(stmt)
+    res = []
+    for lop in result.scalars().all():
+        res.append({
+            "id": lop.id,
+            "name": lop.tenlop,
+            "siso": 0 # TODO: Anh có thể count sinh viên sau nếu cần hiển thị sĩ số
+        })
+    return res
+
+# 2. Lấy danh sách Sinh viên trong 1 lớp (Kèm trạng thái đã có khuôn mặt chưa)
+@router.get("/training/lop/{class_id}/sinhvien")
+async def get_sinhvien_training(class_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Lấy toàn bộ sinh viên của lớp, LEFT JOIN với FaceEmbedding 
+    để biết bạn nào đã có dữ liệu nhận diện.
+    """
+    stmt = select(SinhVien, FaceEmbedding.sv_id).outerjoin(
+        FaceEmbedding, SinhVien.id == FaceEmbedding.sv_id
+    ).where(
+        SinhVien.class_id == class_id,
+        SinhVien.deleted_at.is_(None) # Chỉ lấy sinh viên đang học (chưa bị xóa)
+    )
+    
+    result = await db.execute(stmt)
+    res = []
+    for sv, face_id in result:
+        res.append({
+            "id": sv.id,
+            "name": f"{sv.hodem} {sv.ten}".strip(),
+            "has_data": bool(face_id is not None) # True nếu tìm thấy trong bảng FaceEmbedding
+        })
+    return res
+
+# 3. Tìm kiếm Sinh viên theo Mã SV hoặc Tên (Trong phạm vi các lớp GV quản lý)
+@router.get("/training/giangvien/{gv_id}/timkiem")
+async def search_sinhvien(gv_id: int, keyword: str, db: AsyncSession = Depends(get_db)):
+    """
+    Tìm sinh viên theo từ khóa (Mã SV hoặc Tên) nhưng phải nằm trong 
+    danh sách các lớp mà Giảng viên này có dạy.
+    """
+    # Bước 3.1: Lấy danh sách lớp GV dạy trước
+    lop_stmt = select(ThoiKhoaBieu.lop_id).where(
+        ThoiKhoaBieu.giangvien_id == gv_id,
+        ThoiKhoaBieu.deleted_at.is_(None)
+    ).distinct()
+    lop_result = await db.execute(lop_stmt)
+    lop_ids = [row for row in lop_result.scalars().all()]
+    
+    if not lop_ids:
+        return [] # Nếu GV không dạy lớp nào thì trả về rỗng
+        
+    # Bước 3.2: Tìm kiếm sinh viên nằm trong các lớp đó
+    search_keyword = f"%{keyword}%"
+    
+    # SỬA LỖI 500 Ở ĐÂY: Dùng cast() của ORM thay vì text() để chuyển Integer sang String
+    stmt = select(SinhVien, FaceEmbedding.sv_id).outerjoin(
+        FaceEmbedding, SinhVien.id == FaceEmbedding.sv_id
+    ).where(
+        SinhVien.class_id.in_(lop_ids),
+        SinhVien.deleted_at.is_(None),
+        or_(
+            cast(SinhVien.id, String).ilike(search_keyword), # Ép kiểu ID thành chuỗi để tìm kiếm
+            SinhVien.ten.ilike(search_keyword),
+            SinhVien.hodem.ilike(search_keyword)
+        )
+    )
+    
+    result = await db.execute(stmt)
+    res = []
+    for sv, face_id in result:
+        res.append({
+            "id": sv.id,
+            "class_id": sv.class_id,
+            "name": f"{sv.hodem} {sv.ten}".strip(),
+            "has_data": bool(face_id is not None)
+        })
+    return res
+
+#===============================================
+# API ĐÂÒ TẠO DỮ LIỆU
+#===============================================
+@router.post("/training/face/enroll")
+async def enroll_face_data(req: FaceEnrollRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        # 1. Xử lý qua AI Engine lấy Vector trung bình
+        fused_embedding = face_engine.extract_fused_embedding(req.images)
+        
+        # 2. Xây dựng câu lệnh UPSERT (Cập nhật nếu có, Thêm mới nếu chưa) bằng PostgreSQL
+        stmt = insert(FaceEmbedding).values(
+            sv_id=req.sv_id,
+            embedding=fused_embedding,
+            trained_by=req.gv_id
+        )
+        
+        # ON CONFLICT DO UPDATE: Khớp khóa chính sv_id thì ghi đè
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['sv_id'],
+            set_={
+                'embedding': fused_embedding,
+                'trained_by': req.gv_id,
+                'updated_at': text('now()')
+            }
+        )
+        
+        # Thực thi lưu DB
+        await db.execute(stmt)
+        await db.commit()
+        
+        return {"status": "success", "message": "Cập nhật dữ liệu khuôn mặt thành công!"}
+        
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        print(f"[API Enroll Lỗi] {e}")
+        raise HTTPException(status_code=500, detail="Lỗi hệ thống khi xử lý dữ liệu khuôn mặt.")

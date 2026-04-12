@@ -2,6 +2,7 @@
 import cv2
 import numpy as np
 import torch
+import base64
 import os
 from torchvision import transforms
 import torch.nn.functional as F
@@ -91,5 +92,43 @@ class FaceEngine:
         except Exception as e:
             print(f"[Lỗi FaceNet] {e}")
             return np.zeros(512, dtype=np.float32).tolist()
+        
+    def extract_fused_embedding(self, base64_images: list) -> list:
+        """Nhận vào mảng Base64, chống giả mạo, và hợp nhất Vector bằng Average Pooling"""
+        embeddings = []
+        
+        for b64 in base64_images:
+            try:
+                # 1. Giải mã Base64 sang ảnh OpenCV
+                img_data = base64.b64decode(b64.split(",")[1] if "," in b64 else b64)
+                np_arr = np.frombuffer(img_data, np.uint8)
+                img_cv2 = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                img_rgb = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
+                
+                # 2. Kiểm tra giả mạo cho TỪNG ẢNH
+                if not self.detect_spoof(img_rgb):
+                    raise ValueError("Phát hiện giả mạo khuôn mặt trong ảnh lấy mẫu!")
+                    
+                # 3. Trích xuất Vector
+                emb = self.extract_embedding(img_rgb)
+                embeddings.append(emb)
+            except Exception as e:
+                print(f"[AI Lỗi Xử Lý Ảnh] {e}")
+                continue # Nếu lỗi 1 ảnh, bỏ qua ảnh đó chụp các ảnh khác
+                
+        if not embeddings:
+            raise ValueError("Không thể trích xuất được khuôn mặt hợp lệ từ các ảnh được gửi!")
+
+        # 4. TÍNH TOÁN AVERAGE POOLING VÀ L2 NORMALIZE
+        # Chuyển list python sang numpy array: kích thước (N, 512)
+        arr_embeddings = np.array(embeddings, dtype=np.float32)
+        
+        # Lấy trung bình theo trục dọc (axis=0) để ra 1 vector duy nhất 512 chiều
+        mean_vector = np.mean(arr_embeddings, axis=0)
+        
+        # Chuẩn hóa L2-Normalization (Vector đưa về độ dài = 1)
+        final_vector = mean_vector / np.linalg.norm(mean_vector)
+        
+        return final_vector.tolist()
 
 face_engine = FaceEngine()

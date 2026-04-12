@@ -1,10 +1,10 @@
 import flet as ft
-import flet_geolocator as ftg
 import json
 import asyncio
 import datetime
+import time
 import httpx 
-import flet_geolocator as geo
+from flet_geolocator import Geolocator, GeolocatorPermissionStatus
 import core.theme as theme_module
 from components.options.confirm_dialog import show_confirm_dialog 
 
@@ -26,9 +26,11 @@ class BaseDashboard(ft.Container):
         self.user_name_text = ft.Text("Đang tải...", size=13, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
         
         # ___ Khởi tạo quyền truy cập vị trí _____
-        self.geo = ftg.Geolocator(
+        self.geo = Geolocator(
             on_error=lambda e: print(f"[Geolocator Error] {e.data}")
         )
+        self.app_page.services.append(self.geo)
+            
         # ─── KHỐI TIÊU ĐỀ TRANG ───
         self._page_title_raw_text = ft.Text(
             "TỔNG QUAN", size=13, 
@@ -102,49 +104,102 @@ class BaseDashboard(ft.Container):
             await asyncio.sleep(1)
 
     async def _update_location(self):
-        """Lấy vị trí chính xác bằng ftg.Geolocator + Nominatim"""
-        await asyncio.sleep(2)
+        """Lấy vị trí chính xác với cơ chế Cache 15 phút (900s)"""
+        await asyncio.sleep(2) # Chờ UI render xong xuôi
         
-        headers = {"User-Agent": "AuEdu_PC_App (hiepnc.software@gmail.com)"}
+        prefs = ft.SharedPreferences()
+        TTL = 900 # 15 phút = 900 giây
+        
+        # 1. Đọc dữ liệu từ Cache
+        cached_location = await prefs.get("app_location")
+        last_sync = float(await prefs.get("last_sync_app_location") or 0)
+        current_time = time.time()
+        
+        # 2. Kiểm tra hạn sử dụng của Cache
+        if cached_location and (current_time - last_sync < TTL):
+            self.location_text.value = cached_location
+            try: self.location_text.update()
+            except Exception: pass
+            return # Dừng luôn, không gọi GPS hay API nữa
+
+        # 3. Nếu Cache hết hạn, hiển thị trạng thái đang tải
+        self.location_text.value = "Đang định vị..."
+        try: self.location_text.update()
+        except Exception: pass
+
+        headers = {"User-Agent": "AuEdu_PC_App (chanhhiep.vn@gmail.com)"}
         NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=12"
 
         try:
-            # 1. Kiểm tra dịch vụ vị trí hệ thống
+            # Kiểm tra dịch vụ vị trí hệ thống
             if not await self.geo.is_location_service_enabled():
-                self.location_text.value = "GPS đang tắt"
+                self.location_text.value = cached_location if cached_location else "GPS đang tắt"
                 self.location_text.update()
                 return
 
-            # 2. Kiểm tra và xin quyền
+            # Kiểm tra và xin quyền (Dùng Enum đã import trực tiếp)
             p = await self.geo.get_permission_status()
-            if p != ftg.GeolocatorPermissionStatus.ALWAYS and p != ftg.GeolocatorPermissionStatus.WHILE_IN_USE:
+            if p != GeolocatorPermissionStatus.ALWAYS and p != GeolocatorPermissionStatus.WHILE_IN_USE:
                 p = await self.geo.request_permission()
             
-            if p not in [ftg.GeolocatorPermissionStatus.ALWAYS, ftg.GeolocatorPermissionStatus.WHILE_IN_USE]:
-                self.location_text.value = "Cần cấp quyền"
+            if p not in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
+                self.location_text.value = cached_location if cached_location else "Cần cấp quyền GPS"
                 self.location_text.update()
                 return
 
-            # 3. Lấy tọa độ hiện tại
+            # Lấy tọa độ hiện tại
             pos = await self.geo.get_current_position()
-            if not pos: return
+            if not pos:
+                self.location_text.value = cached_location if cached_location else "Lỗi GPS"
+                self.location_text.update()
+                return
 
-            # 4. Reverse Geocode để lấy tên địa danh
+            # Reverse Geocode để lấy tên địa danh
             async with httpx.AsyncClient(timeout=10.0) as client:
                 res = await client.get(NOMINATIM_URL.format(lat=pos.latitude, lon=pos.longitude), headers=headers)
                 if res.status_code == 200:
                     addr = res.json().get("address", {})
-                    # Ưu tiên Huyện/Xã -> Tỉnh
-                    district = addr.get("city_district") or addr.get("district") or addr.get("suburb") or addr.get("town") or addr.get("village")
-                    state = addr.get("city") or addr.get("state")
                     
-                    location_str = f"{district}, {state}" if district and state else (district or state or "Việt Nam")
+                    # Cấp 1: Xã / Phường / Thôn / Khóm / Đường
+                    ward = addr.get("village") or addr.get("suburb") or addr.get("quarter") or addr.get("hamlet") or addr.get("road")
+                    
+                    # Cấp 2: Quận / Huyện / Thị xã
+                    district = addr.get("county") or addr.get("district") or addr.get("town") or addr.get("city_district")
+                    
+                    # Cấp 3: Tỉnh / Thành phố
+                    province = addr.get("city") or addr.get("state") or addr.get("province")
+                    
+                    # Gom lại thành danh sách, loại bỏ các giá trị None, rỗng hoặc bị trùng tên
+                    parts = []
+                    if ward and ward not in parts: 
+                        parts.append(ward)
+                    if district and district not in parts: 
+                        parts.append(district)
+                    if province and province not in parts: 
+                        parts.append(province)
+                    
+                    # Nối 3 cấp lại với nhau bằng dấu phẩy
+                    location_str = ", ".join(parts) if parts else "Việt Nam"
+                    
+                    # Cập nhật UI
                     self.location_text.value = location_str
+                    self.location_text.update()
+                    
+                    # 4. LƯU CACHE MỚI
+                    await prefs.set("app_location", location_str)
+                    await prefs.set("last_sync_app_location", str(current_time))
+                    
+                    # 5. DỌN DẸP SERVICE ĐỂ TẮT ICON ĐỊNH VỊ
+                    if self.geo in self.app_page.services:
+                        self.app_page.services.remove(self.geo)
+                        self.app_page.update()
+                else:
+                    self.location_text.value = cached_location if cached_location else "Vị trí không xác định"
                     self.location_text.update()
 
         except Exception as e:
             print(f"Lỗi định vị: {e}")
-            self.location_text.value = "Lỗi định vị"
+            self.location_text.value = cached_location if cached_location else "Lỗi kết nối"
             self.location_text.update()
     
     async def init_app_settings(self):

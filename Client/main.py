@@ -112,18 +112,25 @@ async def main(page: ft.Page):
 
                 if current_route == "/user/home":
                     dashboard.set_content("TRANG CHỦ", UserHomePage(page), current_route)
+                    
                 elif current_route == "/user/attendance":
                     dashboard.set_content("ĐIỂM DANH SINH VIÊN", AttendancePage(page), current_route)
+                    
                 elif current_route == "/user/settings":
                     dashboard.set_content("CÀI ĐẶT PHẦN MỀM", SettingsPage(page), current_route)
+                    
                 elif current_route == "/user/schedule":
                     dashboard.set_content("LỊCH HỌC / LỊCH THI", SchedulePage(page), current_route)
+                    
                 elif current_route == "/user/stats":
                     dashboard.set_content("THỐNG KÊ ĐIỂM DANH", StatsPage(page), current_route)
+                    
                 elif current_route == "/user/about":
                     dashboard.set_content("THÔNG TIN PHẦN MỀM", AboutPage(page), current_route)
+                    
                 elif current_route == "/user/profile":
                     dashboard.set_content("HỒ SƠ TÀI KHOẢN", ProfilePage(page), current_route)
+                    
                 elif current_route == "/user/attendance/training":
                     dashboard.set_content("ĐÀO TẠO DỮ LIỆU", FaceTrainingPage(page), current_route)
 

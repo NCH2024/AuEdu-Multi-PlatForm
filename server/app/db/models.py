@@ -39,9 +39,10 @@ class GiangVien(Base):
     diachi = Column(Text)
     sodienthoai = Column(Text)
     khoa_id = Column(String, ForeignKey('khoa.id'))
-    auth_id = Column(String)  # Lưu UUID Auth của Supabase dưới dạng String
+    auth_id = Column(String)  
     vai_tro = Column(Text)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
 
 class Lop(Base):
     __tablename__ = 'lop'
@@ -64,8 +65,15 @@ class SinhVien(Base):
     class_id = Column(String, ForeignKey('lop.id'))
     ghichu = Column(Text)
     anhdaidien = Column(Text)
-    sinhtrachoc = Column(Text) # Chuyển từ USER-DEFINED sang Text
+    sinhtrachoc = Column(Text) 
+    
+    # --- AUDIT TRAIL & SOFT DELETE ---
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class HocPhan(Base):
     __tablename__ = 'hocphan'
@@ -83,6 +91,14 @@ class ThoiKhoaBieu(Base):
     hocky_id = Column(Integer, ForeignKey('hocky.id'))
     lop_id = Column(String, ForeignKey('lop.id'))
     giangvien_id = Column(Integer, ForeignKey('giangvien.id'))
+    
+    # --- AUDIT TRAIL & SOFT DELETE ---
+    created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class TKBTiet(Base):
     __tablename__ = 'tkb_tiet'
@@ -101,13 +117,24 @@ class DiemDanh(Base):
     vitri = Column(Text)
     ngay_diem_danh = Column(Date)
     trang_thai = Column(Text)
+    
+    # --- AUDIT TRAIL & SOFT DELETE ---
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class FaceEmbedding(Base):
     __tablename__ = 'face_embeddings'
     sv_id = Column(Integer, ForeignKey('sinhvien.id'), primary_key=True)
     embedding = Column(Vector(512), nullable=False) 
+    
+    # --- AUDIT TRAIL --- (Bảng này thường không soft delete, đào tạo lại thì update ghi đè lên)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    trained_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True) # Lưu vết ai đã chụp ảnh đào tạo
 
 class ThongBao(Base):
     __tablename__ = 'thongbao'
@@ -117,7 +144,14 @@ class ThongBao(Base):
     giangvien_id = Column(Integer, ForeignKey('giangvien.id'))
     hinh_anh = Column(Text)
     link_web = Column(Text)
+    
+    # --- AUDIT TRAIL & SOFT DELETE ---
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class TuanHoc(Base):
     __tablename__ = 'tuan_hoc'
