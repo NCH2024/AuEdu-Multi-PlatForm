@@ -83,6 +83,7 @@ class BaseDashboard(ft.Container):
         
         if self._is_desktop_platform():
             self.app_page.run_task(self._update_location)
+            
 
     def _is_desktop_platform(self):
         return self.app_page.platform in [
@@ -93,14 +94,20 @@ class BaseDashboard(ft.Container):
 
     async def _update_clock(self):
         while True:
-            # Chỉ cập nhật nếu cụm time_location đang hiển thị
-            if getattr(self, "page", None) and self.time_location_container.visible:
-                now = datetime.datetime.now()
-                self.clock_text.value = now.strftime("%H:%M:%S")
-                try:
+            try:
+                # Kiểm tra an toàn xem control đã bị unmount chưa
+                # Nếu self.page_uid báo lỗi nghĩa là nó không còn trên page
+                if not getattr(self, "page", None):
+                    break # Thoát hẳn vòng lặp chạy ngầm nếu Dashboard đã bị gỡ
+                    
+                if self.time_location_container.visible:
+                    now = datetime.datetime.now()
+                    self.clock_text.value = now.strftime("%H:%M:%S")
                     self.clock_text.update()
-                except Exception:
-                    pass
+            except Exception as e:
+                # Nếu bắt gặp lỗi Control must be added..., thì break luôn
+                break 
+                
             await asyncio.sleep(1)
 
     async def _update_location(self):

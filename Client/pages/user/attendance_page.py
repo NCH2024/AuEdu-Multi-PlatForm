@@ -25,6 +25,24 @@ class AttendancePage(ft.Container):
         self.current_limit = 50
         self.selected_tkb = None
         self.selected_date = None
+        
+        # Khai báo nút bấm PC
+        self.btn_start_session = ft.Button(
+            content=ft.Text("BẮT ĐẦU ĐIỂM DANH", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13), 
+            bgcolor=current_theme.secondary, 
+            on_click=self.handle_start_session, 
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=15),
+            disabled=True # KHÓA MẶC ĐỊNH
+        )
+
+        # Khai báo nút bấm Mobile
+        self.btn_start_session_mobile = ft.Button(
+            content=ft.Text("BẮT ĐẦU ĐIỂM DANH", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13), 
+            bgcolor=current_theme.secondary, 
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=15), 
+            on_click=self.handle_start_session_mobile,
+            disabled=True # KHÓA MẶC ĐỊNH
+        )
 
         self.dd_row_limit = CustomDropdown(
             label="Hiển thị",
@@ -58,7 +76,7 @@ class AttendancePage(ft.Container):
                     controls=[
                         ft.Text("CHẾ ĐỘ ĐIỂM DANH", weight=ft.FontWeight.BOLD, size=14, color=current_theme.secondary, text_align=ft.TextAlign.CENTER),
                         self.mobile_rg_mode,
-                        ft.Button(content=ft.Text("BẮT ĐẦU ĐIỂM DANH", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13), bgcolor=current_theme.secondary, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=15), on_click=self.handle_start_session_mobile)
+                        self.btn_start_session_mobile,
                     ]
                 )
             )
@@ -145,7 +163,7 @@ class AttendancePage(ft.Container):
 
         diem_danh_content = ft.Column([
             ft.Container(content=self.rg_mode, padding=5),
-            ft.Button(content=ft.Text("BẮT ĐẦU ĐIỂM DANH", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13), bgcolor=current_theme.secondary, on_click=self.handle_start_session, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=15))
+            self.btn_start_session,
         ], horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         diem_danh_tile = ft.ExpansionTile(title=ft.Text("Thao tác điểm danh", weight=ft.FontWeight.BOLD, size=13), controls=[ft.Container(content=diem_danh_content, padding=15)], expanded=True, collapsed_text_color=current_theme.secondary, text_color=current_theme.secondary, icon_color=current_theme.secondary, collapsed_icon_color=current_theme.secondary, visible=not is_mobile)
 
@@ -222,12 +240,30 @@ class AttendancePage(ft.Container):
             session_data = safe_json_load(session_str)
             self.gv_id = session_data.get("id", "N/A")
 
-        # ✅ Chạy song song, không tuần tự
+        #Chạy song song, không tuần tự
         await asyncio.gather(
             self.load_all_schedules(),
             self.camera_view.load_available_cameras(),
             return_exceptions=True
         )
+
+        # --- TỰ ĐỘNG TẢI LẠI TRẠNG THÁI NẾU ĐÃ CHỌN TRƯỚC ĐÓ ---
+        saved_tkb = self.app_page.session.store.get("saved_selected_tkb")
+        saved_date = self.app_page.session.store.get("saved_selected_date")
+        
+        if saved_tkb and saved_date:
+            self.selected_tkb = saved_tkb
+            self.selected_date = saved_date
+            self.info_lop_text.value = saved_tkb.get("lop", {}).get("tenlop", "N/A")
+            self.info_mon_text.value = saved_tkb.get("hocphan", {}).get("tenhocphan", "N/A")
+            self.info_ngay_text.value = saved_date
+            
+            # Khóa nút lại trong lúc đợi API tải để chống Spam
+            self.btn_start_session.disabled = True
+            self.btn_start_session_mobile.disabled = True
+            
+            # Tự động fetch lại sinh viên và cập nhật giao diện
+            await self.execute_load_students()
 
         if getattr(self, "page", None):
             self.app_page.update()
@@ -295,6 +331,11 @@ class AttendancePage(ft.Container):
                     self.info_lop_text.value = current_tkb.get("lop", {}).get("tenlop", "N/A")
                     self.info_mon_text.value = current_tkb.get("hocphan", {}).get("tenhocphan", "N/A")
                     self.info_ngay_text.value = self.selected_date
+                    
+                    # LƯU VÀO SESSION ĐỂ TỰ ĐỘNG LOAD LẠI KHI QUAY VỀ
+                    self.app_page.session.store.set("saved_selected_tkb", current_tkb)
+                    self.app_page.session.store.set("saved_selected_date", dd.value)
+                    
                     self.close_schedule_dialog()
                     self.app_page.run_task(self.execute_load_students)
                 return on_click
@@ -387,7 +428,7 @@ class AttendancePage(ft.Container):
             tkb_id = self.selected_tkb["id"]
             lop_id = self.selected_tkb["lop_id"]
 
-            # ✅ Singleton client
+            # Singleton client
             client = await get_supabase_client()
 
             res_tiet = await client.get("/tkb_tiet", params={"select": "id", "tkb_id": f"eq.{tkb_id}", "thu": f"eq.{thu}"})
@@ -395,7 +436,7 @@ class AttendancePage(ft.Container):
             tkb_tiet_id = res_tiet.json()[0]["id"] if res_tiet.json() else None
             if not tkb_tiet_id: raise Exception("Không tìm thấy tiết học cho ngày này!")
 
-            # ✅ Fetch sinh viên và điểm danh song song
+            # Fetch sinh viên và điểm danh song song
             res_sv, res_dd = await asyncio.gather(
                 client.get("/sinhvien", params={"select": "*", "class_id": f"eq.{lop_id}", "order": "id.asc"}),
                 client.get("/diemdanh", params={"select": "sv_id,trang_thai", "tkb_tiet_id": f"eq.{tkb_tiet_id}", "ngay_diem_danh": f"eq.{date_obj.isoformat()}"}),
@@ -416,6 +457,19 @@ class AttendancePage(ft.Container):
 
             self.current_limit = int(self.dd_row_limit.value)
             self.render_table()
+            
+            # MỞ KHÓA NÚT BẤM KHI ĐÃ CÓ DANH SÁCH
+            self.btn_start_session.disabled = False
+            self.btn_start_session_mobile.disabled = False
+            
+            # Truyền toàn bộ dữ liệu thực sang trang Camera
+            self.app_page.session.store.set("current_tkb_tiet_id", str(tkb_tiet_id))
+            
+            self.app_page.session.store.set("current_attendance_date", date_obj.isoformat()) 
+            
+            self.app_page.session.store.set("current_student_list", self.all_students_data)
+            
+            self.app_page.update()
 
         except Exception as ex:
             if getattr(self, "page", None): self._show_error_snackbar(f"Lỗi: {ex}")

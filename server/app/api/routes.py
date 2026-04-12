@@ -8,6 +8,9 @@ from sqlalchemy import or_, cast, String, text
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 import base64
 import cv2
+from fastapi import WebSocket, WebSocketDisconnect
+import json
+import asyncio
 import numpy as np
 from app.ai.engine import face_engine 
 from pydantic import BaseModel
@@ -157,11 +160,16 @@ async def get_thoi_khoa_bieu(giangvien_id: str = None, db: AsyncSession = Depend
 async def get_tkb_tiet(tkb_id: str = None, thu: str = None, db: AsyncSession = Depends(get_db)):
     stmt = select(TKBTiet, Tiet).outerjoin(Tiet, TKBTiet.tiet_id == Tiet.id)
     
-    if tkb_id and tkb_id.startswith("in."):
-        ids_str = tkb_id.replace("in.(", "").replace(")", "")
-        ids = [int(i) for i in ids_str.split(",") if i.strip()]
-        stmt = stmt.where(TKBTiet.tkb_id.in_(ids))
-        
+    if tkb_id:
+        if tkb_id.startswith("in."):
+            ids_str = tkb_id.replace("in.(", "").replace(")", "")
+            ids = [int(i) for i in ids_str.split(",") if i.strip()]
+            stmt = stmt.where(TKBTiet.tkb_id.in_(ids))
+        # --- BỔ SUNG NHÁNH NÀY ---
+        elif tkb_id.startswith("eq."):
+            id_val = int(tkb_id.replace("eq.", ""))
+            stmt = stmt.where(TKBTiet.tkb_id == id_val)
+            
     if thu and thu.startswith("eq."):
         thu_val = int(thu.replace("eq.", ""))
         stmt = stmt.where(TKBTiet.thu == thu_val)
@@ -171,16 +179,12 @@ async def get_tkb_tiet(tkb_id: str = None, thu: str = None, db: AsyncSession = D
     result = await db.execute(stmt)
     res = []
     for tkbtiet, tiet in result:
-        # Lấy TOÀN BỘ các trường gốc của bảng tkb_tiet (Bao gồm id, tkb_id, tiet_id, thu...)
         d = model_to_dict(tkbtiet)
         d["created_at"] = str(d["created_at"]) if d.get("created_at") else None
-        
-        # Nhồi thêm chi tiết thời gian của tiết học
         d["tiet"] = {
             "thoigianbd": str(tiet.thoigianbd) if tiet.thoigianbd else None, 
             "thoigiankt": str(tiet.thoigiankt) if tiet.thoigiankt else None
         } if tiet else None
-        
         res.append(d)
     return res
 
@@ -190,11 +194,17 @@ async def get_tkb_tiet(tkb_id: str = None, thu: str = None, db: AsyncSession = D
 @router.get("/diemdanh")
 async def get_diemdanh(tkb_tiet_id: str = None, ngay_diem_danh: str = None, db: AsyncSession = Depends(get_db)):
     stmt = select(DiemDanh)
-    if tkb_tiet_id and tkb_tiet_id.startswith("in."):
-        ids_str = tkb_tiet_id.replace("in.(", "").replace(")", "")
-        ids = [int(i) for i in ids_str.split(",") if i.strip()]
-        stmt = stmt.where(DiemDanh.tkb_tiet_id.in_(ids))
-        
+    
+    if tkb_tiet_id:
+        if tkb_tiet_id.startswith("in."):
+            ids_str = tkb_tiet_id.replace("in.(", "").replace(")", "")
+            ids = [int(i) for i in ids_str.split(",") if i.strip()]
+            stmt = stmt.where(DiemDanh.tkb_tiet_id.in_(ids))
+        # --- BỔ SUNG NHÁNH NÀY ---
+        elif tkb_tiet_id.startswith("eq."):
+            id_val = int(tkb_tiet_id.replace("eq.", ""))
+            stmt = stmt.where(DiemDanh.tkb_tiet_id == id_val)
+            
     if ngay_diem_danh and ngay_diem_danh.startswith("eq."):
         date_str = ngay_diem_danh.replace("eq.", "")
         target_date = datetime.date.fromisoformat(date_str)
@@ -208,85 +218,99 @@ async def get_diemdanh(tkb_tiet_id: str = None, ngay_diem_danh: str = None, db: 
         d_dict["created_at"] = str(d.created_at) if d.created_at else None
         res.append(d_dict)
     return res
-# ---------------------------------------------------------
-# API - WEBSOCKET: XỬ LÝ ĐIỂM DANH REAL-TIME BẰNG AI
-# ---------------------------------------------------------
+
+#===========================================================
+# API NHẬN DẠNG ĐIỂM DANH
+#==========================================================
 @router.websocket("/ws/attendance/{tkb_tiet_id}")
-async def websocket_attendance(websocket: WebSocket, tkb_tiet_id: int, db: AsyncSession = Depends(get_db)):
+async def attendance_websocket(websocket: WebSocket, tkb_tiet_id: int, db: AsyncSession = Depends(get_db)):
     await websocket.accept()
-    print(f"[WebSocket] Mở kết nối điểm danh cho Tiết ID: {tkb_tiet_id}")
+    print(f"[Server] WebSocket kết nối cho Tiết: {tkb_tiet_id}")
+    
+    session_scanned_ids = set()
     
     try:
         while True:
-            # 1. Nhận dữ liệu JSON từ App Client gửi lên (chứa base64 của ảnh)
-            data = await websocket.receive_json()
-            base64_img = data.get("image")
+            data = await websocket.receive_text()
+            payload = json.loads(data)
             
-            if not base64_img:
-                continue
-
-            # 2. Giải mã Base64 thành mảng Numpy (cv2 image)
-            img_data = base64.b64decode(base64_img)
-            np_arr = np.frombuffer(img_data, np.uint8)
-            img_cv2 = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            image_b64 = payload.get("image")
+            mode = payload.get("mode", "1")
             
-            # Chuyển BGR (OpenCV) sang RGB (chuẩn của PyTorch/AI)
-            img_rgb = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
-
-            # 3. AI BƯỚC 1: Chống giả mạo (Anti-Spoofing)
-            is_real = face_engine.detect_spoof(img_rgb)
-            if not is_real:
-                await websocket.send_json({
-                    "status": "spoof", 
-                    "message": "Phát hiện giả mạo khuôn mặt!"
-                })
-                continue
-
-            # 4. AI BƯỚC 2: Trích xuất Vector
-            embedding = face_engine.extract_embedding(img_rgb)
-            
-            # TODO: so sánh khuôn mặt
-            # Ngưỡng khoảng cách Cosine (càng nhỏ càng giống nhau, ví dụ 0.4)
-            THRESHOLD = 0.4
-            # Truy vấn tìm người có khuôn mặt giống nhất
-            from sqlalchemy import select
-            
-            stmt = select(SinhVien).order_by(
-                SinhVien.embedding.cosine_distance(embedding)
-            ).limit(1)
-            
-            result = await db.execute(stmt)
-            best_match = result.scalar_one_or_none()
-            
-            # Tính toán khoảng cách thực tế (nếu cần kiểm tra nghiêm ngặt)
-            # Nếu distance < THRESHOLD thì hợp lệ
-            if best_match:
-                # TODO: Thêm logic INSERT vào bảng DiemDanh ở đây
-                
-                await websocket.send_json({
-                    "status": "success",
-                    "message": "Điểm danh thành công",
-                    "student_id": best_match.id,
-                    "name": best_match.hoten # Điều chỉnh tên cột theo DB của em
-                })
+            # BẮT LẤY NGÀY MÀ CLIENT GỬI LÊN ĐỂ LƯU CHO CHUẨN
+            target_date_str = payload.get("date")
+            if target_date_str:
+                target_date = datetime.date.fromisoformat(target_date_str)
             else:
-                await websocket.send_json({
-                    "status": "fail",
-                    "message": "Không nhận diện được khuôn mặt trong hệ thống."
-                })
+                target_date = datetime.date.today()
             
-            await websocket.send_json({
-                "status": "success",
-                "message": "Hợp lệ",
-                "student_id": "SV_TEST_001",
-                "name": "Bé Mèo Nhỏ (Giả lập)",
-                "embedding_length": len(embedding)
-            })
+            if not image_b64: continue
+
+            embeddings = await asyncio.to_thread(face_engine.process_attendance_frame, image_b64, mode)
+            recognized_students = []
             
+            for emb in embeddings:
+                stmt = select(FaceEmbedding).order_by(FaceEmbedding.embedding.cosine_distance(emb)).limit(1)
+                result = await db.execute(stmt)
+                match = result.scalar_one_or_none()
+
+                if match:
+                    sv_id = match.sv_id
+                    
+                    if sv_id in session_scanned_ids:
+                        continue
+                        
+                    sv_stmt = select(SinhVien).where(SinhVien.id == sv_id)
+                    sv_res = await db.execute(sv_stmt)
+                    sv = sv_res.scalar_one_or_none()
+                    
+                    if sv:
+                        # KIỂM TRA TRÙNG LẶP THEO NGÀY ĐƯỢC CHỌN
+                        check_stmt = select(DiemDanh).where(
+                            DiemDanh.sv_id == sv_id,
+                            DiemDanh.tkb_tiet_id == tkb_tiet_id,
+                            DiemDanh.ngay_diem_danh == target_date 
+                        )
+                        check_res = await db.execute(check_stmt)
+                        existing_record = check_res.scalar_one_or_none()
+                        
+                        ho_ten = f"{sv.hodem} {sv.ten}".strip() if hasattr(sv, 'hodem') else sv.hoten
+                        
+                        if not existing_record:
+                            try:
+                                # LƯU VÀO DB BẰNG NGÀY ĐƯỢC CHỌN
+                                stmt_insert = insert(DiemDanh).values(
+                                    sv_id=sv.id,
+                                    tkb_tiet_id=tkb_tiet_id,
+                                    ngay_diem_danh=target_date, 
+                                    trang_thai="Có mặt"
+                                )
+                                await db.execute(stmt_insert)
+                                await db.commit()
+                            except Exception as db_err:
+                                print(f"[Lỗi DB] {db_err}")
+                                await db.rollback()
+                                continue 
+                                
+                        session_scanned_ids.add(sv_id)
+                        
+                        recognized_students.append({
+                            "id": str(sv.id),
+                            "name": ho_ten,
+                            "time": datetime.datetime.now().strftime("%H:%M:%S")
+                        })
+
+            if recognized_students:
+                await websocket.send_text(json.dumps({
+                    "status": "success",
+                    "students": recognized_students
+                }))
+
     except WebSocketDisconnect:
-        print(f"[WebSocket] Đã đóng kết nối cho Tiết ID: {tkb_tiet_id}")
+        print(f"[Server] WebSocket ngắt kết nối: {tkb_tiet_id}")
     except Exception as e:
-        print(f"[WebSocket Lỗi Kín] {e}")
+        print(f"[Server WebSocket Error] {e}")
+
         
 # =========================================================
 # API DÀNH RIÊNG CHO TRANG ĐÀO TẠO KHUÔN MẶT (FACE TRAINING)
@@ -425,3 +449,4 @@ async def enroll_face_data(req: FaceEnrollRequest, db: AsyncSession = Depends(ge
     except Exception as e:
         print(f"[API Enroll Lỗi] {e}")
         raise HTTPException(status_code=500, detail="Lỗi hệ thống khi xử lý dữ liệu khuôn mặt.")
+

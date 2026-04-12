@@ -130,5 +130,60 @@ class FaceEngine:
         final_vector = mean_vector / np.linalg.norm(mean_vector)
         
         return final_vector.tolist()
+    
+    def process_attendance_frame(self, b64_image: str, mode: str = "1"):
+        """
+        Xử lý frame điểm danh:
+        - mode="1": Chỉ lấy người gần nhất (diện tích mặt lớn nhất)
+        - mode="all": Lấy tất cả khuôn mặt phát hiện được
+        """
+        try:
+            # 1. Giải mã ảnh
+            img_data = base64.b64decode(b64_image.split(",")[1] if "," in b64_image else b64_image)
+            np_arr = np.frombuffer(img_data, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            if frame is None: return []
+            
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            ih, iw, _ = frame.shape
+
+            # 2. SỬ DỤNG 'with' ĐỂ TỰ ĐỘNG DỌN DẸP BỘ NHỚ (CHỐNG TRÀN RAM XNNPACK)
+            import mediapipe as mp
+            with mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5) as face_detection:
+                results = face_detection.process(rgb_frame)
+
+                face_list = []
+                if results.detections:
+                    for detection in results.detections:
+                        bbox = detection.location_data.relative_bounding_box
+                        x, y, w, h = int(bbox.xmin * iw), int(bbox.ymin * ih), int(bbox.width * iw), int(bbox.height * ih)
+                        
+                        # Đảm bảo tọa độ hợp lệ
+                        x, y = max(0, x), max(0, y)
+                        w, h = min(iw - x, w), min(ih - y, h)
+                        area = w * h
+                        
+                        # Cắt khuôn mặt (có padding) để lấy embedding
+                        pad = int(w * 0.15)
+                        face_crop = frame[max(0, y-pad):min(ih, y+h+pad), max(0, x-pad):min(iw, x+w+pad)]
+                        
+                        if face_crop.size > 0:
+                            embedding = self.extract_embedding(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
+                            face_list.append({"embedding": embedding, "area": area})
+
+            # 3. Áp dụng Logic Mode
+            if not face_list: return []
+            
+            if mode == "1":
+                # Sắp xếp theo diện tích giảm dần, lấy mặt to nhất (gần nhất)
+                face_list.sort(key=lambda x: x["area"], reverse=True)
+                return [face_list[0]["embedding"]]
+            else:
+                # Trả về toàn bộ danh sách vector
+                return [f["embedding"] for f in face_list]
+
+        except Exception as e:
+            print(f"[AI Engine Attendance Error] {e}")
+            return []
 
 face_engine = FaceEngine()

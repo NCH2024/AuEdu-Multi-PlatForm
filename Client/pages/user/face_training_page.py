@@ -35,7 +35,7 @@ class FaceTrainingPage(ft.Container):
 
         # --- STUDIO COMPONENTS ---
         self.dd_camera = CustomDropdown(label="Nguồn Camera", options=[])
-        self.camera_view = CameraView(page=self.app_page, dd_camera=self.dd_camera, is_visible=True)
+        self.camera_view = CameraView(page=self.app_page, dd_camera=self.dd_camera, is_visible=True, view_mode="training")
         
         self.camera_container = ft.Container(content=self.camera_view, visible=False, expand=True, left=0, right=0, top=0, bottom=0)
         self.black_screen = ft.Container(bgcolor=ft.Colors.BLACK, expand=True, left=0, right=0, top=0, bottom=0)
