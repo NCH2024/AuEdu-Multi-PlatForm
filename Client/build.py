@@ -64,6 +64,7 @@ def build(version_name, version_code):
         "--build-number", version_code,
 
         "--permissions", "camera",
+        "--permissions", "location",
 
         "--splash-color", "#ffffff",
         "--clear-cache"

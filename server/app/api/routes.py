@@ -4,7 +4,7 @@ import httpx
 import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import or_, cast, String, text
+from sqlalchemy import or_, cast, String, text, func, case
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 import base64
 import cv2
@@ -17,6 +17,12 @@ from pydantic import BaseModel
 from sqlalchemy.dialects.postgresql import insert
 from app.db.session import get_db
 from app.db.models import SinhVien, ThoiKhoaBieu, TKBTiet, DiemDanh, ThongBao, Lop, HocPhan, HocKy, Tiet, TuanHoc, GiangVien, Khoa, FaceEmbedding
+import io
+import datetime
+from openpyxl import load_workbook
+from openpyxl.styles import Border, Side, Alignment, Font
+from fastapi.responses import StreamingResponse
+
 
 router = APIRouter()
 
@@ -28,6 +34,9 @@ class FaceEnrollRequest(BaseModel):
     sv_id: int
     gv_id: int
     images: list[str]
+
+# Định nghĩa viền bảng chung
+thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
 
 def model_to_dict(model_obj):
     return {c.name: getattr(model_obj, c.name) for c in model_obj.__table__.columns}
@@ -449,4 +458,147 @@ async def enroll_face_data(req: FaceEnrollRequest, db: AsyncSession = Depends(ge
     except Exception as e:
         print(f"[API Enroll Lỗi] {e}")
         raise HTTPException(status_code=500, detail="Lỗi hệ thống khi xử lý dữ liệu khuôn mặt.")
+    
+# ----------------------------------------------------------------------
+# API: BÁO CÁO CHI TIẾT ĐIỂM DANH THEO LỚP
+# ----------------------------------------------------------------------
+@router.get("/export/report/detailed/{tkb_id}")
+async def export_detailed_attendance(tkb_id: int, db: AsyncSession = Depends(get_db)):
+    # Lấy thông tin TKB và Header
+    stmt = select(ThoiKhoaBieu, Lop, HocPhan, HocKy, GiangVien)\
+        .join(Lop, ThoiKhoaBieu.lop_id == Lop.id)\
+        .join(HocPhan, ThoiKhoaBieu.hocphan_id == HocPhan.id)\
+        .join(HocKy, ThoiKhoaBieu.hocky_id == HocKy.id)\
+        .join(GiangVien, ThoiKhoaBieu.giangvien_id == GiangVien.id)\
+        .where(ThoiKhoaBieu.id == tkb_id)
+    
+    res = (await db.execute(stmt)).first()
+    if not res: raise HTTPException(status_code=404, detail="Không tìm thấy lịch học")
+    tkb, lop, hp, hk, gv = res
 
+    wb = load_workbook("app/templates/temp_DetailedAttendance.xlsx")
+    ws = wb.active
+    
+    # Điền Header (Theo mẫu của Bé mèo nhỏ: Cột C, dòng 5-9)
+    ws['C5'], ws['C6'], ws['C7'], ws['C8'], ws['C9'] = lop.tenlop, hp.tenhocphan, hk.tenhocky, hk.namhoc, f"{gv.hodem} {gv.ten}"
+
+    # Lấy danh sách ngày đã điểm danh của tkb_id này
+    date_stmt = select(DiemDanh.ngay_diem_danh).where(DiemDanh.tkb_tiet_id.in_(
+        select(TKBTiet.id).where(TKBTiet.tkb_id == tkb_id)
+    )).distinct().order_by(DiemDanh.ngay_diem_danh.asc())
+    dates = (await db.execute(date_stmt)).scalars().all()
+
+    # Đổ tiêu đề ngày vào dòng 12 (Từ cột E)
+    for i, d in enumerate(dates):
+        cell = ws.cell(row=12, column=5+i, value=d.strftime("%d/%m"))
+        cell.font, cell.border, cell.alignment = Font(bold=True), thin_border, Alignment(horizontal="center")
+
+    # Đổ danh sách sinh viên (Dòng 13 trở đi)
+    sv_stmt = select(SinhVien).where(SinhVien.class_id == lop.id).order_by(SinhVien.id.asc())
+    students = (await db.execute(sv_stmt)).scalars().all()
+
+    for r_idx, sv in enumerate(students):
+        row = 13 + r_idx
+        ws.cell(row=row, column=1, value=r_idx + 1).border = thin_border
+        ws.cell(row=row, column=2, value=sv.id).border = thin_border
+        ws.cell(row=row, column=3, value=sv.hodem).border = thin_border
+        ws.cell(row=row, column=4, value=sv.ten).border = thin_border
+        
+        # Lấy điểm danh của SV này trong tkb_id hiện tại
+        dd_res = await db.execute(select(DiemDanh).where(DiemDanh.sv_id == sv.id, DiemDanh.tkb_tiet_id.in_(
+            select(TKBTiet.id).where(TKBTiet.tkb_id == tkb_id)
+        )))
+        sv_dd_map = {d.ngay_diem_danh: d.trang_thai for d in dd_res.scalars().all()}
+        
+        for c_idx, d in enumerate(dates):
+            status = sv_dd_map.get(d, "")
+            cell = ws.cell(row=row, column=5+c_idx, value="X" if status=="Có mặt" else "V" if status=="Vắng" else "")
+            cell.border, cell.alignment = thin_border, Alignment(horizontal="center")
+
+    return send_excel_response(wb, f"ChiTietDiemDanh_{lop.id}")
+
+# ----------------------------------------------------------------------
+# API: BÁO CÁO TỔNG QUAN PHỤ TRÁCH LỚP
+# ----------------------------------------------------------------------
+@router.get("/export/report/overview/{gv_id}")
+async def export_overview_report(gv_id: int, db: AsyncSession = Depends(get_db)):
+    gv_res = await db.execute(select(GiangVien).where(GiangVien.id == gv_id))
+    gv = gv_res.scalar_one_or_none()
+
+    wb = load_workbook("app/templates/temp_OverviewReport.xlsx")
+    ws = wb.active
+    ws['C7'] = f"{gv.hodem} {gv.ten}" if gv else "N/A"
+
+    # Query lấy danh sách các lớp GV dạy kèm sĩ số và số buổi đã dạy
+    stmt = select(Lop.id, Lop.tenlop, func.count(SinhVien.id).label("siso"))\
+        .join(ThoiKhoaBieu, Lop.id == ThoiKhoaBieu.lop_id)\
+        .join(SinhVien, Lop.id == SinhVien.class_id)\
+        .where(ThoiKhoaBieu.giangvien_id == gv_id).group_by(Lop.id, Lop.tenlop)
+    
+    data = (await db.execute(stmt)).all()
+
+    for r_idx, item in enumerate(data):
+        row = 10 + r_idx
+        # Query đếm số buổi đã dạy của lớp này
+        count_stmt = select(func.count(func.distinct(DiemDanh.ngay_diem_danh)))\
+            .where(DiemDanh.tkb_tiet_id.in_(select(TKBTiet.id).join(ThoiKhoaBieu).where(ThoiKhoaBieu.lop_id == item.id)))
+        buoi_day = (await db.execute(count_stmt)).scalar()
+
+        vals = [r_idx+1, item.id, item.tenlop, item.siso, f"{buoi_day} buổi", "100%"]
+        for c_idx, val in enumerate(vals):
+            cell = ws.cell(row=row, column=1+c_idx, value=val)
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal="center")
+
+    return send_excel_response(wb, f"TongQuanLop_GV_{gv_id}")
+
+# ----------------------------------------------------------------------
+# API: DANH SÁCH CẢNH BÁO HỌC VỤ
+# ----------------------------------------------------------------------
+@router.get("/export/report/warning/{tkb_id}")
+async def export_warning_report(tkb_id: int, db: AsyncSession = Depends(get_db)):
+    # Thay thế dòng code cũ bằng lệnh chỉ định Join rõ ràng
+    stmt = select(ThoiKhoaBieu, Lop, HocPhan, HocKy, GiangVien)\
+        .join(Lop, ThoiKhoaBieu.lop_id == Lop.id)\
+        .join(HocPhan, ThoiKhoaBieu.hocphan_id == HocPhan.id)\
+        .join(HocKy, ThoiKhoaBieu.hocky_id == HocKy.id)\
+        .join(GiangVien, ThoiKhoaBieu.giangvien_id == GiangVien.id)\
+        .where(ThoiKhoaBieu.id == tkb_id)
+        
+    tkb_res = (await db.execute(stmt)).first()
+    if not tkb_res: raise HTTPException(status_code=404, detail="Không tìm thấy lịch học")
+    tkb, lop, hp, hk, gv = tkb_res
+
+    wb = load_workbook("app/templates/temp_WarningList.xlsx")
+    ws = wb.active
+    ws['C5'], ws['C6'], ws['C7'], ws['C8'], ws['C9'] = lop.tenlop, hp.tenhocphan, hk.tenhocky, hk.namhoc, f"{gv.hodem} {gv.ten}"
+
+    # Lấy thống kê vắng của từng SV
+    stmt = select(SinhVien.id, SinhVien.hodem, SinhVien.ten, 
+                  func.count(case((DiemDanh.trang_thai == 'Có mặt', 1))).label("co_mat"),
+                  func.count(case((DiemDanh.trang_thai == 'Vắng', 1))).label("vang"))\
+        .join(DiemDanh, SinhVien.id == DiemDanh.sv_id)\
+        .where(DiemDanh.tkb_tiet_id.in_(select(TKBTiet.id).where(TKBTiet.tkb_id == tkb_id)))\
+        .group_by(SinhVien.id).having(func.count(case((DiemDanh.trang_thai == 'Vắng', 1))) >= 3) # Ví dụ vắng >= 3 buổi
+    
+    warnings = (await db.execute(stmt)).all()
+
+    for r_idx, sv in enumerate(warnings):
+        row = 12 + r_idx
+        tong = sv.co_mat + sv.vang
+        ty_le = (sv.vang / tong * 100) if tong > 0 else 0
+        
+        vals = [r_idx+1, sv.id, sv.hodem, sv.ten, sv.co_mat, sv.vang, f"{ty_le:.1f}%", "CẢNH BÁO: Nghỉ nhiều"]
+        for c_idx, val in enumerate(vals):
+            cell = ws.cell(row=row, column=1+c_idx, value=val)
+            cell.border = thin_border
+            if c_idx == 7: cell.font = Font(color="FF0000", bold=True)
+
+    return send_excel_response(wb, f"CanhBaoHocVu_{lop.id}")
+
+def send_excel_response(wb, filename):
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    return StreamingResponse(stream, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={'Content-Disposition': f'attachment; filename="{filename}.xlsx"'})
