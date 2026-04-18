@@ -1,21 +1,31 @@
-# Server_Core/app/main.py
+# server/app/main.py
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router as api_router # Dòng thêm mới
-
-app = FastAPI(title="AuEdu Server API", version="1.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+from app.api import (
+    auth, teachers, schedule, attendance,
+    training, reports
 )
 
-# Gắn toàn bộ API trong file routes.py vào tiền tố /api
-app.include_router(api_router, prefix="/api")
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="AuEdu – Attendance System",
+        version="0.1.0",
+        docs_url="/docs",
+        openapi_url="/openapi.json",
+    )
 
-@app.get("/")
-async def read_root():
-    return {"message": "AUEDU đã sẵng sàng!"}
+    # ==== Đăng ký routers ====
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(teachers.router, tags=["giangvien"])
+    app.include_router(schedule.router, tags=["schedule"])
+    # attendance (REST)
+    app.include_router(attendance.routes.router, tags=["attendance"])
+    # attendance (WebSocket)
+    app.include_router(attendance.ws.router, tags=["attendance-ws"])
+    # training (face‑training)
+    app.include_router(training.router, prefix="/training", tags=["training"])
+    # reports
+    app.include_router(reports.router, prefix="/export", tags=["reports"])
+
+    return app
+
+app = create_app()
