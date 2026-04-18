@@ -1,7 +1,8 @@
 # server/app/api/training.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert, or_, cast, String, text
+from sqlalchemy import select, or_, cast, String, text
+from sqlalchemy.dialects.postgresql import insert
 from typing import List
 from app.db.session import get_db
 from app.db.models import (

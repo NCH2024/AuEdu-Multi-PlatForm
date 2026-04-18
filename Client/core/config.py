@@ -13,7 +13,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "public")
 
-SERVER_API_URL = "http://127.0.0.1:8000/api" 
+SERVER_API_URL = "http://127.0.0.1:8000/" 
 
 def get_headers():
     return {

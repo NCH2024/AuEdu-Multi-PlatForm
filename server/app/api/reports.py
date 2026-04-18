@@ -242,13 +242,8 @@ async def export_warning_report(tkb_id: int, db: AsyncSession = Depends(get_db))
 # -------------------------------------------------
 @router.get("/export/browser/{report_type}/{item_id}")
 async def browser_download_wrapper(report_type: str, item_id: str):
-    """
-    Trang HTML đệm xử lý UX khi tải file, chống lỗi trình duyệt chặn pop-up/auto-download.
-    """
-    # Đường dẫn trỏ tới API xuất Excel thật
-    real_download_url = f"/api/export/report/{report_type}/{item_id}"
-    
-    html_content = f"""
+    real_url = f"/api/export/report/{report_type}/{item_id}"
+    html = f"""
     <!DOCTYPE html>
     <html lang="vi">
     <head>
@@ -299,7 +294,7 @@ async def browser_download_wrapper(report_type: str, item_id: str):
             <h2 id="title-text">Đang chuẩn bị tệp Excel...</h2>
             <p id="desc-text">Trình duyệt sẽ tự động tải tệp báo cáo của bạn xuống trong giây lát.</p>
             
-            <a href="{real_download_url}" class="btn-download" id="manualBtn">Tải xuống thủ công</a>
+            <a href="{real_url}" class="btn-download" id="manualBtn">Tải xuống thủ công</a>
             
             <div class="brand">AUEDU ANALYTICS</div>
         </div>
@@ -307,7 +302,7 @@ async def browser_download_wrapper(report_type: str, item_id: str):
         <script>
             // 1. Tự động kích hoạt tải xuống sau 1.5 giây
             setTimeout(function() {{
-                window.location.href = "{real_download_url}";
+                window.location.href = "{real_url}";
                 
                 // 2. Thay đổi giao diện báo hiệu đã xử lý xong
                 document.getElementById('spinner').style.display = 'none';
@@ -326,4 +321,4 @@ async def browser_download_wrapper(report_type: str, item_id: str):
     </body>
     </html>
     """
-    return HTMLResponse(content=html_content)
+    return HTMLResponse(content=html)

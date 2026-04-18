@@ -9,6 +9,7 @@ from components.options.open_browser import open_browser
 from components.options.news_image import build_news_image
 from core.theme import current_theme
 from core.config import get_supabase_client
+from services.home_service import HomeService
 
 class UserHomePage(ft.Container):
     def __init__(self, page: ft.Page):
@@ -614,7 +615,7 @@ class UserHomePage(ft.Container):
             session_data = safe_json_load(session_str)
             self.gv_name = session_data.get("name", "Giảng viên")
             self.gv_id = session_data.get("id", "N/A")
-            # Cập nhật tên ngay lập tức (không chờ API)
+            
             if self._name_text:
                 self._name_text.value = f"GV. {self.gv_name}"
                 try:
@@ -622,55 +623,19 @@ class UserHomePage(ft.Container):
                 except Exception:
                     pass
 
-        # ── Bước 1: Hiển thị cache ngay (UX tức thì) ──
-        cached_news = safe_json_load(await prefs.get("cached_news"))
-        cached_schedule = safe_json_load(await prefs.get(f"cached_home_schedule_{self.gv_id}"))
-        cached_today = safe_json_load(await prefs.get(f"cached_today_{self.gv_id}"))
-        last_sync = float(await prefs.get(f"last_sync_home_{self.gv_id}") or 0)
-
-        if cached_news is not None and cached_schedule is not None and cached_today is not None:
-            self.render_data_to_ui(cached_news, cached_schedule, cached_today)
-
-        # ── Bước 2: Kiểm tra TTL (300 giây = 5 phút) ──
-        TTL = 300
-        current_time = time.time()
-        if current_time - last_sync < TTL:
-            return  # Cache còn mới, không fetch lại
-
-        # ── Bước 3: Fetch song song bằng asyncio.gather ──
         try:
-            client = await get_supabase_client()
+            # Chỉ cần gọi đúng 1 dòng này, Service và CacheManager sẽ tự lo phần còn lại!
+            # Đặt TTL = 300 (5 phút)
+            news_result, schedule_result, today_result = await HomeService.get_all_home_data(self.gv_id, ttl=300)
 
-            # Ba hàm fetch chạy ĐỒNG THỜI thay vì tuần tự
-            # return_exceptions=True: nếu 1 cái lỗi thì 2 cái kia vẫn chạy tiếp
-            news_result, schedule_result, today_result = await asyncio.gather(
-                self._fetch_news(client),
-                self._fetch_schedule(client),
-                self._fetch_today(client),
-                return_exceptions=True
-            )
+            # Xử lý kết quả (nếu lỗi ở API nào thì gán mảng rỗng cho API đó)
+            fresh_news = news_result if isinstance(news_result, list) else []
+            fresh_schedule = schedule_result if isinstance(schedule_result, list) else []
+            fresh_today = today_result if isinstance(today_result, dict) else {"classes": []}
 
-            # Xử lý kết quả (nếu lỗi thì giữ nguyên cache)
-            fresh_news = news_result if isinstance(news_result, list) else (cached_news or [])
-            fresh_schedule = schedule_result if isinstance(schedule_result, list) else (cached_schedule or [])
-            fresh_today = today_result if isinstance(today_result, dict) else (cached_today or {"classes": []})
-
-            # Log lỗi nếu có
-            for name, result in [("news", news_result), ("schedule", schedule_result), ("today", today_result)]:
-                if isinstance(result, Exception):
-                    print(f"fetch_{name} exception: {result}")
-
-            # ── Bước 4: Lưu cache mới ──
-            await asyncio.gather(
-                prefs.set("cached_news", json.dumps(fresh_news)),
-                prefs.set(f"cached_home_schedule_{self.gv_id}", json.dumps(fresh_schedule)),
-                prefs.set(f"cached_today_{self.gv_id}", json.dumps(fresh_today)),
-                prefs.set(f"last_sync_home_{self.gv_id}", str(current_time)),
-            )
-
-            # ── Bước 5: Cập nhật UI ──
+            # Render lại UI phẳng của em
             self.render_data_to_ui(fresh_news, fresh_schedule, fresh_today)
 
         except Exception as e:
-            show_top_notification(self.app_page, "Lỗi kết nối", "Không thể cập nhật bảng tin!", color=ft.Colors.ORANGE)
+            show_top_notification(self.app_page, "Lỗi hệ thống", "Không thể tải dữ liệu!", color=ft.Colors.ORANGE)
             print(f"HOME load_data ERROR: {e}")
