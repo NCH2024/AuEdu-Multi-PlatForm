@@ -1,5 +1,5 @@
 # Server_Core/app/db/models.py
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Date, DateTime, Time, ForeignKey, text, Identity
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Date, DateTime, Time, ForeignKey, text, Identity, Float, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.db.session import Base
@@ -114,9 +114,16 @@ class DiemDanh(Base):
     id = Column(Integer, Identity(always=True), primary_key=True)
     sv_id = Column(Integer, ForeignKey('sinhvien.id'))
     tkb_tiet_id = Column(Integer, ForeignKey('tkb_tiet.id'))
-    vitri = Column(Text)
+    
+    # --- THÊM CÁC TRƯỜNG MỚI ---
+    vitri = Column(Text, nullable=True) # Tọa độ hoặc tên phòng
+    device_id = Column(Text, nullable=True)
+    client_version = Column(Text, nullable=True)
+    confidence_score = Column(Float, nullable=True) # Điểm AI nhận diện
+    note = Column(Text, nullable=True) # Ghi chú thêm (đi trễ, v.v.)
+    
     ngay_diem_danh = Column(Date)
-    trang_thai = Column(Text)
+    trang_thai = Column(Text, default="Có mặt") # Có mặt / Vắng / Đi trễ
     
     # --- AUDIT TRAIL & SOFT DELETE ---
     created_at = Column(DateTime, server_default=text('now()'))
@@ -126,15 +133,24 @@ class DiemDanh(Base):
     updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
     deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
+    # --- RÀNG BUỘC & CHỈ MỤC (INDEX) ---
+    __table_args__ = (
+        # Đảm bảo 1 sinh viên không bị điểm danh 2 lần trong cùng 1 tiết + 1 ngày
+        UniqueConstraint('sv_id', 'tkb_tiet_id', 'ngay_diem_danh', name='uq_diemdanh_sv_tiet_ngay'),
+        # Index tối ưu hóa cho các query báo cáo
+        Index('idx_diemdanh_ngay', 'ngay_diem_danh'),
+        Index('idx_diemdanh_tkb', 'tkb_tiet_id'),
+    )
+
 class FaceEmbedding(Base):
     __tablename__ = 'face_embeddings'
     sv_id = Column(Integer, ForeignKey('sinhvien.id'), primary_key=True)
     embedding = Column(Vector(512), nullable=False) 
     
-    # --- AUDIT TRAIL --- (Bảng này thường không soft delete, đào tạo lại thì update ghi đè lên)
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
-    trained_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True) # Lưu vết ai đã chụp ảnh đào tạo
+    trained_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    model_version = Column(Text, nullable=True, default="MiniFASNetV2_MobileFaceNet") # Thêm version model
 
 class ThongBao(Base):
     __tablename__ = 'thongbao'

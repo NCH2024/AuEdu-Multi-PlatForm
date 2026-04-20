@@ -149,8 +149,20 @@ class AttendancePage(ft.Container):
             return ft.Container(content=content, padding=15, bgcolor=current_theme.surface_color, border_radius=16, border=ft.Border.all(1, current_theme.divider_color))
 
         nang_cao_content = ft.Column([
-            ft.Button(content=ft.Text("Lịch sử điểm danh", color=ft.Colors.WHITE, size=12), bgcolor=ft.Colors.BLUE_GREY_600, expand=True, style=btn_style_menu),
-            ft.Button(content=ft.Text("Tra cứu sinh viên", color=ft.Colors.WHITE, size=12), bgcolor=ft.Colors.BLUE_GREY_600, expand=True, style=btn_style_menu),
+            ft.Button(content=ft.Text("Lịch sử điểm danh", color=ft.Colors.WHITE, size=12), 
+                      bgcolor=ft.Colors.BLUE_GREY_600, 
+                      expand=True, 
+                      style=btn_style_menu,
+                      on_click=self.handle_attendent_history
+                      ),
+            ft.Button(
+                content=ft.Text("Tra cứu sinh viên", color=ft.Colors.WHITE, size=12), 
+                bgcolor=ft.Colors.BLUE_GREY_600, 
+                expand=True, 
+                style=btn_style_menu,
+                # Gắn sự kiện chuyển hướng trang tại đây:
+                on_click=lambda e: self.app_page.run_task(self.app_page.push_route, "/user/attendance/search")
+            ),
             ft.Button(
                 content=ft.Text("Đào tạo khuôn mặt", color=ft.Colors.WHITE, size=12), 
                 bgcolor=current_theme.secondary, 
@@ -523,12 +535,14 @@ class AttendancePage(ft.Container):
         await prefs.set("attendance_mode", str(mode))
         await self.camera_view.stop_camera()
         await self.app_page.push_route("/user/attendance/session")
+    
+    async def handle_attendent_history(self, e):
+        if not getattr(self, "page", None): return
+        e.control.disabled = True
+        e.control.update()
+        await self.app_page.push_route("/user/attendance/history")
         
     async def handle_start_trainning(self, e):
-        # is_mobile = (self.app_page.width and self.app_page.width < 768) or self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
-        # if is_mobile:
-        #     show_alert_dialog( self, "AuEdu Thông báo", ft.Text("Chức năng 'ĐÀO TẠO DỮ LIỆU' chỉ khả dụng trên nền tảng Desktop (Windows/MaxOS)!\nVui lòng liên hệ quản trị nếu khuôn mặt sinh viên không khớp, hoặc bạn có thể dùng AuEdu trên PC để sữ dụng tính năng này.", size=13, color=current_theme.text_main))
-        #     return
         if not getattr(self, "page", None): return
         e.control.disabled = True
         e.control.update()

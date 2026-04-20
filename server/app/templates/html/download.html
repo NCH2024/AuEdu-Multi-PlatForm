@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tải báo cáo | AuEdu</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --bg-gradient: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex; justify-content: center; align-items: center; 
+            min-height: 100vh; background: var(--bg-gradient); margin: 0;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            text-align: center; padding: 40px 30px; 
+            border-radius: 24px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            max-width: 420px; width: 90%;
+            transition: all 0.3s ease;
+        }
+
+        /* Logo Section */
+        .brand-header {
+            display: flex; flex-direction: column; align-items: center; margin-bottom: 30px;
+        }
+        .logo-icon {
+            background: linear-gradient(135deg, var(--primary), #60a5fa);
+            width: 64px; height: 64px; border-radius: 18px;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+            margin-bottom: 15px;
+        }
+        .brand-header h1 {
+            margin: 0; font-size: 22px; font-weight: 700; color: var(--text-main); letter-spacing: -0.5px;
+        }
+        .brand-header p {
+            margin: 4px 0 0 0; font-size: 13px; font-weight: 500; color: var(--primary); text-transform: uppercase; letter-spacing: 1px;
+        }
+
+        /* Dynamic States */
+        .state-container { min-height: 120px; }
+        
+        /* Loading State */
+        #state-loading { display: block; }
+        .spinner-ring {
+            display: inline-block; position: relative; width: 60px; height: 60px;
+        }
+        .spinner-ring div {
+            box-sizing: border-box; display: block; position: absolute;
+            width: 48px; height: 48px; margin: 6px;
+            border: 4px solid var(--primary); border-radius: 50%;
+            animation: spinner-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+            border-color: var(--primary) transparent transparent transparent;
+        }
+        .spinner-ring div:nth-child(1) { animation-delay: -0.45s; }
+        .spinner-ring div:nth-child(2) { animation-delay: -0.3s; }
+        .spinner-ring div:nth-child(3) { animation-delay: -0.15s; }
+        @keyframes spinner-ring {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Success State */
+        #state-success { display: none; animation: fadeIn 0.5s ease-out; }
+        .success-circle {
+            width: 60px; height: 60px; background: #d1fae5; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            margin: 0 auto 15px auto; color: var(--success);
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Text & Buttons */
+        h2 { color: var(--text-main); margin: 0 0 10px 0; font-size: 18px; }
+        .desc { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 25px; }
+        
+        .btn-download {
+            display: inline-block; background-color: var(--primary); color: white; 
+            text-decoration: none; padding: 14px 28px; border-radius: 12px; 
+            font-weight: 600; font-size: 14px; transition: all 0.2s; 
+            border: none; cursor: pointer; box-shadow: 0 8px 15px rgba(59, 130, 246, 0.25);
+        }
+        .btn-download:hover { background-color: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 12px 20px rgba(59, 130, 246, 0.3); }
+        .btn-download:active { transform: translateY(1px); }
+        
+    </style>
+</head>
+<body>
+    <div class="card">
+        
+        <div class="brand-header">
+            <img src="/assets/splash-1.png" width="200" style="margin-bottom: 15px;">
+            <h1>Hệ thống AuEdu</h1>
+            <p>Xuất Báo Cáo</p>
+        </div>
+
+        <div class="state-container">
+            <div id="state-loading">
+                <div class="spinner-ring"><div></div><div></div><div></div><div></div></div>
+                <h2>Đang chuẩn bị tệp Excel...</h2>
+                <p class="desc">Trình duyệt sẽ tự động tải xuống trong giây lát.</p>
+            </div>
+
+            <div id="state-success">
+                <div class="success-circle">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+                <h2>Đã hoàn tất!</h2>
+                <p class="desc" style="margin-bottom: 20px;">Nếu trình duyệt chặn tải tự động, vui lòng nhấn nút bên dưới.</p>
+                <a href="{{ real_url }}" class="btn-download">Tải xuống thủ công</a>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Chuyển trạng thái sau 1.5 giây và kích hoạt URL tải file
+        setTimeout(function() {
+            window.location.href = "{{ real_url }}";
+            
+            document.getElementById('state-loading').style.display = 'none';
+            document.getElementById('state-success').style.display = 'block';
+        }, 1500);
+    </script>
+</body>
+</html>

@@ -33,6 +33,13 @@ class AttendanceSessionPage(ft.Container):
         
         # Danh sách chứa các sinh viên VỪA MỚI QUÉT ĐƯỢC trong phiên này
         self.scanned_session_students = []
+        for sv in self.real_students:
+            if sv.get("trang_thai_diem_danh") == "Có mặt":
+                self.scanned_session_students.append({
+                    "id": sv["id"],
+                    "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
+                    "time": "Đã điểm danh"
+                })
         
         self.ws = None
         self.ws_connected = False
@@ -136,8 +143,7 @@ class AttendanceSessionPage(ft.Container):
             await asyncio.sleep(1.5)
         
     async def connect_websocket(self):
-        # URL này theo IP của máy (VD: ws://192.168.1.X:8000)
-        ws_url = f"ws://localhost:8000/api/ws/attendance/{self.tkb_tiet_id}" 
+        ws_url = f"ws://localhost:8000/api/ws/attendance/{self.tkb_tiet_id}"
         try:
             self.ws = await websockets.connect(ws_url)
             self.ws_connected = True
@@ -278,18 +284,42 @@ class AttendanceSessionPage(ft.Container):
     async def update_scanned_ui(self, recognized_students):
         updated = False
         for rec_sv in recognized_students:
-            # Tìm sinh viên trong danh sách thực tế
+            # Tìm ID một cách an toàn (tránh trường hợp server trả về 'sv_id' thay vì 'id')
+            rec_id = str(rec_sv.get("id", rec_sv.get("sv_id", "")))
+            
             for sv in self.real_students: 
-                if str(sv["id"]) == str(rec_sv["id"]) and sv.get("trang_thai_diem_danh") != "Có mặt":
-                    sv["trang_thai_diem_danh"] = "Có mặt" 
-                    
-                    # Thêm vào đầu danh sách thẻ (người mới nhất nổi lên trên)
-                    self.scanned_session_students.insert(0, {
-                        "id": sv["id"],
-                        "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
-                        "time": rec_sv.get("time", datetime.now().strftime("%H:%M:%S"))
-                    })
-                    updated = True
+                if str(sv["id"]) == rec_id:
+                    # Trường hợp 1: Sinh viên chưa điểm danh -> Ghi nhận mới
+                    if sv.get("trang_thai_diem_danh") != "Có mặt":
+                        sv["trang_thai_diem_danh"] = "Có mặt" 
+                        
+                        # Thêm vào đầu danh sách thẻ
+                        self.scanned_session_students.insert(0, {
+                            "id": sv["id"],
+                            "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
+                            "time": rec_sv.get("time", datetime.now().strftime("%H:%M:%S"))
+                        })
+                        updated = True
+                        
+                        # Hiện thông báo xanh báo hiệu ghi nhận thành công
+                        self.app_page.snack_bar = ft.SnackBar(
+                            content=ft.Text(f"✅ Đã ghi nhận: {sv.get('ten')}", color=ft.Colors.WHITE),
+                            bgcolor=ft.Colors.GREEN_600,
+                            duration=2000
+                        )
+                        self.app_page.snack_bar.open = True
+                        self.app_page.update()
+                        
+                    # Trường hợp 2: Sinh viên đã điểm danh rồi nhưng camera lại quét trúng
+                    else:
+                        # Hiện thông báo cam để người dùng biết hệ thống vẫn đang hoạt động tốt
+                        self.app_page.snack_bar = ft.SnackBar(
+                            content=ft.Text(f"⚠️ {sv.get('ten')} đã được điểm danh trước đó!", color=ft.Colors.WHITE),
+                            bgcolor=ft.Colors.ORANGE_500,
+                            duration=1500
+                        )
+                        self.app_page.snack_bar.open = True
+                        self.app_page.update()
         
         if updated:
             if self.show_grid:

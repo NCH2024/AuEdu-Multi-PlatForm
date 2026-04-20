@@ -1,7 +1,8 @@
 # server/app/api/reports.py
 import io
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, distinct
 from datetime import datetime
@@ -20,6 +21,8 @@ router = APIRouter()
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
 
+templates = Jinja2Templates(directory="app/templates/html")
+
 
 # -------------------------------------------------
 # Helper: trả về file excel dưới dạng stream
@@ -30,16 +33,16 @@ def stream_excel(wb, filename: str):
     stream.seek(0)
     return StreamingResponse(
         stream,
-        media_type=
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content‑Disposition": f'attachment; filename="{filename}.xlsx"'},
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        # Gõ lại chính xác dòng bên dưới bằng bàn phím của em:
+        headers={"Content-Disposition": f'attachment; filename="{filename}.xlsx"'},
     )
 
 
 # -------------------------------------------------
-# 1️⃣ Báo cáo chi tiết (theo lớp‑tiết)
+# Báo cáo chi tiết (theo lớp‑tiết)
 # -------------------------------------------------
-@router.get("/export/report/detailed/{tkb_id}")
+@router.get("/report/detailed/{tkb_id}")
 async def export_detailed_attendance(tkb_id: int, db: AsyncSession = Depends(get_db)):
     # Lấy thông tin TKB + header
     hdr_stmt = (
@@ -66,7 +69,7 @@ async def export_detailed_attendance(tkb_id: int, db: AsyncSession = Depends(get
         f"{gv.hodem} {gv.ten}",
     )
 
-    # 2️⃣ Lấy danh sách ngày đã điểm danh
+    # Lấy danh sách ngày đã điểm danh
     date_stmt = (
         select(DiemDanh.ngay_diem_danh)
         .where(DiemDanh.tkb_tiet_id.in_(select(TKBTiet.id).where(TKBTiet.tkb_id == tkb_id)))
@@ -78,7 +81,7 @@ async def export_detailed_attendance(tkb_id: int, db: AsyncSession = Depends(get
         cell = ws.cell(row=12, column=5 + i, value=d.strftime("%d/%m"))
         cell.font, cell.border, cell.alignment = Font(bold=True), thin_border, Alignment(horizontal="center")
 
-    # 3️⃣ Danh sách sinh viên lớp
+    # Danh sách sinh viên lớp
     sv_stmt = select(SinhVien).where(SinhVien.class_id == lop.id).order_by(SinhVien.id.asc())
     students = (await db.execute(sv_stmt)).scalars().all()
 
@@ -108,9 +111,9 @@ async def export_detailed_attendance(tkb_id: int, db: AsyncSession = Depends(get
 
 
 # -------------------------------------------------
-# 2️⃣ Báo cáo tổng quan (theo GV)
+# Báo cáo tổng quan (theo GV)
 # -------------------------------------------------
-@router.get("/export/report/overview/{gv_id}")
+@router.get("/report/overview/{gv_id}")
 async def export_overview_report(gv_id: int, db: AsyncSession = Depends(get_db)):
     gv = await db.scalar(select(GiangVien).where(GiangVien.id == gv_id))
     if not gv:
@@ -144,7 +147,7 @@ async def export_overview_report(gv_id: int, db: AsyncSession = Depends(get_db))
 
         ty_le = (tong_co_mat / (item.siso * buoi_day) * 100) if (item.siso * buoi_day) > 0 else 0
 
-        values = [r_idx + 1, item.id, item.tenlop, item.siso, buoi_day, f"{ty_le:.1f}%"]
+        values = [r_idx + 1, item.id, item.tenlop, item.siso, buoi_day, f"{ty_le:.1f}%"] 
         for c_idx, val in enumerate(values):
             cell = ws.cell(row=row, column=1 + c_idx, value=val)
             cell.border = thin_border
@@ -154,9 +157,9 @@ async def export_overview_report(gv_id: int, db: AsyncSession = Depends(get_db))
 
 
 # -------------------------------------------------
-# 3️⃣ Báo cáo cảnh báo (sinh viên vắng quá mức)
+# Báo cáo cảnh báo (sinh viên vắng quá mức)
 # -------------------------------------------------
-@router.get("/export/report/warning/{tkb_id}")
+@router.get("/report/warning/{tkb_id}")
 async def export_warning_report(tkb_id: int, db: AsyncSession = Depends(get_db)):
     # Thông tin TKB + Loại học phần
     stmt_hdr = (
@@ -238,87 +241,14 @@ async def export_warning_report(tkb_id: int, db: AsyncSession = Depends(get_db))
 
 
 # -------------------------------------------------
-# 4️⃣ HTML wrapper để kích hoạt download (tránh chặn pop‑up)
+# HTML wrapper để kích hoạt download (tránh chặn pop‑up)
 # -------------------------------------------------
-@router.get("/export/browser/{report_type}/{item_id}")
-async def browser_download_wrapper(report_type: str, item_id: str):
-    real_url = f"/api/export/report/{report_type}/{item_id}"
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Tải báo cáo AuEdu</title>
-        <style>
-            body {{
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                display: flex; justify-content: center; align-items: center; 
-                height: 100vh; background-color: #f8fafc; margin: 0;
-            }}
-            .card {{
-                text-align: center; padding: 40px; background: white; 
-                border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-                border: 1px solid #e2e8f0; max-width: 400px; width: 90%;
-            }}
-            .spinner {{
-                border: 4px solid #f1f5f9; border-top: 4px solid #3b82f6; 
-                border-radius: 50%; width: 45px; height: 45px; 
-                animation: spin 1s linear infinite; margin: 0 auto 20px auto;
-            }}
-            @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-            
-            .success-icon {{
-                display: none; font-size: 45px; color: #10b981; margin-bottom: 15px;
-            }}
-            h2 {{ color: #1e293b; margin-bottom: 10px; font-size: 20px; transition: 0.3s; }}
-            p {{ color: #64748b; font-size: 14px; line-height: 1.5; margin-bottom: 25px; transition: 0.3s; }}
-            
-            .btn-download {{
-                display: none; /* Ẩn lúc mới vào */
-                background-color: #3b82f6; color: white; text-decoration: none;
-                padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;
-                transition: all 0.2s; border: none; cursor: pointer; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.2);
-            }}
-            .btn-download:hover {{ background-color: #2563eb; transform: translateY(-1px); }}
-            
-            .brand {{ margin-top: 30px; font-size: 12px; color: #94a3b8; font-weight: 600; letter-spacing: 1px; }}
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <div class="spinner" id="spinner"></div>
-            
-            <div class="success-icon" id="success-icon">✓</div>
-            
-            <h2 id="title-text">Đang chuẩn bị tệp Excel...</h2>
-            <p id="desc-text">Trình duyệt sẽ tự động tải tệp báo cáo của bạn xuống trong giây lát.</p>
-            
-            <a href="{real_url}" class="btn-download" id="manualBtn">Tải xuống thủ công</a>
-            
-            <div class="brand">AUEDU ANALYTICS</div>
-        </div>
-
-        <script>
-            // 1. Tự động kích hoạt tải xuống sau 1.5 giây
-            setTimeout(function() {{
-                window.location.href = "{real_url}";
-                
-                // 2. Thay đổi giao diện báo hiệu đã xử lý xong
-                document.getElementById('spinner').style.display = 'none';
-                document.getElementById('success-icon').style.display = 'block';
-                
-                document.getElementById('title-text').innerText = 'Đã hoàn tất yêu cầu!';
-                document.getElementById('title-text').style.color = '#10b981';
-                
-                document.getElementById('desc-text').innerText = 'Nếu trình duyệt của bạn chặn tự động tải xuống, vui lòng nhấn nút bên dưới.';
-                
-                // Hiện nút tải lại thủ công
-                document.getElementById('manualBtn').style.display = 'inline-block';
-                
-            }}, 1500);
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
+@router.get("/browser/{report_type}/{item_id}")
+async def browser_download_wrapper(request: Request, report_type: str, item_id: str):
+    real_url = f"/export/report/{report_type}/{item_id}"
+    
+    return templates.TemplateResponse(
+        request=request, 
+        name="download.html", 
+        context={"real_url": real_url}
+    )

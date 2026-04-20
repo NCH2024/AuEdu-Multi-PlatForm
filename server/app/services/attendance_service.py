@@ -2,8 +2,9 @@
 import json, datetime, asyncio
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import SinhVien, DiemDanh, TKBTiet, FaceEmbedding
 from app.ai.engine import face_engine
@@ -17,14 +18,18 @@ async def _get_embedding_list(image_b64: str, mode: str) -> List[bytes]:
 
 
 async def _find_best_match(embedding, db: AsyncSession):
-    """Trả về FaceEmbedding gần nhất (cosine distance) hoặc None."""
+    """Trả về (FaceEmbedding, khoảng_cách_cosine) gần nhất hoặc (None, None)."""
+    distance = FaceEmbedding.embedding.cosine_distance(embedding)
     stmt = (
-        select(FaceEmbedding)
-        .order_by(FaceEmbedding.embedding.cosine_distance(embedding))
+        select(FaceEmbedding, distance.label('score'))
+        .order_by(distance)
         .limit(1)
     )
     result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+    row = result.first()
+    if row:
+        return row[0], row[1] # Trả về tuple (match, score)
+    return None, None
 
 
 async def _save_attendance(
@@ -32,36 +37,40 @@ async def _save_attendance(
     tkb_tiet_id: int,
     attend_date: datetime.date,
     db: AsyncSession,
+    vitri: str = None,
+    device_id: str = None,
+    client_version: str = None,
+    confidence_score: float = None,
+    created_by: int = None
 ):
     """
-    Kiểm tra trùng lặp, sau đó INSERT vào bảng DiemDanh.
-    Nếu có lỗi DB, rollback và trả về False.
+    Dùng INSERT ... ON CONFLICT DO NOTHING để triệt tiêu hoàn toàn Race Condition.
     """
-    # Kiểm tra đã tồn tại chưa (cùng ngày)
-    exists = await db.scalar(
-        select(DiemDanh)
-        .where(
-            DiemDanh.sv_id == sv_id,
-            DiemDanh.tkb_tiet_id == tkb_tiet_id,
-            DiemDanh.ngay_diem_danh == attend_date,
-        )
-    )
-    if exists:
-        return False
-
-    stmt = insert(DiemDanh).values(
+    stmt = pg_insert(DiemDanh).values(
         sv_id=sv_id,
         tkb_tiet_id=tkb_tiet_id,
         ngay_diem_danh=attend_date,
         trang_thai="Có mặt",
+        vitri=vitri,
+        device_id=device_id,
+        client_version=client_version,
+        confidence_score=confidence_score,
+        created_by=created_by
     )
+    
+    # Nếu trùng cặp (sv_id, tkb_tiet_id, ngày) thì bỏ qua không báo lỗi
+    stmt = stmt.on_conflict_do_nothing(
+        constraint='uq_diemdanh_sv_tiet_ngay'
+    )
+    
     try:
-        await db.execute(stmt)
+        # Sử dụng transaction an toàn
+        result = await db.execute(stmt)
         await db.commit()
-        return True
+        # rowcount > 0 nghĩa là đã insert mới. = 0 nghĩa là bị trùng nên đã bỏ qua.
+        return result.rowcount > 0 
     except SQLAlchemyError as err:
         await db.rollback()
-        # Log lỗi – ở production bạn nên dùng logger
         print(f"[Attendance Service] DB error: {err}")
         return False
 
@@ -71,56 +80,58 @@ async def handle_attendance_frame(
     tkb_tiet_id: int,
     payload: dict,
     db: AsyncSession,
+    giangvien_id: int = None # Thêm params nhận từ người dùng đã xác thực
 ):
-    """
-    Hàm chính được gọi từ `attendance/ws.py`.
-    - Nhận payload (image, mode, optional date)
-    - Chạy AI, so sánh, lưu DB, trả về kết quả qua websocket.
-    """
     image_b64 = payload.get("image")
     mode = payload.get("mode", "1")
     date_str = payload.get("date")
-    target_date = (
-        datetime.date.fromisoformat(date_str) if date_str else datetime.date.today()
-    )
+    target_date = datetime.date.fromisoformat(date_str) if date_str else datetime.date.today()
+    
+    # Lấy thêm các tham số thiết bị, vị trí từ client gửi lên
+    vitri = payload.get("vitri")
+    device_id = payload.get("device_id")
+    client_version = payload.get("client_version")
+
     if not image_b64:
-        return  # nothing to do
+        return
 
-    # 1️⃣ Lấy danh sách embedding từ AI
     embeddings = await _get_embedding_list(image_b64, mode)
-
     recognized: list[dict] = []
-    already_scanned: set[int] = set()
 
     for emb in embeddings:
-        match = await _find_best_match(emb, db)
+        match, score = await _find_best_match(emb, db)
         if not match:
             continue
-        sv_id = match.sv_id
-        if sv_id in already_scanned:
-            continue
+            
+        # Có thể thêm logic kiểm tra ngưỡng (threshold) tại đây
+        # Ví dụ: if score > 0.4: continue (khoảng cách càng lớn càng không giống)
 
-        # Lấy thông tin sinh viên
+        sv_id = match.sv_id
         sv = await db.scalar(select(SinhVien).where(SinhVien.id == sv_id))
         if not sv:
             continue
 
-        # Lưu vào DB
-        saved = await _save_attendance(sv_id, tkb_tiet_id, target_date, db)
-        if not saved:
-            # Đã tồn tại hoặc lỗi DB → bỏ qua
-            continue
-
-        already_scanned.add(sv_id)
-        recognized.append(
-            {
-                "id": str(sv.id),
-                "name": f"{sv.hodem} {sv.ten}".strip(),
-                "time": datetime.datetime.now().strftime("%H:%M:%S"),
-            }
+        saved = await _save_attendance(
+            sv_id=sv_id, 
+            tkb_tiet_id=tkb_tiet_id, 
+            attend_date=target_date, 
+            db=db,
+            vitri=vitri,
+            device_id=device_id,
+            client_version=client_version,
+            confidence_score=score,
+            created_by=giangvien_id
         )
+        
+        if not saved:
+            continue # Đã điểm danh trước đó hoặc lỗi
+
+        recognized.append({
+            "id": str(sv.id),
+            "name": f"{sv.hodem} {sv.ten}".strip(),
+            "time": datetime.datetime.now().strftime("%H:%M:%S"),
+            "score": float(score) # Trả về cho client xem (tuỳ chọn)
+        })
 
     if recognized:
-        await websocket.send_text(
-            json.dumps({"status": "success", "students": recognized})
-        )
+        await websocket.send_text(json.dumps({"status": "success", "students": recognized}))

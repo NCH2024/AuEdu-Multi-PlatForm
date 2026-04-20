@@ -14,6 +14,8 @@ from pages.about_page import AboutPage
 from pages.user.profile_page import ProfilePage
 from pages.user.attendance_session_page import AttendanceSessionPage
 from pages.user.face_training_page import FaceTrainingPage
+from pages.user.attendance_history_page import AttendanceHistoryPage
+from pages.user.student_search_page import StudentSearchPage
 
 
 import core.theme as theme_module
@@ -115,6 +117,12 @@ async def main(page: ft.Page):
                     
                 elif current_route == "/user/attendance":
                     dashboard.set_content("ĐIỂM DANH SINH VIÊN", AttendancePage(page), current_route)
+                    
+                elif current_route == "/user/attendance/history":
+                    dashboard.set_content("LỊCH SỬ ĐIỂM DANH", AttendanceHistoryPage(page), current_route)
+                    
+                elif current_route == "/user/attendance/search":
+                    dashboard.set_content("TÌM KIẾM SINH VIÊN", StudentSearchPage(page), current_route)
                     
                 elif current_route == "/user/settings":
                     dashboard.set_content("CÀI ĐẶT PHẦN MỀM", SettingsPage(page), current_route)

@@ -48,7 +48,7 @@ class FaceTrainingPage(ft.Container):
             content=ft.Row([
                 ft.Icon(ft.Icons.TIMER, color=ft.Colors.WHITE, size=16),
                 self.txt_countdown,
-                ft.Container(width=1, height=15, bgcolor=ft.Colors.WHITE54), # Vách ngăn mờ
+                ft.Container(width=1, height=15, bgcolor=ft.Colors.WHITE_54),
                 self.txt_pose_status
             ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
             bgcolor=ft.Colors.RED_500, # Đỏ mặc định
