@@ -8,6 +8,7 @@ from datetime import datetime
 from core.theme import current_theme, get_flat_container
 from components.options.camera_view import CameraView
 from components.options.custom_dropdown import CustomDropdown
+from components.options.top_notification import show_top_notification
 
 class AttendanceSessionPage(ft.Container):
     def __init__(self, page: ft.Page):
@@ -143,12 +144,27 @@ class AttendanceSessionPage(ft.Container):
             await asyncio.sleep(1.5)
         
     async def connect_websocket(self):
-        ws_url = f"ws://localhost:8000/api/ws/attendance/{self.tkb_tiet_id}"
+        # 1. Lấy chuỗi JSON từ SharedPreferences và giải mã để lấy Token
+        prefs = ft.SharedPreferences()
+        user_session_str = await prefs.get("user_session")
+        token = ""
+        
+        if user_session_str:
+            try:
+                session_data = json.loads(user_session_str)
+                token = session_data.get("access_token", "")
+            except Exception as e:
+                print(f"[Client] Lỗi giải mã user_session: {e}")
+        
+        # 2. Sinh URL chuẩn xác
+        from core.config import get_ws_url
+        ws_url = get_ws_url(self.tkb_tiet_id, token)
+        
         try:
             self.ws = await websockets.connect(ws_url)
+            
             self.ws_connected = True
-            print("[Client] Đã kết nối WebSocket thành công!")
-            # Khởi chạy luồng lắng nghe ngầm mà không làm đơ giao diện
+            print(f"[Client] Đã kết nối WebSocket thành công tới tiết: {self.tkb_tiet_id}")
             self.app_page.run_task(self.receive_ws_messages)
         except Exception as e:
             print(f"[Client] Lỗi kết nối WebSocket: {e}")
@@ -158,11 +174,20 @@ class AttendanceSessionPage(ft.Container):
         try:
             async for message in self.ws:
                 data = json.loads(message)
-                
-                # Giả sử Server trả về: {"status": "success", "students": [{"id": "223401", "name": "Nguyễn Văn A", "time": "08:30"}]}
                 if data.get("status") == "success":
-                    recognized_students = data.get("students", [])
-                    await self.update_scanned_ui(recognized_students)
+                    for student_data in data.get("students", []):
+                        target_id = student_data.get("id")
+                        
+                        # BÍ QUYẾT: Ép kiểu ID về String để so sánh chính xác tuyệt đối
+                        for student in self.real_students:
+                            if str(student.get("id")) == str(target_id):
+                                # Cập nhật dữ liệu mới vào danh sách local
+                                student["trang_thai"] = student_data.get("status")
+                                student["score"] = student_data.get("score")
+                                student["time"] = student_data.get("time")
+                                break
+                    if self.student_grid.page:
+                        await self.update_student_grid()
                     
         except websockets.exceptions.ConnectionClosed:
             print("[Client] Mất kết nối WebSocket. Đang thử lại...")
@@ -441,14 +466,21 @@ class AttendanceSessionPage(ft.Container):
     
     async def send_frame_to_server(self, frame_base64: str):
         if self.ws_connected and self.ws:
+            # Tạo một device_id cơ bản để phân biệt thiết bị
+            device_id = self.app_page.session_id if hasattr(self.app_page, 'session_id') else "unknown_device"
+            
             payload = {
                 "image": frame_base64,
                 "mode": self.mode,
                 "tkb_tiet_id": self.tkb_tiet_id,
-                "date": self.attendance_date
+                "date": self.attendance_date,
+                
+                # --- THÊM CÁC TRƯỜNG DỮ LIỆU MỚI ĐỂ KHỚP VỚI CSDL ---
+                "vitri": "Phòng học hiện tại", # Có thể nâng cấp gọi thư viện GPS sau
+                "device_id": device_id,
+                "client_version": "1.0.0"
             }
             try:
-                # Gửi bất đồng bộ lên Server
                 await self.ws.send(json.dumps(payload))
             except Exception as e:
                 print(f"[Client] Lỗi khi gửi frame: {e}")

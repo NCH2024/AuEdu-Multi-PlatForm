@@ -232,15 +232,15 @@ class StatsPage(ft.Container):
             content=ft.Column([
                 ft.Text("CÔNG CỤ XUẤT BẢN", size=12, weight=ft.FontWeight.BOLD, color=current_theme.secondary),
                 ft.Column([
-                    ft.ElevatedButton(
+                    ft.Button(
                         "Chi tiết điểm danh", icon=ft.Icons.FILE_DOWNLOAD, on_click=self.download_detailed,
                         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=30), padding=ft.Padding(0, 15, 0, 15), color=current_theme.text_main)
                     ),
-                    ft.ElevatedButton(
+                    ft.Button(
                         "Tổng quan học kỳ", icon=ft.Icons.ANALYTICS, on_click=self.download_overview,
                         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=30), padding=ft.Padding(0, 15, 0, 15), color=current_theme.text_main)
                     ),
-                    ft.ElevatedButton(
+                    ft.Button(
                         "Cảnh báo học vụ", icon=ft.Icons.ERROR_OUTLINE, on_click=self.download_warning,
                         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=30), padding=ft.Padding(0, 15, 0, 15), color=ft.Colors.RED_500)
                     ),

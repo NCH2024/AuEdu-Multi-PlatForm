@@ -223,7 +223,6 @@ class LoginPage(ft.Container):
             self.btn_login.disabled = True
             self.update()
 
-            # ✅ Auth dùng client riêng (endpoint /auth/v1 khác base_url của singleton)
             async with httpx.AsyncClient() as auth_client:
                 auth_resp = await auth_client.post(
                     f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
@@ -238,7 +237,9 @@ class LoginPage(ft.Container):
                     self.reset_login_button()
                     return
 
-                user_id = auth_resp.json()["user"]["id"]
+                auth_data = auth_resp.json()
+                user_id = auth_data["user"]["id"]
+                access_token = auth_data.get("access_token")
 
             # ✅ DB dùng singleton client, KHÔNG dùng async with
             db_client = await get_supabase_client()
@@ -254,7 +255,8 @@ class LoginPage(ft.Container):
                     "role": giangvien.get("vai_tro", "giangvien"),
                     "name": ho_ten,
                     "id": giangvien.get("id"),
-                    "auth_id": user_id
+                    "auth_id": user_id,
+                    "access_token": access_token 
                 }
 
                 prefs = ft.SharedPreferences()

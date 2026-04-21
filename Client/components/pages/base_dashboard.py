@@ -125,13 +125,18 @@ class BaseDashboard(ft.Container):
         # 2. Kiểm tra hạn sử dụng của Cache
         if cached_location and (current_time - last_sync < TTL):
             self.location_text.value = cached_location
-            try: self.location_text.update()
+            try: 
+                
+                if self.location_text.page:
+                    self.location_text.update()
             except Exception: pass
             return # Dừng luôn, không gọi GPS hay API nữa
 
         # 3. Nếu Cache hết hạn, hiển thị trạng thái đang tải
         self.location_text.value = "Đang định vị..."
-        try: self.location_text.update()
+        try: 
+            if self.location_text.page:
+                self.location_text.update()
         except Exception: pass
 
         headers = {"User-Agent": "AuEdu_PC_App (chanhhiep.vn@gmail.com)"}
@@ -141,7 +146,8 @@ class BaseDashboard(ft.Container):
             # Kiểm tra dịch vụ vị trí hệ thống
             if not await self.geo.is_location_service_enabled():
                 self.location_text.value = cached_location if cached_location else "GPS đang tắt"
-                self.location_text.update()
+                if self.location_text.page:
+                    self.location_text.update()
                 return
 
             # Kiểm tra và xin quyền (Dùng Enum đã import trực tiếp)
@@ -151,14 +157,16 @@ class BaseDashboard(ft.Container):
             
             if p not in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
                 self.location_text.value = cached_location if cached_location else "Cần cấp quyền GPS"
-                self.location_text.update()
+                if self.location_text.page:
+                    self.location_text.update()
                 return
 
             # Lấy tọa độ hiện tại
             pos = await self.geo.get_current_position()
             if not pos:
                 self.location_text.value = cached_location if cached_location else "Lỗi GPS"
-                self.location_text.update()
+                if self.location_text.page:
+                    self.location_text.update()
                 return
 
             # Reverse Geocode để lấy tên địa danh
@@ -190,7 +198,8 @@ class BaseDashboard(ft.Container):
                     
                     # Cập nhật UI
                     self.location_text.value = location_str
-                    self.location_text.update()
+                    if self.location_text.page:
+                        self.location_text.update()
                     
                     # 4. LƯU CACHE MỚI
                     await prefs.set("app_location", location_str)
@@ -202,12 +211,14 @@ class BaseDashboard(ft.Container):
                         self.app_page.update()
                 else:
                     self.location_text.value = cached_location if cached_location else "Vị trí không xác định"
-                    self.location_text.update()
+                    if self.location_text.page:
+                        self.location_text.update()
 
         except Exception as e:
             print(f"Lỗi định vị: {e}")
             self.location_text.value = cached_location if cached_location else "Lỗi kết nối"
-            self.location_text.update()
+            if self.location_text.page:
+                self.location_text.update()
     
     async def init_app_settings(self):
         prefs = ft.SharedPreferences()

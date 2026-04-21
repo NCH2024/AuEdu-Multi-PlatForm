@@ -12,11 +12,15 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 security = HTTPBearer()
 
-async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def verify_token(credentials: HTTPAuthorizationCredentials | str = Depends(security)):
     """
-    Hàm này tự động đọc Header 'Authorization: Bearer <token>' từ Client gửi lên.
+    Tự động đọc Header từ API hoặc nhận chuỗi token trực tiếp từ WebSocket.
     """
-    token = credentials.credentials
+    # Xử lý thông minh: Nếu là chuỗi (từ WS) thì dùng luôn, nếu là Object (từ API) thì trích xuất
+    if isinstance(credentials, str):
+        token = credentials
+    else:
+        token = credentials.credentials
     
     async with httpx.AsyncClient() as client:
         response = await client.get(
@@ -30,5 +34,4 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
     if response.status_code != 200:
         raise HTTPException(status_code=401, detail="Token không hợp lệ hoặc đã hết hạn")
         
-    # Nếu thành công, trả về thông tin user đã giải mã từ Supabase
     return response.json()

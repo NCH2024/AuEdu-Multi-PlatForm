@@ -129,8 +129,11 @@ async def handle_attendance_frame(
         recognized.append({
             "id": str(sv.id),
             "name": f"{sv.hodem} {sv.ten}".strip(),
+            "mssv": sv.mssv, # Bổ sung thêm để Card hiển thị mã số
             "time": datetime.datetime.now().strftime("%H:%M:%S"),
-            "score": float(score) # Trả về cho client xem (tuỳ chọn)
+            "status": "Có mặt", 
+            "score": round(float(score), 2), 
+            "vitri": vitri or "Tại lớp"
         })
 
     if recognized:
