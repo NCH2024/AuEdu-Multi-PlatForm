@@ -172,28 +172,61 @@ class AttendanceSessionPage(ft.Container):
 
     async def receive_ws_messages(self):
         try:
-            async for message in self.ws:
+            while self.ws_connected and self.ws:
+                message = await self.ws.recv()
                 data = json.loads(message)
+                
+                # CHỈ CẦN GỌI ĐÚNG 1 DÒNG NÀY, để hàm bên dưới lo liệu
                 if data.get("status") == "success":
-                    for student_data in data.get("students", []):
-                        target_id = student_data.get("id")
-                        
-                        # BÍ QUYẾT: Ép kiểu ID về String để so sánh chính xác tuyệt đối
-                        for student in self.real_students:
-                            if str(student.get("id")) == str(target_id):
-                                # Cập nhật dữ liệu mới vào danh sách local
-                                student["trang_thai"] = student_data.get("status")
-                                student["score"] = student_data.get("score")
-                                student["time"] = student_data.get("time")
-                                break
-                    if self.student_grid.page:
-                        await self.update_student_grid()
+                    await self.update_scanned_ui(data.get("students", []))
                     
-        except websockets.exceptions.ConnectionClosed:
-            print("[Client] Mất kết nối WebSocket. Đang thử lại...")
-            self.ws_connected = False
         except Exception as e:
-            print(f"[Client] Lỗi xử lý tin nhắn: {e}")
+            print(f"[Client] WS Nhận tin nhắn bị lỗi: {e}")
+            self.ws_connected = False
+
+    async def update_scanned_ui(self, recognized_students):
+        updated = False
+        for rec_sv in recognized_students:
+            rec_id = str(rec_sv.get("id", rec_sv.get("sv_id", "")))
+            is_new = rec_sv.get("is_new", False) # Đọc cờ từ Server
+            
+            for sv in self.real_students: 
+                if str(sv["id"]) == rec_id:
+                    if is_new:
+                        # 1. Đổi trạng thái trong lưới tổng
+                        sv["trang_thai_diem_danh"] = "Có mặt" 
+                        
+                        # 2. Xóa khỏi danh sách thẻ (nếu trước đó đã có) để chống bị trùng lặp
+                        self.scanned_session_students = [s for s in self.scanned_session_students if str(s["id"]) != rec_id]
+                        
+                        # 3. Nhét lên VỊ TRÍ ĐẦU TIÊN (index 0)
+                        self.scanned_session_students.insert(0, {
+                            "id": sv["id"],
+                            "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
+                            "time": rec_sv.get("time", datetime.now().strftime("%H:%M:%S"))
+                        })
+                        updated = True
+                        
+                        # Báo hiệu xanh lá
+                        show_top_notification(self.app_page, "Điểm danh thành công", f"Đã ghi nhận: {sv.get('ten')}", color=ft.Colors.GREEN_600, sound="S")
+                        
+                    else:
+                        # Vẫn tìm thấy nhưng is_new = False -> Đã điểm danh rồi!
+                        show_top_notification(self.app_page, "Đã quét", f"{sv.get('ten')} đã điểm danh trước đó!", color=ft.Colors.ORANGE_500)
+                    
+                    break # Thoát vòng lặp tìm kiếm sinh viên
+        
+        # Chỉ vẽ lại khi thực sự có thay đổi để tránh giật lag
+        if updated:
+            if self.show_grid:
+                self.list_grid_container.content = self.build_student_grid()
+            else:
+                self.list_grid_container.content = self.build_scanned_list()
+            
+            try:
+                self.list_grid_container.update()
+            except Exception:
+                pass
 
     async def handle_camera_change(self, e=None):
         prefs = ft.SharedPreferences()
@@ -465,22 +498,28 @@ class AttendanceSessionPage(ft.Container):
         return ft.Container(content=main_layout, padding=2 if self.is_desktop else 5, expand=True)
     
     async def send_frame_to_server(self, frame_base64: str):
-        if self.ws_connected and self.ws:
-            # Tạo một device_id cơ bản để phân biệt thiết bị
+        # THÊM DÒNG NÀY ĐỂ DEBUG:
+        print(f"[Client] Đang thử gửi frame... ws_connected: {self.ws_connected}")
+        
+        # Nếu đang bị pause thì không gửi
+        if getattr(self, "is_paused", False):
+            return
+
+        if self.ws_connected and getattr(self, "ws", None):
             device_id = self.app_page.session_id if hasattr(self.app_page, 'session_id') else "unknown_device"
             
             payload = {
                 "image": frame_base64,
                 "mode": self.mode,
                 "tkb_tiet_id": self.tkb_tiet_id,
-                "date": self.attendance_date,
-                
-                # --- THÊM CÁC TRƯỜNG DỮ LIỆU MỚI ĐỂ KHỚP VỚI CSDL ---
-                "vitri": "Phòng học hiện tại", # Có thể nâng cấp gọi thư viện GPS sau
+                # Chú ý: Đảm bảo self.attendance_date có tồn tại, nếu không có thể thay bằng chuỗi ngày hôm nay
+                "date": getattr(self, "attendance_date", datetime.now().strftime("%Y-%m-%d")),
+                "vitri": "Phòng học hiện tại", 
                 "device_id": device_id,
                 "client_version": "1.0.0"
             }
             try:
+                # SỬA LẠI THÀNH DÒNG NÀY NẾU DÙNG THƯ VIỆN websockets BẤT ĐỒNG BỘ:
                 await self.ws.send(json.dumps(payload))
             except Exception as e:
                 print(f"[Client] Lỗi khi gửi frame: {e}")

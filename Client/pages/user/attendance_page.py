@@ -117,8 +117,11 @@ class AttendancePage(ft.Container):
         self.app_page.run_task(self.initialize_page)
 
     def will_unmount(self):
-        self.app_page.floating_action_button = None
-        self.app_page.update()
+        try:
+            if self.app_page.views:
+                self.app_page.floating_action_button = None
+        except Exception:
+            pass
 
     def apply_theme(self):
         self.info_lop_text.color = current_theme.secondary
