@@ -116,7 +116,7 @@ async def handle_attendance_frame(
         recognized.append({
             "id": str(sv.id),
             "name": f"{sv.hodem} {sv.ten}".strip(),
-            "mssv": sv.mssv, 
+            "id": sv.id, 
             "time": datetime.datetime.now().strftime("%H:%M:%S"),
             "status": "Có mặt", 
             "score": round(float(score), 2), 

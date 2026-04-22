@@ -16,7 +16,7 @@ API_PREFIX = "/v1"
 
 # SERVER_API_URL = "http://172.14.1.33:8000/" 
 
-SERVER_API_URL = "http://127.0.0.1:8000/" 
+SERVER_API_URL = "http://192.168.1.20:8000/" 
 # SERVER_API_URL = "http://192.168.1.5:8000/" 
 
 def get_headers():

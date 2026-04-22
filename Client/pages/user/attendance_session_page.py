@@ -39,7 +39,8 @@ class AttendanceSessionPage(ft.Container):
                 self.scanned_session_students.append({
                     "id": sv["id"],
                     "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
-                    "time": "Đã điểm danh"
+                    # Lấy thời gian từ CSDL thay vì gán cứng "Đã điểm danh"
+                    "time": sv.get("time", "Đã điểm danh") 
                 })
         
         self.ws = None
@@ -284,13 +285,11 @@ class AttendanceSessionPage(ft.Container):
         self.settings_sheet.update()
         
     def minimize_window(self, e):
-        try: self.app_page.window.minimized = True
-        except: self.app_page.window_minimized = True
+        self.app_page.window.minimized = True
         self.app_page.update()
 
     def toggle_maximize(self, e):
-        try: self.app_page.window.maximized = not self.app_page.window.maximized
-        except: self.app_page.window_maximized = not getattr(self.app_page, "window_maximized", False)
+        self.app_page.window.maximized = not self.app_page.window.maximized
         self.app_page.update()
 
     def build_student_grid(self):

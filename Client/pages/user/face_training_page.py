@@ -111,6 +111,8 @@ class FaceTrainingPage(ft.Container):
             bgcolor=current_theme.accent, height=45, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
             on_click=self.start_training, disabled=True
         )
+        
+        self.txt_current_student = ft.Text("CHƯA CHỌN SINH VIÊN", color=ft.Colors.RED_500, weight=ft.FontWeight.BOLD, size=14)
 
         self.step_indicator_row = ft.Row(wrap=True, alignment=ft.MainAxisAlignment.CENTER, spacing=15)
         self.step_wrapper = ft.Container(content=self.step_indicator_row, alignment=ft.Alignment(0, 0))
@@ -229,7 +231,10 @@ class FaceTrainingPage(ft.Container):
                 ft.Container(height=5),
                 self.step_wrapper, 
                 ft.Container(height=5),
-                self.btn_start
+                ft.Column([
+                    ft.Row([ft.Text("Đang chọn:", size=13, color=current_theme.text_muted), self.txt_current_student], alignment=ft.MainAxisAlignment.CENTER),
+                    self.btn_start
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
             ])
         )
 
@@ -382,6 +387,11 @@ class FaceTrainingPage(ft.Container):
         control.border = ft.Border.all(2, current_theme.accent)
         self.selected_student = sv
         self.btn_start.disabled = False
+        
+        # Cập nhật Label
+        self.txt_current_student.value = f"{sv['name']} - {sv['id']}"
+        self.txt_current_student.color = ft.Colors.GREEN_600
+        
         show_top_notification(self.app_page, "Đã chọn", f"Sinh viên: {sv['name']}", ft.Colors.BLUE_600)
         self.update()
 
@@ -400,71 +410,72 @@ class FaceTrainingPage(ft.Container):
         self.update()
         
         await self.camera_view.start_camera()
-        await asyncio.sleep(1)
+        await asyncio.sleep(2.5) # Tăng lên 2.5s để Camera "bình tĩnh" khởi động ánh sáng
 
         target_frames = len(self.step_texts)
         for i in range(target_frames):
             requested_pose = self.step_texts[i]
-            self.step_states[i] = "active"
-            self._update_step_ui()
+            step_success = False # Biến cờ ép buộc hoàn thành
             
-            # Đổi chữ ở nút to bên dưới cho rõ ràng
-            self.btn_start.content = ft.Text(f"ĐANG XỬ LÝ: {requested_pose.upper()}", weight="bold", color="white", size=13)
-            self.update()
-            
-            is_matched = False
-            timeout = 15 
-            start_wait = time.time()
-            
-            while not is_matched:
-                current_pose = getattr(self.camera_view, "current_pose", "N/A")
+            # Vòng lặp này sẽ giam người dùng ở góc mặt hiện tại cho đến khi nhận được ảnh hợp lệ
+            while not step_success:
+                self.step_states[i] = "active"
+                self._update_step_ui()
                 
-                # ==== KIỂM TRA TƯ THẾ ====
-                if current_pose == requested_pose:
-                    # Chuyển viên nang sang màu Primary (Xanh/Cam tùy theme)
-                    self.status_pill.bgcolor = current_theme.accent
-                    self.txt_pose_status.value = f"Tuyệt vời! Giữ nguyên"
-                    self.update()
+                self.btn_start.content = ft.Text(f"ĐANG XỬ LÝ: {requested_pose.upper()}", weight="bold", color="white", size=13)
+                self.update()
+                
+                is_matched = False
+                timeout = 10 # Cho 10s để chuẩn bị tư thế
+                start_wait = time.time()
+                
+                while not is_matched:
+                    current_pose = getattr(self.camera_view, "current_pose", "N/A")
                     
-                    # Vòng lặp đếm ngược 1s liên tục kiểm tra lại tư thế
-                    for countdown in range(1, 0, -1):
-                        self.txt_countdown.value = f"{countdown}s"
+                    if current_pose == requested_pose:
+                        self.status_pill.bgcolor = current_theme.accent
+                        self.txt_pose_status.value = f"Tuyệt vời! Giữ nguyên"
                         self.update()
                         
-                        cp = getattr(self.camera_view, "current_pose", "N/A")
-                        if cp != requested_pose:
-                            break # Nếu mặt bị lệch trong lúc đếm -> Hủy đếm ngược
-                        await asyncio.sleep(0.5)
+                        for countdown in range(1, 0, -1):
+                            self.txt_countdown.value = f"{countdown}s"
+                            self.update()
+                            cp = getattr(self.camera_view, "current_pose", "N/A")
+                            if cp != requested_pose:
+                                break 
+                            await asyncio.sleep(0.5)
+                        else:
+                            is_matched = True
                     else:
-                        # Nếu vòng for chạy mượt mà không bị break => Hoàn thành!
-                        is_matched = True
-                else:
-                    # Sai tư thế -> Viên nang Đỏ
-                    self.status_pill.bgcolor = ft.Colors.RED_500
-                    self.txt_pose_status.value = f"Đang thấy: {current_pose}"
-                    self.txt_countdown.value = "--"
-                    self.update()
-                
-                if not is_matched:
-                    if time.time() - start_wait > timeout:
-                        show_top_notification(self.app_page, "Hết thời gian", f"Không nhận diện được {requested_pose}", ft.Colors.ORANGE_500, sound="E")
-                        break
-                    await asyncio.sleep(0.2)
+                        self.status_pill.bgcolor = ft.Colors.RED_500
+                        self.txt_pose_status.value = f"Đang thấy: {current_pose}"
+                        self.txt_countdown.value = "--"
+                        self.update()
+                    
+                    if not is_matched:
+                        if time.time() - start_wait > timeout:
+                            break # Hết 10s không làm được -> Thoát vòng lặp chờ để báo lỗi
+                        await asyncio.sleep(0.2)
 
-            # CHỤP ẢNH KHI MATCH
-            if is_matched:
-                base64_frame = await self.camera_view.get_current_frame_base64()
-                if base64_frame:
-                    self.captured_frames.append(base64_frame)
-                    self.step_states[i] = "success"
-                    show_top_notification(self.app_page, "Đã bắt", requested_pose, ft.Colors.GREEN_600, sound="S")
+                # CHỤP ẢNH KHI MATCH
+                if is_matched:
+                    base64_frame = await self.camera_view.get_current_frame_base64()
+                    if base64_frame:
+                        self.captured_frames.append(base64_frame)
+                        self.step_states[i] = "success"
+                        step_success = True # CỜ LẬT -> THOÁT VÒNG LẶP WHILE, ĐI TỚI GÓC TIẾP THEO
+                        show_top_notification(self.app_page, "Đã bắt", requested_pose, ft.Colors.GREEN_600, sound="S")
+                    else:
+                        self.step_states[i] = "error"
                 else:
+                    # Nếu hết giờ mà làm sai -> Báo lỗi và chạy lại vòng lặp của chính góc này
                     self.step_states[i] = "error"
-            else:
-                self.step_states[i] = "error"
+                    self._update_step_ui()
+                    show_top_notification(self.app_page, "Lỗi góc mặt", f"Mặt không khớp! Vui lòng làm lại góc: {requested_pose}", ft.Colors.ORANGE_500, sound="E")
+                    await asyncio.sleep(2) # Nghỉ ngơi 2s trước khi hệ thống bắt quét lại góc đó
 
-            self._update_step_ui()
-            await asyncio.sleep(0.5)
+                self._update_step_ui()
+                await asyncio.sleep(0.5)
 
         # GỬI LÊN DATABASE
         try:
@@ -474,8 +485,13 @@ class FaceTrainingPage(ft.Container):
                 "gv_id": self.gv_id,
                 "images": self.captured_frames
             })
-            res.raise_for_status()
             
+            if res.status_code != 200:
+                # Đọc chi tiết lỗi từ FastAPI trả về
+                error_detail = res.json().get("detail", "Lỗi không xác định từ Server")
+                raise ValueError(error_detail) # Ném lỗi ra để khối except bắt lấy
+
+            # Nếu thành công (200 OK) thì đi tiếp
             self.selected_student["has_data"] = True
             prefs = ft.SharedPreferences()
             
@@ -487,7 +503,11 @@ class FaceTrainingPage(ft.Container):
                 
             show_top_notification(self.app_page, "Thành công", "Dữ liệu đã được cập nhật!", ft.Colors.BLUE_600, sound="S")
             
+        except ValueError as ve:
+            # Bắt riêng lỗi Trùng lặp (do mình ném ra ở trên) để hiện màu Cam cảnh báo
+            show_top_notification(self.app_page, "Cảnh báo dữ liệu", str(ve), ft.Colors.ORANGE_500, sound="E", duration_ms=6000)
         except Exception as ex:
+            # Bắt các lỗi mạng
             show_top_notification(self.app_page, "AuEdu - Lỗi API", str(ex), ft.Colors.RED_500, sound="E")
 
         # ==========================================

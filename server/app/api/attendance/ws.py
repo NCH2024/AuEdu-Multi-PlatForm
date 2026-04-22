@@ -17,17 +17,17 @@ async def attendance_websocket(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        # 1. Giải mã token an toàn
+        # Nếu verify_token ném HTTPException(403), bắt lỗi lại ở đây
         user_payload = await verify_token(token)
-    except HTTPException:
-        await websocket.close(code=1008, reason="Token không hợp lệ")
-        return
     except Exception as e:
-        print(f"[WS] Lỗi xác thực: {e}")
-        await websocket.close(code=1011, reason="Lỗi máy chủ nội bộ")
+        print(f"[WS] Lỗi xác thực Token: {e}")
+        # Chấp nhận kết nối tạm thời chỉ để gửi mã lỗi đóng, tránh lỗi 403 handshake
+        await websocket.accept() 
+        await websocket.close(code=1008, reason="Token không hợp lệ hoặc đã hết hạn")
         return
-            
+        
     if not user_payload:
+        await websocket.accept()
         await websocket.close(code=1008, reason="Token không hợp lệ")
         return
         

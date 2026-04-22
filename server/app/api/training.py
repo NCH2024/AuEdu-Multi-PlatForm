@@ -123,10 +123,29 @@ async def enroll_face_data(
     req: FaceEnrollRequest, db: AsyncSession = Depends(get_db)
 ):
     try:
-        # 1️⃣ Lấy embedding trung bình từ AI
+        # Lấy embedding trung bình từ AI
         fused = face_engine.extract_fused_embedding(req.images)
 
-        # 2️⃣ UPSERT vào bảng FaceEmbedding
+        # RÀ SOÁT TRÙNG LẶP (DUPLICATE CHECK)
+        # Giới hạn cosine_distance. Khoảng cách < 0.35 thường được coi là cùng 1 người.
+        threshold = 0.35 
+        distance = FaceEmbedding.embedding.cosine_distance(fused)
+        
+        check_stmt = (
+            select(FaceEmbedding.sv_id, distance.label('score'))
+            .where(FaceEmbedding.sv_id != req.sv_id) # Bỏ qua data cũ của chính nó (nếu sinh viên này cập nhật lại mặt)
+            .order_by(distance)
+            .limit(1)
+        )
+        
+        check_res = await db.execute(check_stmt)
+        match = check_res.first()
+        
+        if match and match.score < threshold:
+            # Nếu tìm thấy một vector quá sát
+            raise ValueError(f"Hệ thống phát hiện khuôn mặt này TRÙNG LẶP với dữ liệu của Sinh viên ID {match.sv_id} (Độ lệch {match.score:.2f}). Vui lòng kiểm tra lại sinh viên!")
+
+        # Không trùng lặp -> UPSERT vào bảng FaceEmbedding bình thường
         stmt = insert(FaceEmbedding).values(
             sv_id=req.sv_id,
             embedding=fused,
@@ -138,12 +157,14 @@ async def enroll_face_data(
                 "embedding": fused,
                 "trained_by": req.gv_id,
                 "updated_at": text("now()"),
+                "model_version": "mobilefacenet_model_best.pth"
             },
         )
         await db.execute(stmt)
         await db.commit()
         return {"status": "success", "message": "Cập nhật dữ liệu khuôn mặt thành công!"}
     except ValueError as ve:
+        # Lỗi mình tự raise sẽ bay ra đây, trả về 400 Client Error
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         print(f"[API Enroll Lỗi] {e}")
