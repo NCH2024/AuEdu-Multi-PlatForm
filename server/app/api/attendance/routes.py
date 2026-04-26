@@ -148,7 +148,7 @@ async def update_attendance_manual(payload: UpdateManualReq, db: AsyncSession = 
                 tkb_tiet_id=payload.tkb_tiet_id,
                 ngay_diem_danh=target_date,
                 trang_thai=payload.new_status,
-                vitri="Cập nhật thủ công bởi GV"
+                vitri="Cập nhật thủ công bởi GV",           
             )
             db.add(new_record)
 

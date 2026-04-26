@@ -96,7 +96,12 @@ async def handle_attendance_frame(
 
     for emb in embeddings:
         match, score = await _find_best_match(emb, db)
-        if not match: continue
+        
+        # NGƯỠNG AN TOÀN (THRESHOLD):
+        # Khoảng cách Cosine của pgvector (0.0: giống hệt, 2.0: hoàn toàn khác).
+        # InsightFace thường dùng ngưỡng distance < 0.65 để xác nhận là cùng 1 người.
+        if not match or float(score) > 0.65: 
+            continue
 
         sv_id = match.sv_id
         sv = await db.scalar(select(SinhVien).where(SinhVien.id == sv_id))

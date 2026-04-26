@@ -16,8 +16,6 @@ from pages.user.attendance_session_page import AttendanceSessionPage
 from pages.user.face_training_page import FaceTrainingPage
 from pages.user.attendance_history_page import AttendanceHistoryPage
 from pages.user.student_search_page import StudentSearchPage
-
-
 import core.theme as theme_module
 
 DEBUG_LOADING = False
@@ -49,6 +47,13 @@ async def main(page: ft.Page):
             system_navigation_bar_icon_brightness=theme_module.current_theme.text_main
         )
     )
+    
+    # --- KHỞI ĐỘNG HỆ THỐNG QUẢN LÝ THIẾT BỊ & XIN QUYỀN ---
+    from core.device_manager import DeviceManager
+    dev_manager = DeviceManager.get_instance()
+    await dev_manager.init_device(page)
+    # ------------------------------------------------------
+    
     page.theme_mode = ft.ThemeMode.LIGHT 
     page.padding = 0 
     page.bgcolor = theme_module.current_theme.bg_color

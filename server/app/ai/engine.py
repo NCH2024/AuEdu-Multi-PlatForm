@@ -1,189 +1,165 @@
-# Server_Core/app/ai/engine.py
 import cv2
 import numpy as np
-import torch
 import base64
-import os
-from torchvision import transforms
-import torch.nn.functional as F
-
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
+import insightface
+from insightface.app import FaceAnalysis
+import onnxruntime as ort
+from app.ai.calibration import CameraCalibrator
 
 class FaceEngine:
     def __init__(self):
-        # 1. Khởi tạo thiết bị tính toán (Ưu tiên GPU nếu có)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"[AI Core] Đang khởi động lõi AI trên thiết bị: {self.device.type.upper()}")
+        print("[AI Core] Đang khởi động lõi AI bằng InsightFace...")
         
-        # 2. Định nghĩa các bộ tiền xử lý ảnh (Pipelines)
-        # MobileFaceNet yêu cầu ảnh 112x112, chuẩn hóa (mean=0.5, std=0.5)
-        self.face_transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize((112, 112)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-        ])
+        # 1. Khởi tạo InsightFace với model buffalo_s (RetinaFace dò tìm + MobileFaceNet/ArcFace 512D)
+        # Model 'buffalo_s' rất nhẹ và chính xác, phù hợp cho triển khai thực tế đa môi trường.
+        self.app = FaceAnalysis(name='buffalo_s', root='~/.insightface/models')
         
-        # Mini-FASNet V2 thường dùng ảnh 80x80
-        self.fas_transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize((80, 80)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-
-        # 3. Load Trọng số Mô hình (Tạm thời dùng dummy_model nếu thiếu file cấu trúc class)
-        self.fas_model = self._load_model("MiniFASNetV2.pth", is_fas=True)
-        self.face_model = self._load_model("mobilefacenet_model_best.pth", is_fas=False)
+        # Tự động nhận diện thiết bị (GPU/CPU)
+        providers = ort.get_available_providers()
+        ctx_id = 0 if 'CUDAExecutionProvider' in providers else -1
         
-        print("[AI Core] Hệ thống nhận diện đã sẵn sàng!")
-
-    def _load_model(self, filename, is_fas):
-        """Hàm hỗ trợ load model an toàn"""
-        path = os.path.join(MODEL_DIR, filename)
-        if not os.path.exists(path):
-            print(f"[Cảnh báo] Không tìm thấy {filename}. Sẽ chạy ở chế độ giả lập (Dummy Mode).")
-            return None
-            
-        try:
-            # Lưu ý: Lệnh torch.load đối với file .pth dạng state_dict cần có class mạng nơ-ron
-            checkpoint = torch.load(path, map_location=self.device)
-            print(f"[AI Core] Tải thành công {filename}")
-            return checkpoint
-        except Exception as e:
-            print(f"[Lỗi load model {filename}]: {e}")
-            return None
-
-    def detect_spoof(self, image_rgb: np.ndarray) -> bool:
-        """Kiểm tra ảnh giả mạo (Anti-Spoofing)"""
-        if self.fas_model is None:
-            return True # Giả lập: Luôn là người thật nếu chưa có model
-            
-        try:
-            # Tiền xử lý
-            tensor_img = self.fas_transform(image_rgb).unsqueeze(0).to(self.device)
-            
-            # Đưa qua model (Khi có file class MiniFASNet, ta sẽ gọi self.fas_model(tensor_img))
-            # Hiện tại trả về True để test thông mạch
-            return True 
-        except Exception as e:
-            print(f"[Lỗi FAS] {e}")
-            return False
-
-    def extract_embedding(self, image_rgb: np.ndarray) -> list:
-        """Trích xuất vector 512 chiều từ khuôn mặt"""
-        try:
-            if self.face_model is not None:
-                # Tiền xử lý
-                tensor_img = self.face_transform(image_rgb).unsqueeze(0).to(self.device)
-                
-                # Inference qua mạng MobileFaceNet (Cần ráp class MobileFaceNet sau)
-                # with torch.no_grad():
-                #     features = self.face_model(tensor_img)
-                #     features = F.normalize(features, p=2, dim=1)
-                #     return features.cpu().numpy().flatten().tolist()
-            
-            # --- CHẾ ĐỘ TEST KHI CHƯA RÁP CLASS ---
-            # Trả về một vector giả 512 chiều được chuẩn hóa (L2-Norm)
-            dummy_vec = np.random.rand(512).astype(np.float32)
-            dummy_vec = dummy_vec / np.linalg.norm(dummy_vec)
-            return dummy_vec.tolist()
-            
-        except Exception as e:
-            print(f"[Lỗi FaceNet] {e}")
-            return np.zeros(512, dtype=np.float32).tolist()
+        # Cấu hình ctx_id (0: GPU đầu tiên, -1: CPU) và kích thước dò tìm
+        self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+        device_name = "GPU" if ctx_id == 0 else "CPU"
+        print(f"[AI Core] Đã cấu hình InsightFace chạy trên: {device_name}")
         
+        # 2. Khởi tạo bộ Calibration chống méo ảnh góc rộng
+        self.calibrator = CameraCalibrator()
+        
+        print("[AI Core] Hệ thống nhận diện chuẩn công nghiệp đã sẵn sàng!")
+
+    def evaluate_fiqa(self, face_crop: np.ndarray) -> float:
+        """
+        Đánh giá chất lượng khuôn mặt (Face Image Quality Assessment - FIQA).
+        Thuật toán: Tính phương sai của ma trận đạo hàm bậc 2 (Laplacian) để đo độ sắc nét.
+        Trả về: Điểm từ 0.0 đến 1.0.
+        """
+        if face_crop is None or face_crop.size == 0:
+            return 0.0
+            
+        # Chuyển đổi sang ảnh xám
+        gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
+        
+        # Tính toán Laplacian Variance (độ sắc nét)
+        laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+        
+        # Giả định ngưỡng 200.0 là sắc nét đối với webcam thông thường.
+        score = laplacian_var / 200.0
+        
+        # Giới hạn trần ở 1.0
+        return float(min(score, 1.0))
+
     def extract_fused_embedding(self, base64_images: list) -> list:
-        """Nhận vào mảng Base64, chống giả mạo, và hợp nhất Vector bằng Average Pooling"""
+        """
+        Mean Aggregation (Pha Đào tạo - Enrollment):
+        Nhận vào 1 danh sách 10-15 ảnh Base64 của cùng 1 người.
+        Giải méo, dò mặt, trích xuất vector 512D, sau đó tính trung bình (np.mean)
+        và L2-Normalization để tạo ra 1 siêu vector (Anchor) duy nhất đại diện cho người đó.
+        """
         embeddings = []
         
         for b64 in base64_images:
             try:
-                # 1. Giải mã Base64 sang ảnh OpenCV
+                # 1. Giải mã Base64
                 img_data = base64.b64decode(b64.split(",")[1] if "," in b64 else b64)
                 np_arr = np.frombuffer(img_data, np.uint8)
-                img_cv2 = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-                img_rgb = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
+                frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                if frame is None:
+                    continue
                 
-                # 2. Kiểm tra giả mạo cho TỪNG ẢNH
-                if not self.detect_spoof(img_rgb):
-                    raise ValueError("Phát hiện giả mạo khuôn mặt trong ảnh lấy mẫu!")
+                # 2. Giải méo quang học
+                frame = self.calibrator.undistort_image(frame)
+                
+                # 3. Dò tìm khuôn mặt (Trả về BGR, InsightFace yêu cầu BGR theo mặc định cv2)
+                faces = self.app.get(frame)
+                
+                if len(faces) == 0:
+                    continue
                     
-                # 3. Trích xuất Vector
-                emb = self.extract_embedding(img_rgb)
+                # 4. Lấy khuôn mặt to nhất (nhân vật chính)
+                # bounding box format: [x1, y1, x2, y2]
+                faces.sort(key=lambda x: (x.bbox[2]-x.bbox[0]) * (x.bbox[3]-x.bbox[1]), reverse=True)
+                target_face = faces[0]
+                
+                # Trích xuất vector 512D (đã tự động được l2 normalize trong insightface)
+                emb = target_face.normed_embedding
                 embeddings.append(emb)
+                
             except Exception as e:
-                print(f"[AI Lỗi Xử Lý Ảnh] {e}")
-                continue # Nếu lỗi 1 ảnh, bỏ qua ảnh đó chụp các ảnh khác
+                print(f"[AI Extract Lỗi] {e}")
+                continue 
                 
         if not embeddings:
             raise ValueError("Không thể trích xuất được khuôn mặt hợp lệ từ các ảnh được gửi!")
 
-        # 4. TÍNH TOÁN AVERAGE POOLING VÀ L2 NORMALIZE
-        # Chuyển list python sang numpy array: kích thước (N, 512)
+        # 5. MEAN AGGREGATION & L2-NORMALIZATION
         arr_embeddings = np.array(embeddings, dtype=np.float32)
-        
-        # Lấy trung bình theo trục dọc (axis=0) để ra 1 vector duy nhất 512 chiều
         mean_vector = np.mean(arr_embeddings, axis=0)
-        
-        # Chuẩn hóa L2-Normalization (Vector đưa về độ dài = 1)
         final_vector = mean_vector / np.linalg.norm(mean_vector)
         
         return final_vector.tolist()
     
     def process_attendance_frame(self, b64_image: str, mode: str = "1"):
         """
-        Xử lý frame điểm danh:
-        - mode="1": Chỉ lấy người gần nhất (diện tích mặt lớn nhất)
-        - mode="all": Lấy tất cả khuôn mặt phát hiện được
+        Pha Điểm danh (Inference): Xử lý frame thời gian thực gửi từ WebSockets.
+        Tích hợp Calibration, InsightFace Detection + ArcFace, và FIQA.
         """
         try:
             # 1. Giải mã ảnh
             img_data = base64.b64decode(b64_image.split(",")[1] if "," in b64_image else b64_image)
             np_arr = np.frombuffer(img_data, np.uint8)
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            if frame is None: return []
             
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            ih, iw, _ = frame.shape
-
-            # 2. SỬ DỤNG 'with' ĐỂ TỰ ĐỘNG DỌN DẸP BỘ NHỚ (CHỐNG TRÀN RAM XNNPACK)
-            import mediapipe as mp
-            with mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5) as face_detection:
-                results = face_detection.process(rgb_frame)
-
-                face_list = []
-                if results.detections:
-                    for detection in results.detections:
-                        bbox = detection.location_data.relative_bounding_box
-                        x, y, w, h = int(bbox.xmin * iw), int(bbox.ymin * ih), int(bbox.width * iw), int(bbox.height * ih)
-                        
-                        # Đảm bảo tọa độ hợp lệ
-                        x, y = max(0, x), max(0, y)
-                        w, h = min(iw - x, w), min(ih - y, h)
-                        area = w * h
-                        
-                        # Cắt khuôn mặt (có padding) để lấy embedding
-                        pad = int(w * 0.15)
-                        face_crop = frame[max(0, y-pad):min(ih, y+h+pad), max(0, x-pad):min(iw, x+w+pad)]
-                        
-                        if face_crop.size > 0:
-                            embedding = self.extract_embedding(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
-                            face_list.append({"embedding": embedding, "area": area})
-
-            # 3. Áp dụng Logic Mode
-            if not face_list: return []
+            if frame is None: 
+                return []
             
+            # 2. Tiền xử lý: Kéo phẳng ảnh (Undistort) để tránh sai lệch ở góc rộng
+            frame = self.calibrator.undistort_image(frame)
+            ih, iw = frame.shape[:2]
+
+            # 3. Dò tìm toàn bộ khuôn mặt trong khung hình
+            faces = self.app.get(frame)
+            
+            face_list = []
+            for face in faces:
+                bbox = face.bbox.astype(int)
+                x1, y1, x2, y2 = bbox
+                
+                # Giới hạn tọa độ hợp lệ
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(iw, x2), min(ih, y2)
+                
+                # Kiểm tra diện tích
+                area = (x2 - x1) * (y2 - y1)
+                if area <= 0: continue
+                
+                # 4. FIQA - Cắt ảnh khuôn mặt để đo độ nét
+                face_crop = frame[y1:y2, x1:x2]
+                fiqa_score = self.evaluate_fiqa(face_crop)
+                
+                # 5. Bộ lọc FIQA: Bỏ qua các ảnh quá mờ nhòe (ngưỡng 0.05 tương đương độ nét cơ bản của Webcam)
+                if fiqa_score >= 0.05:
+                    face_list.append({
+                        "embedding": face.normed_embedding.tolist(),
+                        "area": area,
+                        "fiqa": fiqa_score
+                    })
+
+            if not face_list: 
+                return []
+            
+            # 6. Trả về theo cấu hình Mode (1 người hay Toàn lớp)
             if mode == "1":
-                # Sắp xếp theo diện tích giảm dần, lấy mặt to nhất (gần nhất)
+                # Lấy mặt to nhất (gần camera nhất)
                 face_list.sort(key=lambda x: x["area"], reverse=True)
                 return [face_list[0]["embedding"]]
             else:
-                # Trả về toàn bộ danh sách vector
+                # Lấy tất cả
                 return [f["embedding"] for f in face_list]
 
         except Exception as e:
             print(f"[AI Engine Attendance Error] {e}")
             return []
 
+# Khởi tạo thể hiện Singleton để sử dụng toàn cục
 face_engine = FaceEngine()

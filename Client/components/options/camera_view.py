@@ -315,6 +315,7 @@ class CameraView(ft.Container):
                 # --- TỐI ƯU 3: CHO AI CHẠY NGẦM BẰNG to_thread ĐỂ KHÔNG BLOCK GIAO DIỆN ---
                 results = await asyncio.to_thread(self.face_detection.process, rgb_small)
                 
+                frame_to_send = None
                 if results and results.detections:
                     for detection in results.detections:
                         # Tọa độ trả về là tỷ lệ phần trăm (0.0 -> 1.0), nên ta nhân lại với iw, ih của khung hình GỐC
@@ -326,15 +327,11 @@ class CameraView(ft.Container):
                         w, h = min(iw - x, w), min(ih - y, h)
                         
                         self._draw_flat_bounding_box(frame, x, y, w, h, color=(100, 200, 50))
-                        
-                        pad_x, pad_y = int(w * 0.15), int(h * 0.15)
-                        start_y, end_y = max(0, y - pad_y), min(ih, y + h + pad_y)
-                        start_x, end_x = max(0, x - pad_x), min(iw, x + w + pad_x)
-                        
-                        face_crop = self.current_frame[start_y:end_y, start_x:end_x]
-                        if face_crop.size > 0:
-                            _, buffer = cv2.imencode('.jpg', face_crop, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-                            face_crop_base64 = base64.b64encode(buffer).decode('utf-8')
+                    
+                    # Nén toàn bộ khung hình nhỏ (small_frame) để gửi cho Server
+                    # Server dùng InsightFace nên cần nguyên khung hình để dò tìm nhiều người
+                    _, buffer = cv2.imencode('.jpg', small_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                    frame_to_send = base64.b64encode(buffer).decode('utf-8')
                             
             # ==== CHẾ ĐỘ 2: ĐÀO TẠO (TRAINING) ====
             elif self.view_mode == "training" and hasattr(self, 'face_mesh'):
@@ -384,7 +381,17 @@ class CameraView(ft.Container):
                 self._last_ui_update = now
                 
             # --- Bắn qua WebSocket lên Server (Vẫn giữ lá cờ chống Spam của mình) ---
-            if face_crop_base64 and self.on_frame and not getattr(self, 'is_sending_frame', False):
+            if getattr(self, 'view_mode', '') == 'attendance' and frame_to_send and self.on_frame and not getattr(self, 'is_sending_frame', False):
+                self.is_sending_frame = True 
+                async def send_and_release():
+                    try:
+                        await self.on_frame(frame_to_send)
+                    finally:
+                        await asyncio.sleep(0.5) 
+                        self.is_sending_frame = False 
+                asyncio.create_task(send_and_release())
+                
+            elif getattr(self, 'view_mode', '') == 'training' and face_crop_base64 and self.on_frame and not getattr(self, 'is_sending_frame', False):
                 self.is_sending_frame = True 
                 async def send_and_release():
                     try:

@@ -592,5 +592,4 @@ class AttendancePage(ft.Container):
         self.app_page.update()
 
     def _show_error_snackbar(self, message: str):
-        self.app_page.overlay.append(ft.SnackBar(content=ft.Text(message), bgcolor=ft.Colors.RED_700, open=True))
-        self.app_page.update()
+        show_top_notification(self.app_page, "Lỗi", message, ft.Colors.RED_700, sound="E")

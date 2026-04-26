@@ -2,8 +2,10 @@ import flet as ft
 import asyncio
 import time
 import json
-import random
-from core.theme import current_theme, get_flat_container
+import base64
+import cv2
+import numpy as np
+from core.theme import current_theme
 from components.options.camera_view import CameraView
 from components.options.custom_dropdown import CustomDropdown
 from components.options.top_notification import show_top_notification
@@ -20,18 +22,14 @@ class FaceTrainingPage(ft.Container):
 
         self.is_desktop = self.app_page.platform not in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
 
-        # --- STATE MANAGEMENT (Bộ nhớ giao diện) ---
-        self.gv_id = "N/A"  # Lưu ID giảng viên hiện tại
+        # --- STATE MANAGEMENT ---
+        self.gv_id = "N/A"
         self.selected_student = None
         self.captured_frames = []
         self.is_training = False
         self.search_mode_val = "class"
         self.current_class_id = None
-
-        # --- QUẢN LÝ TRẠNG THÁI TIMELINE ---
-        self.step_texts = ["Trực diện", "Nghiêng Trái", "Nghiêng Phải"]
-        self.step_states = ["pending"] * 3 
-        self.step_ui_elements = [] 
+        self.target_frames = 15 # Thu thập 15 ảnh (Mean Aggregation)
 
         # --- STUDIO COMPONENTS ---
         self.dd_camera = CustomDropdown(label="Nguồn Camera", options=[])
@@ -40,56 +38,48 @@ class FaceTrainingPage(ft.Container):
         self.camera_container = ft.Container(content=self.camera_view, visible=False, expand=True, left=0, right=0, top=0, bottom=0)
         self.black_screen = ft.Container(bgcolor=ft.Colors.BLACK, expand=True, left=0, right=0, top=0, bottom=0)
         
-        # ==== UI VIÊN NANG (PILL) THÔNG BÁO TRẠNG THÁI ====
-        self.txt_countdown = ft.Text("--", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)
-        self.txt_pose_status = ft.Text("Chờ nhận diện...", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)
+        # UI Hướng dẫn (Alignment Guide)
+        # Sử dụng BoxShadow siêu lớn để tạo lớp phủ mờ có lỗ thủng (Oval) ở giữa
+        self.alignment_guide = ft.Container(
+            alignment=ft.Alignment(0, 0),
+            content=ft.Container(
+                width=300, height=400, 
+                border_radius=150, # Tạo hình Oval
+                border=ft.Border.all(3, ft.Colors.GREEN_400),
+                shadow=ft.BoxShadow(
+                    spread_radius=3000,
+                    blur_radius=0,
+                    color=ft.Colors.with_opacity(0.6, ft.Colors.BLACK)
+                )
+            ),
+            left=0, right=0, top=0, bottom=0,
+            visible=False
+        )
+        
+        self.txt_status = ft.Text("Vui lòng nhìn thẳng và giữ yên khuôn mặt", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=15)
+        self.txt_progress = ft.Text("0/15", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400, size=18)
         
         self.status_pill = ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.TIMER, color=ft.Colors.WHITE, size=16),
-                self.txt_countdown,
-                ft.Container(width=1, height=15, bgcolor=ft.Colors.WHITE_54),
-                self.txt_pose_status
-            ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
-            bgcolor=ft.Colors.RED_500, # Đỏ mặc định
-            padding=ft.Padding(15, 8, 15, 8),
-            border_radius=20,
+            content=ft.Column([
+                self.txt_status,
+                ft.Row([ft.Icon(ft.Icons.CAMERA, color=ft.Colors.WHITE), self.txt_progress], alignment=ft.MainAxisAlignment.CENTER)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
+            bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.BLACK),
+            padding=ft.Padding(15, 10, 15, 10),
+            border_radius=15,
             visible=False,
         )
         
-        # Wrapper để căn giữa viên nang ở mép dưới Camera
         self.status_pill_wrapper = ft.Container(
             content=ft.Row([self.status_pill], alignment=ft.MainAxisAlignment.CENTER),
-            bottom=15, left=0, right=0
+            bottom=20, left=0, right=0
         )
-        
-        # ---- STEP TRAINING ----
-        # Khởi tạo 2 Row riêng biệt
-        self.step_row_3 = ft.Row(wrap=True, alignment=ft.MainAxisAlignment.CENTER, spacing=15)
-        self.step_row_6 = ft.Row(wrap=True, alignment=ft.MainAxisAlignment.CENTER, spacing=15, visible=False)
-        
-        # Gom vào wrapper
-        self.step_wrapper = ft.Container(
-            content=ft.Column([self.step_row_3, self.step_row_6]), 
-            alignment=ft.Alignment(0, 0)
-        )
-        
-        self.training_mode = ft.SegmentedButton(
-            selected=["3"], 
-            allow_empty_selection=False,
-            on_change=self.handle_mode_change_training,
-            segments=[
-                ft.Segment(value="3", label=ft.Text("Cơ bản (3 góc)", size=11), icon=ft.Icon(ft.Icons.FILTER_3, size=14)),
-                ft.Segment(value="6", label=ft.Text("Chuyên sâu (6 góc)", size=11), icon=ft.Icon(ft.Icons.FILTER_6, size=14)),
-            ]
-        )
-        self.step_wrapper = ft.Container(alignment=ft.Alignment(0, 0))
 
         # --- LEFT PANEL COMPONENTS ---
         self.search_tf = ft.TextField(
             label="Nhập Mã Sinh Viên", hint_text="Nhấn Enter để tìm",
             prefix_icon=ft.Icons.SEARCH,
-            suffix=ft.IconButton(icon=ft.Icons.ARROW_FORWARD_IOS, icon_size=14, on_click=self.handle_search_student, tooltip="Tìm kiếm"),
+            suffix=ft.IconButton(icon=ft.Icons.ARROW_FORWARD_IOS, icon_size=14, on_click=self.handle_search_student),
             border_radius=8, height=45, text_size=12, content_padding=10,
             on_submit=self.handle_search_student
         )
@@ -107,28 +97,22 @@ class FaceTrainingPage(ft.Container):
         )
 
         self.btn_start = ft.Button(
-            content=ft.Row([ft.Icon(ft.Icons.FACE_RETOUCHING_NATURAL, color=ft.Colors.WHITE, size=18), ft.Text("BẮT ĐẦU ĐÀO TẠO", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)], alignment=ft.MainAxisAlignment.CENTER),
+            content=ft.Row([ft.Icon(ft.Icons.FACE_RETOUCHING_NATURAL, color=ft.Colors.WHITE, size=18), ft.Text("BẮT ĐẦU THU THẬP", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)], alignment=ft.MainAxisAlignment.CENTER),
             bgcolor=current_theme.accent, height=45, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
             on_click=self.start_training, disabled=True
         )
         
         self.txt_current_student = ft.Text("CHƯA CHỌN SINH VIÊN", color=ft.Colors.RED_500, weight=ft.FontWeight.BOLD, size=14)
 
-        self.step_indicator_row = ft.Row(wrap=True, alignment=ft.MainAxisAlignment.CENTER, spacing=15)
-        self.step_wrapper = ft.Container(content=self.step_indicator_row, alignment=ft.Alignment(0, 0))
-
         self.content = self.build_desktop_layout() if self.is_desktop else self.build_mobile_warning()
 
     def did_mount(self):
         if self.is_desktop:
             self.app_page.run_task(self.camera_view.load_available_cameras)
-            self.step_indicator_row.controls = self.build_step_indicators()
-            # Bắt đầu khởi tạo trang và gọi API
             self.app_page.run_task(self.initialize_page)
             self.update()
             
     async def initialize_page(self):
-        # Lấy session giảng viên đang đăng nhập
         prefs = ft.SharedPreferences()
         session_str = await prefs.get("user_session")
         if session_str:
@@ -141,17 +125,10 @@ class FaceTrainingPage(ft.Container):
         if self.is_desktop:
             self.app_page.run_task(self.camera_view.stop_camera)
 
-    # ══════════════════════════════════════════════════════════════════
-    # APPLY THEME - ĐỒNG BỘ THEME MƯỢT MÀ KHÔNG TẢI LẠI TRANG
-    # ══════════════════════════════════════════════════════════════════
     def apply_theme(self):
         self.bgcolor = current_theme.bg_color
         self.btn_start.bgcolor = current_theme.accent
-        self.step_indicator_row.controls = self.build_step_indicators()
-        self._update_step_ui()
         self.content = self.build_desktop_layout() if self.is_desktop else self.build_mobile_warning()
-        
-        # Phục hồi giao diện
         if self.search_mode_val == "class":
             if self.current_class_id is None:
                 self.app_page.run_task(self.load_classes)
@@ -160,25 +137,16 @@ class FaceTrainingPage(ft.Container):
         else:
             self.app_page.run_task(self.handle_search_student, None)
 
-    # ══════════════════════════════════════════════════════════════════
-    # BUILD LAYOUT
-    # ══════════════════════════════════════════════════════════════════
     def build_mobile_warning(self):
         return ft.Column(
             controls=[
             ft.Icon(ft.Icons.DESKTOP_MAC, size=80, color=current_theme.secondary),
             ft.Text("Tính năng này chỉ hỗ trợ trên PC!", size=18, weight=ft.FontWeight.BOLD, color=current_theme.secondary),
-            ft.Text("Vui lòng sữ dụng AuEdu trên nền tảng Desktop (Windows/MacOS).", color=current_theme.text_main, text_align=ft.TextAlign.CENTER, size=12),
-            ft.Divider(height=10, color=current_theme.divider_color),
-            ft.Container(height=150),
-            ft.Text("Bạn đang gặp vấn đề?", size=13, weight=ft.FontWeight.BOLD, color=current_theme.text_muted, text_align=ft.TextAlign.LEFT),
-            ft.Text("› Khuôn mặt sinh viên không khớp?\n› Không có dữ liệu nhận dạng cho sinh viên?\n› Hệ thống bị nghẽn hoặc treo? ...", size=13, color=current_theme.text_muted, text_align=ft.TextAlign.LEFT ),
-            ft.Text("››› Vui lòng kết nối lại nếu mạng chập chờn hoặc liên hệ phòng QLSV/ Quản trị hệ thống để xử lý kịp thời!", size=13, color=current_theme.text_muted, text_align=ft.TextAlign.LEFT ),
+            ft.Text("Vui lòng sử dụng AuEdu trên nền tảng Desktop (Windows/MacOS).", color=current_theme.text_main, text_align=ft.TextAlign.CENTER, size=12),
             ], 
             alignment=ft.MainAxisAlignment.CENTER, 
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
-        
 
     def build_desktop_layout(self):
         top_bar = ft.Row([
@@ -204,11 +172,8 @@ class FaceTrainingPage(ft.Container):
             border=ft.Border.all(1, current_theme.divider_color),
             content=ft.Column([
                 ft.Row([
-                    ft.Text("CAMERA NHẬN DIỆN", weight=ft.FontWeight.BOLD, size=14, color=current_theme.secondary),
-                    ft.Row([
-                        self.training_mode, 
-                        ft.Container(content=self.dd_camera, width=150)
-                    ], spacing=10)
+                    ft.Text("CAMERA THU THẬP", weight=ft.FontWeight.BOLD, size=14, color=current_theme.secondary),
+                    ft.Container(content=self.dd_camera, width=150)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 
                 ft.Container(
@@ -217,20 +182,12 @@ class FaceTrainingPage(ft.Container):
                     content=ft.Stack([
                         self.black_screen,     
                         self.camera_container,  
-                        ft.Container(
-                            alignment=ft.Alignment(0, 0),
-                            content=ft.Container(
-                                width=550, height=420, border_radius=210, 
-                                border=ft.Border.all(2, ft.Colors.WHITE_54) 
-                            )
-                        ),
+                        self.alignment_guide,
                         self.status_pill_wrapper
                     ])
                 ),
                 
-                ft.Container(height=5),
-                self.step_wrapper, 
-                ft.Container(height=5),
+                ft.Container(height=10),
                 ft.Column([
                     ft.Row([ft.Text("Đang chọn:", size=13, color=current_theme.text_muted), self.txt_current_student], alignment=ft.MainAxisAlignment.CENTER),
                     self.btn_start
@@ -240,85 +197,6 @@ class FaceTrainingPage(ft.Container):
 
         return ft.Column([top_bar, ft.Row([left_panel, right_panel], expand=True, spacing=15)])
 
-    def build_step_indicators(self):
-        self.step_ui_elements.clear()
-        indicators = []
-        for i, text in enumerate(self.step_texts):
-            step_circle = ft.Container(
-                content=ft.Text(str(i+1), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=11),
-                width=30, height=30, border_radius=15, 
-                bgcolor=ft.Colors.BLACK_54,
-                alignment=ft.Alignment(0, 0), 
-                animate=ft.Animation(300, "easeInOut")
-            )
-            step_col = ft.Column([
-                step_circle,
-                ft.Text(text, size=11, color=current_theme.text_muted)
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=3)
-            
-            self.step_ui_elements.append((step_circle, step_col.controls[1]))
-            indicators.append(step_col)
-            
-        return indicators
-
-    def _update_step_ui(self):
-        for i, (circle, text_ui) in enumerate(self.step_ui_elements):
-            state = self.step_states[i]
-            
-            if state == "pending":
-                circle.bgcolor = ft.Colors.BLACK_54
-                circle.content = ft.Text(str(i+1), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=11)
-                text_ui.color = current_theme.text_muted
-                text_ui.weight = ft.FontWeight.NORMAL
-            
-            elif state == "active":
-                circle.bgcolor = current_theme.accent
-                circle.content = ft.Text(str(i+1), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=11)
-                text_ui.color = current_theme.secondary
-                text_ui.weight = ft.FontWeight.BOLD
-                
-            elif state == "success":
-                circle.bgcolor = ft.Colors.YELLOW_700
-                circle.content = ft.Icon(ft.Icons.CHECK, color=ft.Colors.BLACK, size=16)
-                text_ui.color = ft.Colors.YELLOW_700
-                text_ui.weight = ft.FontWeight.BOLD
-                
-            elif state == "error":
-                circle.bgcolor = ft.Colors.RED_500
-                circle.content = ft.Icon(ft.Icons.CLOSE, color=ft.Colors.WHITE, size=16)
-                text_ui.color = ft.Colors.RED_500
-                text_ui.weight = ft.FontWeight.BOLD
-
-        self.update()
-
-    def handle_mode_change_training(self, e):
-        mode = list(e.control.selected)[0]
-        
-        if mode == "6":
-            self.step_texts = ["Trực diện", "Nghiêng Trái", "Nghiêng Phải", "Cười tươi", "Nhắm mắt", "Nghiêng đầu"]
-        else:
-            self.step_texts = ["Trực diện", "Nghiêng Trái", "Nghiêng Phải"]
-            
-        self.step_states = ["pending"] * len(self.step_texts)
-        
-        # 1. Tạo một Row hoàn toàn mới mỗi khi đổi mode
-        new_row = ft.Row(
-            controls=self.build_step_indicators(),
-            wrap=True, 
-            alignment=ft.MainAxisAlignment.CENTER, 
-            spacing=15
-        )
-        
-        # 2. Gán thẳng Row mới vào content của Wrapper
-        self.step_wrapper.content = new_row
-        self._update_step_ui()
-        
-        if getattr(self, "page", None):
-            self.step_wrapper.update()
-
-    # ══════════════════════════════════════════════════════════════════
-    # LOGIC CHỌN SINH VIÊN (KẾT HỢP MEMORY STATE)
-    # ══════════════════════════════════════════════════════════════════
     def handle_mode_change(self, e):
         self.search_mode_val = list(e.control.selected)[0]
         self.student_list_ui.controls.clear()
@@ -329,35 +207,11 @@ class FaceTrainingPage(ft.Container):
             self.tab_content.content = ft.Column([self.search_tf, self.student_list_ui], expand=True)
         self.update()
 
-    def load_dummy_classes(self):
-        self.current_class_id = None # Xóa trạng thái lớp hiện tại
-        self.student_list_ui.controls.clear()
-        classes = [{"id": 1, "name": "D20CQCN01-N", "siso": 50}, {"id": 2, "name": "D20CQAT01-N", "siso": 45}]
-        for c in classes:
-            self.student_list_ui.controls.append(
-                ft.Card(
-                    elevation=1, margin=0,
-                    content=ft.Container(
-                        bgcolor=current_theme.surface_color, border_radius=8, padding=2,
-                        content=ft.ListTile(
-                            leading=ft.Icon(ft.Icons.FOLDER_SHARED, color=current_theme.secondary, size=20),
-                            title=ft.Text(c["name"], weight=ft.FontWeight.BOLD, size=13),
-                            subtitle=ft.Text(f"Sĩ số: {c['siso']} sinh viên", size=11),
-                            trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=16),
-                            on_click=lambda e, cid=c["id"]: self.load_students_by_class(cid)
-                        )
-                    )
-                )
-            )
-        self.update()
-
-
     def _render_student_cards(self, svs):
         for sv in svs:
-            status_color = ft.Colors.GREEN_600 if sv["has_data"] else ft.Colors.RED_500
-            status_text = "Đã có dữ liệu" if sv["has_data"] else "Chưa có dữ liệu"
+            status_color = ft.Colors.GREEN_600 if sv.get("has_data") else ft.Colors.RED_500
+            status_text = "Đã có dữ liệu" if sv.get("has_data") else "Chưa có dữ liệu"
             
-            # Ghi nhớ viền Highlight nếu sinh viên đang được chọn (để không bị mất khi đổi Theme)
             is_selected = self.selected_student and self.selected_student["id"] == sv["id"]
             border_style = ft.Border.all(2, current_theme.accent) if is_selected else ft.Border.all(1, ft.Colors.TRANSPARENT)
             
@@ -388,154 +242,146 @@ class FaceTrainingPage(ft.Container):
         self.selected_student = sv
         self.btn_start.disabled = False
         
-        # Cập nhật Label
         self.txt_current_student.value = f"{sv['name']} - {sv['id']}"
         self.txt_current_student.color = ft.Colors.GREEN_600
         
         show_top_notification(self.app_page, "Đã chọn", f"Sinh viên: {sv['name']}", ft.Colors.BLUE_600)
         self.update()
 
-    # ══════════════════════════════════════════════════════════════════
-    # LOGIC ĐÀO TẠO THEO TIMELINE
-    # ══════════════════════════════════════════════════════════════════
+    def check_quality(self, base64_str):
+        # Hàm kiểm tra chất lượng ảnh dùng OpenCV theo tiêu chuẩn Mean Aggregation tại Client
+        try:
+            if "," in base64_str:
+                base64_str = base64_str.split(",")[1]
+                
+            img_data = base64.b64decode(base64_str)
+            np_arr = np.frombuffer(img_data, np.uint8)
+            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            if img is None:
+                return False, "Không thể đọc ảnh"
+
+            # Check 1: Độ mờ (Laplacian variance) - Chống rung/Anti-Motion Blur
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
+            if blur_score < 100:
+                return False, "Ảnh mờ, vui lòng giữ yên đầu!"
+
+            # Check 2: Khoảng cách (Diện tích khuôn mặt)
+            # Tích hợp MediaPipe (nếu có)
+            try:
+                import mediapipe as mp
+                mp_face_detection = mp.solutions.face_detection
+                with mp_face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5) as face_detection:
+                    results = face_detection.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+                    if not results.detections:
+                        return False, "Không tìm thấy khuôn mặt!"
+                    
+                    max_area = 0
+                    for detection in results.detections:
+                        bbox = detection.location_data.relative_bounding_box
+                        area = bbox.width * bbox.height
+                        if area > max_area:
+                            max_area = area
+                    
+                    if max_area < 0.15: # 15% diện tích frame
+                        return False, "Vui lòng tiến gần lại camera"
+            except ImportError:
+                # Nếu client không có mediapipe, có thể giả lập vượt qua check 2 để đảm bảo app luôn chạy
+                pass 
+
+            return True, "Ảnh hợp lệ"
+        except Exception as e:
+            return False, f"Lỗi xử lý cv2: {str(e)}"
+
     async def start_training(self, e):
         self.is_training = True
         self.captured_frames.clear()
         self.btn_start.disabled = True
-        self.training_mode.disabled = True 
         
         self.camera_container.visible = True
         self.black_screen.visible = False
-        self.status_pill.visible = True # Bật hiển thị viên nang
+        self.alignment_guide.visible = True
+        self.status_pill.visible = True
+        self.txt_progress.value = f"0/{self.target_frames}"
         self.update()
         
         await self.camera_view.start_camera()
-        await asyncio.sleep(2.5) # Tăng lên 2.5s để Camera "bình tĩnh" khởi động ánh sáng
+        await asyncio.sleep(2.0) # Đợi Camera khởi động ánh sáng
 
-        target_frames = len(self.step_texts)
-        for i in range(target_frames):
-            requested_pose = self.step_texts[i]
-            step_success = False # Biến cờ ép buộc hoàn thành
-            
-            # Vòng lặp này sẽ giam người dùng ở góc mặt hiện tại cho đến khi nhận được ảnh hợp lệ
-            while not step_success:
-                self.step_states[i] = "active"
-                self._update_step_ui()
+        captured_count = 0
+        
+        # Bắt đầu vòng lặp thu thập ảnh
+        while captured_count < self.target_frames:
+            if not self.is_training:
+                break
                 
-                self.btn_start.content = ft.Text(f"ĐANG XỬ LÝ: {requested_pose.upper()}", weight="bold", color="white", size=13)
-                self.update()
-                
-                is_matched = False
-                timeout = 10 # Cho 10s để chuẩn bị tư thế
-                start_wait = time.time()
-                
-                while not is_matched:
-                    current_pose = getattr(self.camera_view, "current_pose", "N/A")
-                    
-                    if current_pose == requested_pose:
-                        self.status_pill.bgcolor = current_theme.accent
-                        self.txt_pose_status.value = f"Tuyệt vời! Giữ nguyên"
-                        self.update()
-                        
-                        for countdown in range(1, 0, -1):
-                            self.txt_countdown.value = f"{countdown}s"
-                            self.update()
-                            cp = getattr(self.camera_view, "current_pose", "N/A")
-                            if cp != requested_pose:
-                                break 
-                            await asyncio.sleep(0.5)
-                        else:
-                            is_matched = True
-                    else:
-                        self.status_pill.bgcolor = ft.Colors.RED_500
-                        self.txt_pose_status.value = f"Đang thấy: {current_pose}"
-                        self.txt_countdown.value = "--"
-                        self.update()
-                    
-                    if not is_matched:
-                        if time.time() - start_wait > timeout:
-                            break # Hết 10s không làm được -> Thoát vòng lặp chờ để báo lỗi
-                        await asyncio.sleep(0.2)
-
-                # CHỤP ẢNH KHI MATCH
-                if is_matched:
-                    base64_frame = await self.camera_view.get_current_frame_base64()
-                    if base64_frame:
-                        self.captured_frames.append(base64_frame)
-                        self.step_states[i] = "success"
-                        step_success = True # CỜ LẬT -> THOÁT VÒNG LẶP WHILE, ĐI TỚI GÓC TIẾP THEO
-                        show_top_notification(self.app_page, "Đã bắt", requested_pose, ft.Colors.GREEN_600, sound="S")
-                    else:
-                        self.step_states[i] = "error"
+            base64_frame = await self.camera_view.get_current_frame_base64()
+            if base64_frame:
+                is_valid, msg = self.check_quality(base64_frame)
+                if is_valid:
+                    self.captured_frames.append(base64_frame)
+                    captured_count += 1
+                    self.txt_progress.value = f"{captured_count}/{self.target_frames}"
+                    self.txt_status.value = "Tốt, giữ nguyên tư thế..."
+                    self.txt_status.color = ft.Colors.GREEN_400
+                    self.update()
+                    # Flet 0.84.0: Bỏ qua page.snack_bar, có thể không cần hiện SnackBar khi thành công để tránh rối
+                    await asyncio.sleep(0.3)
                 else:
-                    # Nếu hết giờ mà làm sai -> Báo lỗi và chạy lại vòng lặp của chính góc này
-                    self.step_states[i] = "error"
-                    self._update_step_ui()
-                    show_top_notification(self.app_page, "Lỗi góc mặt", f"Mặt không khớp! Vui lòng làm lại góc: {requested_pose}", ft.Colors.ORANGE_500, sound="E")
-                    await asyncio.sleep(2) # Nghỉ ngơi 2s trước khi hệ thống bắt quét lại góc đó
+                    self.txt_status.value = msg
+                    self.txt_status.color = ft.Colors.RED_400
+                    self.update()
+                    # Loại bỏ show_top_notification vì đã có text hiển thị trực quan trên khung camera
+                    await asyncio.sleep(0.5)
+            else:
+                await asyncio.sleep(0.2)
 
-                self._update_step_ui()
-                await asyncio.sleep(0.5)
-
-        # GỬI LÊN DATABASE
-        try:
-            client = await get_supabase_client()
-            res = await client.post("/training/face/enroll", json={
-                "sv_id": self.selected_student["id"],
-                "gv_id": self.gv_id,
-                "images": self.captured_frames
-            })
+        if captured_count >= self.target_frames:
+            self.txt_status.value = "Đang gửi dữ liệu..."
+            self.txt_status.color = ft.Colors.YELLOW_400
+            self.update()
             
-            if res.status_code != 200:
-                # Đọc chi tiết lỗi từ FastAPI trả về
-                error_detail = res.json().get("detail", "Lỗi không xác định từ Server")
-                raise ValueError(error_detail) # Ném lỗi ra để khối except bắt lấy
-
-            # Nếu thành công (200 OK) thì đi tiếp
-            self.selected_student["has_data"] = True
-            prefs = ft.SharedPreferences()
-            
-            if self.search_mode_val == "class" and self.current_class_id:
-                await prefs.remove(f"cache_training_sv_{self.current_class_id}")
-                await self.load_students_by_class(self.current_class_id)
-            elif self.search_mode_val == "mssv":
-                await self.handle_search_student(None)
+            # GỬI LÊN DATABASE
+            try:
+                client = await get_supabase_client()
+                res = await client.post("/training/face/enroll", json={
+                    "sv_id": self.selected_student["id"],
+                    "gv_id": self.gv_id,
+                    "images": self.captured_frames
+                })
                 
-            show_top_notification(self.app_page, "Thành công", "Dữ liệu đã được cập nhật!", ft.Colors.BLUE_600, sound="S")
-            
-        except ValueError as ve:
-            # Bắt riêng lỗi Trùng lặp (do mình ném ra ở trên) để hiện màu Cam cảnh báo
-            show_top_notification(self.app_page, "Cảnh báo dữ liệu", str(ve), ft.Colors.ORANGE_500, sound="E", duration_ms=6000)
-        except Exception as ex:
-            # Bắt các lỗi mạng
-            show_top_notification(self.app_page, "AuEdu - Lỗi API", str(ex), ft.Colors.RED_500, sound="E")
+                if res.status_code != 200:
+                    error_detail = res.json().get("detail", "Lỗi không xác định từ Server")
+                    raise ValueError(error_detail)
+
+                self.selected_student["has_data"] = True
+                prefs = ft.SharedPreferences()
+                
+                if self.search_mode_val == "class" and self.current_class_id:
+                    await prefs.remove(f"cache_training_sv_{self.current_class_id}")
+                    await self.load_students_by_class(self.current_class_id)
+                elif self.search_mode_val == "mssv":
+                    await self.handle_search_student(None)
+                    
+                show_top_notification(self.app_page, "Thành công", "Dữ liệu đã được cập nhật!", ft.Colors.BLUE_600, sound="S")
+                
+            except ValueError as ve:
+                show_top_notification(self.app_page, "Cảnh báo dữ liệu", str(ve), ft.Colors.ORANGE_500, sound="E", duration_ms=6000)
+            except Exception as ex:
+                show_top_notification(self.app_page, "AuEdu - Lỗi API", str(ex), ft.Colors.RED_500, sound="E")
 
         # ==========================================
-        # PHỤC HỒI GIAO DIỆN SAU KHI KẾT THÚC
+        # PHỤC HỒI GIAO DIỆN
         # ==========================================
         await self.camera_view.stop_camera()
+        self.is_training = False
         self.camera_container.visible = False
         self.black_screen.visible = True
+        self.alignment_guide.visible = False
         self.status_pill.visible = False
-        
         self.btn_start.disabled = False
-        self.training_mode.disabled = False
-        
-        # 1. Reset mảng trạng thái về Pending
-        self.step_states = ["pending"] * len(self.step_texts)
-        self._update_step_ui()
-        
-        # 2. Đổi lại chữ và Icon cho nút bấm ban đầu
-        self.btn_start.content = ft.Row([
-            ft.Icon(ft.Icons.FACE_RETOUCHING_NATURAL, color=ft.Colors.WHITE, size=18), 
-            ft.Text("BẮT ĐẦU ĐÀO TẠO", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)
-        ], alignment=ft.MainAxisAlignment.CENTER)
-        
         self.update()
-        
-    # ══════════════════════════════════════════════════════════════════
-    # API FETCH LỚP & SINH VIÊN KÈM CACHE (1 NGÀY = 86400s)
-    # ══════════════════════════════════════════════════════════════════
+
     async def load_classes(self):
         if self.gv_id == "N/A": return
         self.current_class_id = None
@@ -551,25 +397,21 @@ class FaceTrainingPage(ft.Container):
         
         classes_data = []
         
-        # 1. Kiểm tra Cache (86400 giây = 24 giờ)
         if cached_data_str and last_sync_str and (current_time - float(last_sync_str) < 86400):
             classes_data = safe_json_load(cached_data_str)
         else:
-            # 2. Gọi API nếu không có cache hoặc hết hạn
             try:
                 client = await get_supabase_client()
                 res = await client.get(f"/training/giangvien/{self.gv_id}/lophoc")
                 res.raise_for_status()
                 classes_data = res.json()
                 
-                # Lưu Cache
                 await prefs.set(cache_key_data, json.dumps(classes_data))
                 await prefs.set(cache_key_time, str(current_time))
             except Exception as e:
-                print(f"Lỗi load lớp (Face Training): {e}")
+                print(f"Lỗi load lớp: {e}")
                 if cached_data_str: classes_data = safe_json_load(cached_data_str)
         
-        # 3. Render giao diện
         for c in classes_data:
             self.student_list_ui.controls.append(
                 ft.Card(
@@ -621,7 +463,7 @@ class FaceTrainingPage(ft.Container):
                 await prefs.set(cache_key_data, json.dumps(students_data))
                 await prefs.set(cache_key_time, str(current_time))
             except Exception as e:
-                print(f"Lỗi load sinh viên (Face Training): {e}")
+                print(f"Lỗi load sinh viên: {e}")
                 if cached_data_str: students_data = safe_json_load(cached_data_str)
                 
         self._render_student_cards(students_data)
@@ -636,7 +478,6 @@ class FaceTrainingPage(ft.Container):
         )
         self.update()
         
-        # Tìm kiếm thì không nên lưu cache lâu vì phụ thuộc vào từ khóa gõ
         try:
             client = await get_supabase_client()
             res = await client.get(f"/training/giangvien/{self.gv_id}/timkiem", params={"keyword": keyword})

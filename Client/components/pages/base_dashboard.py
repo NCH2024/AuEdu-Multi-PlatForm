@@ -2,6 +2,7 @@ import flet as ft
 import json
 import asyncio
 import datetime
+import base64
 import time
 import httpx 
 from flet_geolocator import Geolocator, GeolocatorPermissionStatus
@@ -41,7 +42,7 @@ class BaseDashboard(ft.Container):
             content=self._page_title_raw_text,
             bgcolor=theme_module.current_theme.primary, 
             padding=ft.Padding(12, 6, 12, 6),
-            border_radius=16, 
+            border_radius=20, 
             alignment=ft.Alignment(0, 0)
         )
         
@@ -81,10 +82,12 @@ class BaseDashboard(ft.Container):
         self.app_page.run_task(self.init_app_settings)
         self.app_page.run_task(self._update_clock)
         
+        # --- BẬT TÍNH NĂNG GIÁM SÁT BẢO MẬT ---
+        self.app_page.run_task(self._monitor_session)
+        
         if self._is_desktop_platform():
             self.app_page.run_task(self._update_location)
             
-
     def _is_desktop_platform(self):
         return self.app_page.platform in [
             ft.PagePlatform.WINDOWS,
@@ -96,16 +99,18 @@ class BaseDashboard(ft.Container):
         while True:
             try:
                 # Kiểm tra an toàn xem control đã bị unmount chưa
-                # Nếu self.page_uid báo lỗi nghĩa là nó không còn trên page
-                if not getattr(self, "page", None):
-                    break # Thoát hẳn vòng lặp chạy ngầm nếu Dashboard đã bị gỡ
+                try:
+                    if not self.page:
+                        break
+                except RuntimeError:
+                    break 
                     
                 if self.time_location_container.visible:
                     now = datetime.datetime.now()
                     self.clock_text.value = now.strftime("%H:%M:%S")
-                    self.clock_text.update()
+                    if getattr(self.clock_text, "page", None):
+                        self.clock_text.update()
             except Exception as e:
-                # Nếu bắt gặp lỗi Control must be added..., thì break luôn
                 break 
                 
             await asyncio.sleep(1)
@@ -126,16 +131,15 @@ class BaseDashboard(ft.Container):
         if cached_location and (current_time - last_sync < TTL):
             self.location_text.value = cached_location
             try: 
-                
-                if self.location_text.page:
+                if getattr(self.location_text, "page", None):
                     self.location_text.update()
             except Exception: pass
-            return # Dừng luôn, không gọi GPS hay API nữa
+            return 
 
         # 3. Nếu Cache hết hạn, hiển thị trạng thái đang tải
         self.location_text.value = "Đang định vị..."
         try: 
-            if self.location_text.page:
+            if getattr(self.location_text, "page", None):
                 self.location_text.update()
         except Exception: pass
 
@@ -143,48 +147,44 @@ class BaseDashboard(ft.Container):
         NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=12"
 
         try:
-            # Kiểm tra dịch vụ vị trí hệ thống
             if not await self.geo.is_location_service_enabled():
                 self.location_text.value = cached_location if cached_location else "GPS đang tắt"
-                if self.location_text.page:
+                if getattr(self.location_text, "page", None):
+                    self.location_text.update()
+                return
+            try:
+                p = await self.geo.get_permission_status()
+                if p != GeolocatorPermissionStatus.ALWAYS and p != GeolocatorPermissionStatus.WHILE_IN_USE:
+                    p = await self.geo.request_permission()
+                
+                if p not in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
+                    self.location_text.value = cached_location if cached_location else "Cần cấp quyền GPS"
+                    if getattr(self.location_text, "page", None):
+                        self.location_text.update()
+                    return
+
+                pos = await self.geo.get_current_position()
+                if not pos:
+                    self.location_text.value = cached_location if cached_location else "Lỗi GPS"
+                    if getattr(self.location_text, "page", None):
+                        self.location_text.update()
+                    return
+            except Exception as e:
+                print(f"Bỏ qua định vị do chạy ở chế độ Debug: {e}")
+                self.location_text.value = cached_location if cached_location else "Đang ở chế độ Debug"
+                if getattr(self.location_text, "page", None):
                     self.location_text.update()
                 return
 
-            # Kiểm tra và xin quyền (Dùng Enum đã import trực tiếp)
-            p = await self.geo.get_permission_status()
-            if p != GeolocatorPermissionStatus.ALWAYS and p != GeolocatorPermissionStatus.WHILE_IN_USE:
-                p = await self.geo.request_permission()
-            
-            if p not in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
-                self.location_text.value = cached_location if cached_location else "Cần cấp quyền GPS"
-                if self.location_text.page:
-                    self.location_text.update()
-                return
-
-            # Lấy tọa độ hiện tại
-            pos = await self.geo.get_current_position()
-            if not pos:
-                self.location_text.value = cached_location if cached_location else "Lỗi GPS"
-                if self.location_text.page:
-                    self.location_text.update()
-                return
-
-            # Reverse Geocode để lấy tên địa danh
             async with httpx.AsyncClient(timeout=10.0) as client:
                 res = await client.get(NOMINATIM_URL.format(lat=pos.latitude, lon=pos.longitude), headers=headers)
                 if res.status_code == 200:
                     addr = res.json().get("address", {})
                     
-                    # Cấp 1: Xã / Phường / Thôn / Khóm / Đường
                     ward = addr.get("village") or addr.get("suburb") or addr.get("quarter") or addr.get("hamlet") or addr.get("road")
-                    
-                    # Cấp 2: Quận / Huyện / Thị xã
                     district = addr.get("county") or addr.get("district") or addr.get("town") or addr.get("city_district")
-                    
-                    # Cấp 3: Tỉnh / Thành phố
                     province = addr.get("city") or addr.get("state") or addr.get("province")
                     
-                    # Gom lại thành danh sách, loại bỏ các giá trị None, rỗng hoặc bị trùng tên
                     parts = []
                     if ward and ward not in parts: 
                         parts.append(ward)
@@ -193,31 +193,31 @@ class BaseDashboard(ft.Container):
                     if province and province not in parts: 
                         parts.append(province)
                     
-                    # Nối 3 cấp lại với nhau bằng dấu phẩy
                     location_str = ", ".join(parts) if parts else "Việt Nam"
                     
-                    # Cập nhật UI
+                    from core.device_manager import DeviceManager
+                    DeviceManager.get_instance().update_location(location_str)
+                    
                     self.location_text.value = location_str
-                    if self.location_text.page:
+                    if getattr(self.location_text, "page", None):
                         self.location_text.update()
                     
-                    # 4. LƯU CACHE MỚI
                     await prefs.set("app_location", location_str)
                     await prefs.set("last_sync_app_location", str(current_time))
                     
-                    # 5. DỌN DẸP SERVICE ĐỂ TẮT ICON ĐỊNH VỊ
                     if self.geo in self.app_page.services:
                         self.app_page.services.remove(self.geo)
-                        self.app_page.update()
+                        if getattr(self.app_page, "page", None):
+                            self.app_page.update()
                 else:
                     self.location_text.value = cached_location if cached_location else "Vị trí không xác định"
-                    if self.location_text.page:
+                    if getattr(self.location_text, "page", None):
                         self.location_text.update()
 
         except Exception as e:
             print(f"Lỗi định vị: {e}")
             self.location_text.value = cached_location if cached_location else "Lỗi kết nối"
-            if self.location_text.page:
+            if getattr(self.location_text, "page", None):
                 self.location_text.update()
     
     async def init_app_settings(self):
@@ -232,11 +232,9 @@ class BaseDashboard(ft.Container):
         
         self.user_name_text.color = theme_module.current_theme.text_main
         
-        # Cập nhật màu Title
         self._page_title_raw_text.color = theme_module.current_theme.surface_color
         self.page_title_container.bgcolor = theme_module.current_theme.primary
         
-        # Cập nhật màu cụm Thời gian - Vị trí
         self.clock_text.color = theme_module.current_theme.primary
         self.clock_icon.color = theme_module.current_theme.primary
         self.location_text.color = theme_module.current_theme.text_muted
@@ -251,17 +249,92 @@ class BaseDashboard(ft.Container):
         if saved_content is not None:
             self.content_area.content = saved_content
 
-        self.update()
-        self.app_page.update()
+        if getattr(self, "page", None):
+            self.update()
+            self.app_page.update()
 
         session_str = await prefs.get("user_session")
         if session_str:
             try:
                 session = json.loads(session_str)
                 self.user_name_text.value = session.get("name", "Người dùng")
-                self.user_name_text.update()
+                if getattr(self.user_name_text, "page", None):
+                    self.user_name_text.update()
             except Exception:
                 pass
+            
+    async def show_session_expired_dialog(self):
+        """Hiển thị hộp thoại ép buộc đăng nhập lại khi hết hạn Token"""
+        async def force_logout(e):
+            self.session_dialog.open = False
+            if getattr(self.app_page, "page", None):
+                self.app_page.update()
+            
+            prefs = ft.SharedPreferences()
+            await prefs.remove("user_session")
+            await self.app_page.push_route("/login")
+
+        self.session_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([
+                ft.Icon(ft.Icons.LOCK_CLOCK, color=ft.Colors.RED_500, size=28),
+                ft.Text("HẾT HẠN PHIÊN", weight=ft.FontWeight.BOLD, color=ft.Colors.RED_500)
+            ]),
+            content=ft.Text("Vì lý do bảo mật, phiên làm việc của bạn đã hết hạn sau 1 tiếng. Vui lòng đăng nhập lại để tiếp tục!", size=13),
+            actions=[
+                ft.Button(
+                    content="Đăng nhập lại", 
+                    bgcolor=theme_module.current_theme.primary, 
+                    color=ft.Colors.WHITE,
+                    on_click=force_logout
+                )
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12)
+        )
+        
+        self.app_page.overlay.append(self.session_dialog)
+        self.session_dialog.open = True
+        if getattr(self.app_page, "page", None):
+            self.app_page.update()
+        
+    async def _monitor_session(self):
+        """Vòng lặp chạy ngầm kiểm tra token mỗi 10 giây"""
+        while True: 
+            try:
+                if not self.page:
+                    break
+            except RuntimeError:
+                break
+                
+            prefs = ft.SharedPreferences()
+            session_str = await prefs.get("user_session")
+            
+            if session_str:
+                try:
+                    session = json.loads(session_str)
+                    expires_at = session.get("expires_at")
+                    
+                    if not expires_at:
+                        token = session.get("access_token", "")
+                        if token:
+                            payload_b64 = token.split('.')[1]
+                            payload_b64 += '=' * (-len(payload_b64) % 4) 
+                            payload_data = json.loads(base64.b64decode(payload_b64).decode('utf-8'))
+                            expires_at = payload_data.get("exp", 0)
+                        else:
+                            expires_at = 0
+
+                    current_time = time.time()
+                    
+                    if expires_at > 0 and current_time >= expires_at:
+                        await self.show_session_expired_dialog()
+                        break 
+                        
+                except Exception as e:
+                    print(f"Lỗi theo dõi phiên: {e}")
+                    
+            await asyncio.sleep(10)
 
     async def _apply_theme_to_current_page(self):
         current_page = self.content_area.content
@@ -321,11 +394,13 @@ class BaseDashboard(ft.Container):
         if dialog not in self.app_page.overlay:
             self.app_page.overlay.append(dialog)
         dialog.open = True
-        self.app_page.update()
+        if getattr(self.app_page, "page", None):
+            self.app_page.update()
 
     def _close_dialog(self, dialog):
         dialog.open = False
-        self.app_page.update()
+        if getattr(self.app_page, "page", None):
+            self.app_page.update()
 
     def set_content(self, title: str, new_content: ft.Control, route: str):
         self._page_title_raw_text.value = title.upper() 
@@ -345,10 +420,12 @@ class BaseDashboard(ft.Container):
     def toggle_sidebar(self, e):
         self.is_sidebar_expanded = not self.is_sidebar_expanded
         self.btn_menu_toggle.icon = ft.Icons.MENU_OPEN_ROUNDED if self.is_sidebar_expanded else ft.Icons.MENU_ROUNDED
-        self.sidebar.width = 220 if self.is_sidebar_expanded else 70
+        self.sidebar.width = 210 if self.is_sidebar_expanded else 70
         self.build_navigation()
         self.sidebar.content.controls[0].controls = self.sidebar.content.controls[0].controls[:1] + self.sidebar_controls
-        self.update()
+        
+        if getattr(self, "page", None):
+            self.update()
 
     async def _do_normal_logout(self):
         prefs = ft.SharedPreferences()
@@ -374,13 +451,16 @@ class BaseDashboard(ft.Container):
 
         async def handle_minimize(e):
             self.app_page.window.minimized = True
-            self.app_page.update()
+            if getattr(self.app_page, "page", None):
+                self.app_page.update()
 
         async def handle_maximize(e):
             self.app_page.window.maximized = not self.app_page.window.maximized
             e.control.icon = ft.Icons.FILTER_NONE if self.app_page.window.maximized else ft.Icons.CROP_SQUARE
-            e.control.update()
-            self.app_page.update()
+            if getattr(e.control, "page", None):
+                e.control.update()
+            if getattr(self.app_page, "page", None):
+                self.app_page.update()
 
         async def handle_close(e):
             await self.app_page.window.close()
@@ -438,7 +518,6 @@ class BaseDashboard(ft.Container):
         )
         self.user_name_text.visible = not is_mobile
         
-        # Hiển thị khối thời gian & vị trí nếu không phải mobile
         self.time_location_container.visible = not is_mobile
 
         popup_items = [
@@ -463,27 +542,27 @@ class BaseDashboard(ft.Container):
             ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.LOGOUT, color=ft.Colors.RED_500), ft.Text("Đăng xuất", color=ft.Colors.RED_500)]), on_click=handle_normal_logout),
         ])
 
+        # Header Desktop Nổi - Header Mobile Phẳng
         header_content = ft.Container(
-            padding=ft.Padding.all(1),
+            padding=ft.Padding(5, 2, 5, 2),
+            margin=ft.Margin(5, 5, 5, 5) if not is_mobile else ft.Margin(0, 0, 0, 0),
+            border_radius=14 if not is_mobile else 0,
             bgcolor=theme_module.current_theme.surface_color,
-            border=ft.Border(bottom=ft.BorderSide(1, theme_module.current_theme.divider_color)),
+            border=None if not is_mobile else ft.Border(bottom=ft.BorderSide(1, theme_module.current_theme.divider_color)),
             alignment=ft.Alignment.TOP_CENTER,
             content=ft.Row(
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 controls=[
-                    # Cột trái (Nút menu và Tiêu đề)
                     ft.Row(spacing=5, controls=[
                         self.btn_menu_toggle,
                         ft.Container(width=5),
                         self.page_title_container
                     ], expand=1),
                     
-                    # Cột giữa (Hiển thị nguyên 1 viên thuốc chứa CẢ thời gian và vị trí)
                     ft.Row([
                         self.time_location_container 
                     ], alignment=ft.MainAxisAlignment.CENTER, expand=1),
                     
-                    # Cột phải (Avatar và Menu tùy chọn)
                     ft.Row(spacing=5, alignment=ft.MainAxisAlignment.END, controls=[
                         ft.Container(
                             ink=True, on_click=go_to_profile, border_radius=50,
@@ -510,7 +589,7 @@ class BaseDashboard(ft.Container):
         if not hasattr(self, "content_area") or self.content_area is None:
             self.content_area = ft.Container(
                 expand=True,
-                padding=10,
+                padding=5,
                 alignment=ft.Alignment.TOP_CENTER
             )
         main_view_stack = ft.Column(
@@ -523,8 +602,11 @@ class BaseDashboard(ft.Container):
         on_secondary_color = ft.Colors.BLACK_87 if theme_module.current_theme.is_dark else ft.Colors.WHITE
         on_secondary_bg_overlay = ft.Colors.with_opacity(0.1, ft.Colors.BLACK) if theme_module.current_theme.is_dark else ft.Colors.with_opacity(0.1, ft.Colors.WHITE)
 
+        # Sidebar Desktop Nổi
         self.sidebar = ft.Container(
-            width=220 if self.is_sidebar_expanded else 70,
+            width=210 if self.is_sidebar_expanded else 70,
+            margin=ft.Margin(5, 5, 0, 5) if not is_mobile else ft.Margin(0, 0, 0, 0),
+            border_radius=14 if not is_mobile else 0,
             bgcolor=theme_module.current_theme.secondary,
             animate=ft.Animation(250, ft.AnimationCurve.EASE_OUT),
             content=ft.Column(
@@ -565,8 +647,8 @@ class BaseDashboard(ft.Container):
         )
 
         self.bottom_nav = ft.Container(
-            bottom=0, left=0, right=0,
             bgcolor=theme_module.current_theme.secondary,
+            border_radius=ft.BorderRadius(20, 20, 0, 0),
             content=ft.Row(controls=self.bottom_nav_controls, alignment=ft.MainAxisAlignment.SPACE_AROUND, height=60)
         )
 
@@ -574,9 +656,14 @@ class BaseDashboard(ft.Container):
             controls=[self.sidebar, ft.Container(content=main_view_stack, expand=True, padding=0)],
             expand=True, spacing=0, vertical_alignment=ft.CrossAxisAlignment.START
         )
-        self.mobile_layout = ft.Stack(
-            controls=[ft.Container(content=main_view_stack, expand=True, padding=0), self.bottom_nav],
-            expand=True
+        
+        # --- KHẮC PHỤC MOBILE CHE NỘI DUNG (CHUYỂN TỪ STACK SANG COLUMN) ---
+        self.mobile_layout = ft.Column(
+            controls=[
+                ft.Container(content=main_view_stack, expand=True, padding=0), # Expand đẩy menu xuống
+                self.bottom_nav
+            ],
+            expand=True, spacing=0
         )
 
         return ft.SafeArea(content=self.mobile_layout if is_mobile else self.desktop_layout)
@@ -613,8 +700,8 @@ class BaseDashboard(ft.Container):
             self.sidebar_controls.append(
                 ft.Container(
                     content=nav_content,
-                    padding=ft.Padding(16, 12, 16, 12) if self.is_sidebar_expanded else ft.Padding(0, 12, 0, 12),
-                    border_radius=12, margin=ft.Margin(10, 0, 10, 0), bgcolor=bg_active,
+                    padding=ft.Padding(16, 12, 16, 12) if self.is_sidebar_expanded else ft.Padding(0, 10, 0, 10),
+                    border_radius=20, margin=ft.Margin(10, 0, 10, 0), bgcolor=bg_active,
                     ink=True, on_click=create_nav_click(item["route"]),
                     tooltip=item["label"] if not self.is_sidebar_expanded else None
                 )
@@ -632,18 +719,20 @@ class BaseDashboard(ft.Container):
             )
 
     async def handle_resize(self, e):
+        if not getattr(self, "page", None): return
+        
         is_mobile = self.app_page.width and self.app_page.width < 768
 
         if is_mobile:
             self.content.content = self.mobile_layout
             self.btn_menu_toggle.visible = False
             self.user_name_text.visible = False
-            self.time_location_container.visible = False # Ẩn toàn bộ khối thời gian/vị trí trên Mobile
+            self.time_location_container.visible = False 
         else:
             self.content.content = self.desktop_layout
             self.btn_menu_toggle.visible = True
             self.user_name_text.visible = True
-            self.time_location_container.visible = True # Bật toàn bộ khối trên PC
+            self.time_location_container.visible = True 
 
         if getattr(self, "page", None):
             self.update()

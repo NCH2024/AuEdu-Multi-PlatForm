@@ -6,6 +6,7 @@ import base64
 import traceback
 from datetime import datetime
 from core.theme import current_theme, get_flat_container
+from core.device_manager import DeviceManager
 from components.options.camera_view import CameraView
 from components.options.custom_dropdown import CustomDropdown
 from components.options.top_notification import show_top_notification
@@ -18,7 +19,6 @@ class AttendanceSessionPage(ft.Container):
         self.bgcolor = current_theme.bg_color 
         self.padding = 0
 
-        self.mode = "1"
         self.is_desktop = self.app_page.platform not in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
         
         self.show_grid = False 
@@ -26,7 +26,7 @@ class AttendanceSessionPage(ft.Container):
         
         # Lấy dữ liệu từ trang trước truyền sang
         self.tkb_tiet_id = self.app_page.session.store.get("current_tkb_tiet_id") or "1" 
-        self.mode = self.app_page.session.store.get("current_attendance_mode") or "1"
+        self.mode = "1" # Sẽ lấy từ cấu hình trong hàm khởi tạo
         
         # NHẬN DANH SÁCH SINH VIÊN THỰC TẾ
         self.real_students = self.app_page.session.store.get("current_student_list") or []
@@ -39,7 +39,6 @@ class AttendanceSessionPage(ft.Container):
                 self.scanned_session_students.append({
                     "id": sv["id"],
                     "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
-                    # Lấy thời gian từ CSDL thay vì gán cứng "Đã điểm danh"
                     "time": sv.get("time", "Đã điểm danh") 
                 })
         
@@ -47,14 +46,16 @@ class AttendanceSessionPage(ft.Container):
         self.ws_connected = False
 
         self.dd_camera = CustomDropdown(label="Chọn nguồn Camera", options=[], on_change=self.handle_camera_change)
+        
+        # Flet liên tục lấy Base64 frame và đóng gói gửi qua WebSocket thông qua callback on_frame
         self.camera_view = CameraView(page=self.app_page, dd_camera=self.dd_camera, is_visible=True, on_frame=self.send_frame_to_server)
         
-        # OVERLAY: Màn đen phủ lên khi tạm dừng
+        # OVERLAY: Màn đen phủ lên khi tạm dừng (KHÔNG CÓ LỚP PHỦ HƯỚNG DẪN NÀO TRONG LÚC CHẠY CAMERA)
         self.pause_overlay = ft.Container(
             left=0, right=0, top=0, bottom=0,
-            bgcolor=ft.Colors.BLACK_87, # Sử dụng đúng chuẩn màu của bạn
+            bgcolor=ft.Colors.BLACK_87, 
             visible=False,
-            alignment=ft.Alignment.CENTER, # Sử dụng đúng chuẩn Căn lề của bạn
+            alignment=ft.Alignment.CENTER, 
             content=ft.Column(
                 controls=[
                     ft.Icon(ft.Icons.MOTION_PHOTOS_PAUSE, color=ft.Colors.WHITE, size=50),
@@ -80,18 +81,58 @@ class AttendanceSessionPage(ft.Container):
         )
         self.app_page.overlay.append(self.settings_sheet)
 
-        self.mock_students = [
-            {"id": "223401", "name": "Nguyễn Văn A", "status": 1, "time": "08:30:10"},
-            {"id": "223402", "name": "Trần Thị B", "status": 0, "time": ""},
-            {"id": "223403", "name": "Lê Văn C", "status": 2, "time": ""},
-            {"id": "223404", "name": "Phạm D", "status": 3, "time": "08:45:00"},
-        ]
-
         self.header_title = ft.Text("Đã quét", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=15)
         self.toggle_btn = ft.IconButton(
             icon=ft.Icons.GRID_VIEW_ROUNDED, icon_color=current_theme.accent, tooltip="Chuyển chế độ xem", on_click=self.toggle_view_mode
         )
         self.list_grid_container = ft.Container(expand=True) 
+
+        # UI TOAST TRÊN CAMERA (thay thế cho show_top_notification)
+        self._toast_seq = 0
+        self.toast_icon = ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=18)
+        self.camera_toast_text = ft.Text("", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)
+        self.toast_pill = ft.Container(
+            content=ft.Row([self.toast_icon, self.camera_toast_text], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+            bgcolor=ft.Colors.GREEN_600,
+            padding=ft.Padding(15, 8, 15, 8),
+            border_radius=20,
+        )
+        self.camera_toast_wrapper = ft.Container(
+            content=ft.Row([self.toast_pill], alignment=ft.MainAxisAlignment.CENTER),
+            bottom=20, left=0, right=0,
+            visible=False,
+            opacity=0,
+            animate_opacity=200
+        )
+
+    async def show_camera_toast(self, msg, is_success=True):
+        self.toast_icon.name = ft.Icons.CHECK_CIRCLE if is_success else ft.Icons.INFO
+        self.toast_pill.bgcolor = ft.Colors.GREEN_600 if is_success else ft.Colors.ORANGE_500
+        self.camera_toast_text.value = msg
+        self.camera_toast_wrapper.visible = True
+        self.camera_toast_wrapper.opacity = 1
+        try:
+            self.camera_toast_wrapper.update()
+        except Exception:
+            pass
+        
+        self._toast_seq += 1
+        current_seq = self._toast_seq
+        
+        await asyncio.sleep(2)
+        if self._toast_seq == current_seq:
+            self.camera_toast_wrapper.opacity = 0
+            try:
+                self.camera_toast_wrapper.update()
+            except Exception:
+                pass
+            await asyncio.sleep(0.2)
+            if self._toast_seq == current_seq:
+                self.camera_toast_wrapper.visible = False
+                try:
+                    self.camera_toast_wrapper.update()
+                except Exception:
+                    pass
 
     def did_mount(self):
         self.list_grid_container.content = self.build_scanned_list()
@@ -100,6 +141,8 @@ class AttendanceSessionPage(ft.Container):
         
         async def delayed_init():
             prefs = ft.SharedPreferences()
+            self.mode = await prefs.get("attendance_mode") or "1"
+            
             saved_cam = await prefs.get("selected_camera")
             await self.camera_view.load_available_cameras()
             if saved_cam:
@@ -126,22 +169,21 @@ class AttendanceSessionPage(ft.Container):
     async def init_camera_session(self):
         await self.camera_view.start_camera()
         
-        # Bật vòng lặp chụp và gửi ảnh cho riêng nền tảng Mobile
+        # Bật vòng lặp chụp và gửi ảnh cho nền tảng Mobile nếu Camera không tự trigger callback
         if not self.is_desktop:
             self.app_page.run_task(self.mobile_streaming_loop)
             
     async def mobile_streaming_loop(self):
         """Vòng lặp chạy ngầm, cứ 1.5 giây chụp 1 tấm gửi Server để điểm danh trên điện thoại"""
-        while self.ws_connected:
+        while self.ws_connected and getattr(self, "page", None):
             if not self.is_paused:
                 try:
                     pic_bytes = await self.camera_view.camera_module.take_picture()
                     if pic_bytes:
                         b64 = base64.b64encode(pic_bytes).decode('utf-8')
                         await self.send_frame_to_server(f"data:image/jpeg;base64,{b64}")
-                except Exception:
-                    pass
-            # Cấu hình 1.5s/frame để máy mát, tiết kiệm pin cho Mobile
+                except Exception as e:
+                    pass 
             await asyncio.sleep(1.5)
         
     async def connect_websocket(self):
@@ -163,7 +205,6 @@ class AttendanceSessionPage(ft.Container):
         
         try:
             self.ws = await websockets.connect(ws_url)
-            
             self.ws_connected = True
             print(f"[Client] Đã kết nối WebSocket thành công tới tiết: {self.tkb_tiet_id}")
             self.app_page.run_task(self.receive_ws_messages)
@@ -173,14 +214,18 @@ class AttendanceSessionPage(ft.Container):
 
     async def receive_ws_messages(self):
         try:
-            while self.ws_connected and self.ws:
+            while self.ws_connected and getattr(self, "ws", None):
                 message = await self.ws.recv()
                 data = json.loads(message)
                 
-                # CHỈ CẦN GỌI ĐÚNG 1 DÒNG NÀY, để hàm bên dưới lo liệu
                 if data.get("status") == "success":
                     await self.update_scanned_ui(data.get("students", []))
                     
+        except websockets.exceptions.ConnectionClosed as e:
+            self.ws_connected = False
+            print(f"[Client] WS Đóng kết nối: {e.code} - {e.reason}")
+            if e.code == 1008:
+                show_top_notification(self.app_page, "Lỗi xác thực", "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại!", ft.Colors.RED_500, sound="E")
         except Exception as e:
             print(f"[Client] WS Nhận tin nhắn bị lỗi: {e}")
             self.ws_connected = False
@@ -188,19 +233,20 @@ class AttendanceSessionPage(ft.Container):
     async def update_scanned_ui(self, recognized_students):
         updated = False
         for rec_sv in recognized_students:
+            # Tìm ID một cách an toàn (tránh trường hợp server trả về 'sv_id' thay vì 'id')
             rec_id = str(rec_sv.get("id", rec_sv.get("sv_id", "")))
             is_new = rec_sv.get("is_new", False) # Đọc cờ từ Server
             
             for sv in self.real_students: 
                 if str(sv["id"]) == rec_id:
-                    if is_new:
-                        # 1. Đổi trạng thái trong lưới tổng
+                    # Trường hợp 1: Sinh viên chưa điểm danh hoặc is_new = True -> Ghi nhận mới
+                    if sv.get("trang_thai_diem_danh") != "Có mặt" or is_new:
                         sv["trang_thai_diem_danh"] = "Có mặt" 
                         
-                        # 2. Xóa khỏi danh sách thẻ (nếu trước đó đã có) để chống bị trùng lặp
+                        # Xóa khỏi danh sách thẻ (nếu trước đó đã có) để chống bị trùng lặp
                         self.scanned_session_students = [s for s in self.scanned_session_students if str(s["id"]) != rec_id]
                         
-                        # 3. Nhét lên VỊ TRÍ ĐẦU TIÊN (index 0)
+                        # Thêm vào đầu danh sách thẻ
                         self.scanned_session_students.insert(0, {
                             "id": sv["id"],
                             "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
@@ -208,16 +254,15 @@ class AttendanceSessionPage(ft.Container):
                         })
                         updated = True
                         
-                        # Báo hiệu xanh lá
-                        show_top_notification(self.app_page, "Điểm danh thành công", f"Đã ghi nhận: {sv.get('ten')}", color=ft.Colors.GREEN_600, sound="S")
+                        # Hiển thị text thẳng trên khung hình Camera
+                        self.app_page.run_task(self.show_camera_toast, f"Đã ghi nhận: {sv.get('ten')}", True)
                         
+                    # Trường hợp 2: Sinh viên đã điểm danh rồi nhưng camera lại quét trúng
                     else:
-                        # Vẫn tìm thấy nhưng is_new = False -> Đã điểm danh rồi!
-                        show_top_notification(self.app_page, "Đã quét", f"{sv.get('ten')} đã điểm danh trước đó!", color=ft.Colors.ORANGE_500)
-                    
-                    break # Thoát vòng lặp tìm kiếm sinh viên
+                        # Hiển thị text màu cam
+                        self.app_page.run_task(self.show_camera_toast, f"{sv.get('ten')} đã điểm danh trước đó!", False)
+                    break
         
-        # Chỉ vẽ lại khi thực sự có thay đổi để tránh giật lag
         if updated:
             if self.show_grid:
                 self.list_grid_container.content = self.build_student_grid()
@@ -311,7 +356,7 @@ class AttendanceSessionPage(ft.Container):
         return ft.GridView(runs_count=5 if self.is_desktop else 6, max_extent=40, spacing=8, run_spacing=8, controls=grid_items)
 
     def build_scanned_list(self):
-        scanned_list = ft.ListView(spacing=10, expand=True)
+        scanned_list = ft.ListView(spacing=8, expand=True) 
         
         if not self.scanned_session_students:
             scanned_list.controls.append(
@@ -324,74 +369,28 @@ class AttendanceSessionPage(ft.Container):
 
         for sv in self.scanned_session_students:
             card = ft.Container(
-                bgcolor=current_theme.surface_variant, border_radius=12, padding=10,
-                border=ft.Border(left=ft.BorderSide(6, ft.Colors.GREEN_500)),
+                bgcolor=current_theme.surface_variant, 
+                border_radius=8, 
+                padding=ft.Padding(12, 8, 12, 8),
+                border=ft.Border(left=ft.BorderSide(4, ft.Colors.GREEN_500)), 
                 content=ft.Row([
-                    ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=ft.Colors.WHITE), bgcolor=current_theme.divider_color, radius=18),
+                    ft.CircleAvatar(
+                        content=ft.Text(sv["name"][0], weight="bold", size=14, color=ft.Colors.WHITE), 
+                        bgcolor=ft.Colors.GREEN_600, 
+                        radius=16
+                    ),
                     ft.Column([
                         ft.Text(sv["name"], weight=ft.FontWeight.BOLD, size=13, color=current_theme.text_main),
-                        ft.Text(f"MSSV: {sv['id']} • {sv['time']}", size=11, color=current_theme.text_muted)
-                    ], spacing=2, expand=True),
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_500, size=20)
+                        ft.Text(f"{sv['id']} • {sv['time']}", size=11, color=current_theme.text_muted)
+                    ], spacing=0, expand=True), 
+                    ft.Icon(ft.Icons.VERIFIED_ROUNDED, color=ft.Colors.GREEN_500, size=20) 
                 ])
             )
             scanned_list.controls.append(card)
         return scanned_list
-    
-    async def update_scanned_ui(self, recognized_students):
-        updated = False
-        for rec_sv in recognized_students:
-            # Tìm ID một cách an toàn (tránh trường hợp server trả về 'sv_id' thay vì 'id')
-            rec_id = str(rec_sv.get("id", rec_sv.get("sv_id", "")))
-            
-            for sv in self.real_students: 
-                if str(sv["id"]) == rec_id:
-                    # Trường hợp 1: Sinh viên chưa điểm danh -> Ghi nhận mới
-                    if sv.get("trang_thai_diem_danh") != "Có mặt":
-                        sv["trang_thai_diem_danh"] = "Có mặt" 
-                        
-                        # Thêm vào đầu danh sách thẻ
-                        self.scanned_session_students.insert(0, {
-                            "id": sv["id"],
-                            "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
-                            "time": rec_sv.get("time", datetime.now().strftime("%H:%M:%S"))
-                        })
-                        updated = True
-                        
-                        # Hiện thông báo xanh báo hiệu ghi nhận thành công
-                        self.app_page.snack_bar = ft.SnackBar(
-                            content=ft.Text(f"✅ Đã ghi nhận: {sv.get('ten')}", color=ft.Colors.WHITE),
-                            bgcolor=ft.Colors.GREEN_600,
-                            duration=2000
-                        )
-                        self.app_page.snack_bar.open = True
-                        self.app_page.update()
-                        
-                    # Trường hợp 2: Sinh viên đã điểm danh rồi nhưng camera lại quét trúng
-                    else:
-                        # Hiện thông báo cam để người dùng biết hệ thống vẫn đang hoạt động tốt
-                        self.app_page.snack_bar = ft.SnackBar(
-                            content=ft.Text(f"⚠️ {sv.get('ten')} đã được điểm danh trước đó!", color=ft.Colors.WHITE),
-                            bgcolor=ft.Colors.ORANGE_500,
-                            duration=1500
-                        )
-                        self.app_page.snack_bar.open = True
-                        self.app_page.update()
-        
-        if updated:
-            if self.show_grid:
-                self.list_grid_container.content = self.build_student_grid()
-            else:
-                self.list_grid_container.content = self.build_scanned_list()
-            
-            try:
-                self.list_grid_container.update()
-            except Exception:
-                pass
 
     def build_ui(self):
-        # 1. KHU VỰC CAMERA
-        # Ép trực tiếp CameraView bám chặt 4 góc của Stack
+        # 1. KHU VỰC CAMERA TRỐNG TRẢI (FULL VIEW)
         self.camera_view.left = 0
         self.camera_view.right = 0
         self.camera_view.top = 0
@@ -401,7 +400,8 @@ class AttendanceSessionPage(ft.Container):
             expand=True,
             controls=[
                 self.camera_view, 
-                self.pause_overlay 
+                self.pause_overlay,
+                self.camera_toast_wrapper
             ]
         )
 
@@ -409,7 +409,6 @@ class AttendanceSessionPage(ft.Container):
             content=camera_stack,
             padding=0, expand=True
         )
-        # Rất quan trọng: Cắt phần hình ảnh dư thừa nếu nó tràn ra khỏi viền bo góc
         camera_card.clip_behavior = ft.ClipBehavior.HARD_EDGE 
 
         # 2. THANH NAVIGATION DƯỚI CÙNG
@@ -454,7 +453,6 @@ class AttendanceSessionPage(ft.Container):
         ], expand=True)
 
         if self.is_desktop:
-            # GIAO DIỆN PC
             desktop_top_bar = ft.WindowDragArea(
                 ft.Container(
                     height=32, bgcolor=current_theme.bg_color, border_radius=8,
@@ -473,7 +471,7 @@ class AttendanceSessionPage(ft.Container):
                 )
             )
 
-            left_panel = get_flat_container(content=panel_content, padding=5, expand=False)
+            left_panel = get_flat_container(content=panel_content, padding=10, expand=False)
             left_panel.width = 350
 
             main_layout = ft.Column([
@@ -484,41 +482,29 @@ class AttendanceSessionPage(ft.Container):
                 ], expand=True, spacing=10)
             ], expand=True, spacing=5)
         else:
-            # GIAO DIỆN MOBILE
-            bottom_panel = get_flat_container(content=panel_content, padding=5, expand=False)
-            bottom_panel.height = 250
+            bottom_panel = get_flat_container(content=panel_content, padding=10, expand=False)
+            bottom_panel.height = 320 # Tăng nhẹ chiều cao để chứa thêm Dropdown
 
             main_layout = ft.Column([
                 camera_card,   
                 bottom_panel,  
                 bottom_nav     
-            ], expand=True, spacing=2)
+            ], expand=True, spacing=5)
 
         return ft.Container(content=main_layout, padding=2 if self.is_desktop else 5, expand=True)
     
     async def send_frame_to_server(self, frame_base64: str):
-        # THÊM DÒNG NÀY ĐỂ DEBUG:
-        print(f"[Client] Đang thử gửi frame... ws_connected: {self.ws_connected}")
-        
-        # Nếu đang bị pause thì không gửi
         if getattr(self, "is_paused", False):
             return
 
         if self.ws_connected and getattr(self, "ws", None):
-            device_id = self.app_page.session_id if hasattr(self.app_page, 'session_id') else "unknown_device"
-            
+            # Payload bắt buộc có format JSON chứa các key thiết yếu theo yêu cầu
             payload = {
                 "image": frame_base64,
-                "mode": self.mode,
-                "tkb_tiet_id": self.tkb_tiet_id,
-                # Chú ý: Đảm bảo self.attendance_date có tồn tại, nếu không có thể thay bằng chuỗi ngày hôm nay
-                "date": getattr(self, "attendance_date", datetime.now().strftime("%Y-%m-%d")),
-                "vitri": "Phòng học hiện tại", 
-                "device_id": device_id,
-                "client_version": "1.0.0"
+                "mode": self.mode, # "1" hoặc "all" lấy từ Dropdown
+                "date": getattr(self, "attendance_date", datetime.now().strftime("%Y-%m-%d"))
             }
             try:
-                # SỬA LẠI THÀNH DÒNG NÀY NẾU DÙNG THƯ VIỆN websockets BẤT ĐỒNG BỘ:
                 await self.ws.send(json.dumps(payload))
             except Exception as e:
                 print(f"[Client] Lỗi khi gửi frame: {e}")

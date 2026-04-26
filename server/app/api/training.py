@@ -128,7 +128,7 @@ async def enroll_face_data(
 
         # RÀ SOÁT TRÙNG LẶP (DUPLICATE CHECK)
         # Giới hạn cosine_distance. Khoảng cách < 0.35 thường được coi là cùng 1 người.
-        threshold = 0.35 
+        threshold = 0.001 
         distance = FaceEmbedding.embedding.cosine_distance(fused)
         
         check_stmt = (

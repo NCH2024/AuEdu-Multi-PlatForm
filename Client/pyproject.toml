@@ -15,20 +15,22 @@ version_code = 2
 version_name = "0.2.0"
 
 # CẤU HÌNH GIAO DIỆN KHI TẢI APP
-# Đường dẫn tính từ thư mục assets
 icon = "icon.png"
 splash_image = "icon-2.png"
 splash_color = "#ffffff" 
 
-# QUYỀN TRUY CẬP (Rất quan trọng cho Camera)
-permissions = [
-    "CAMERA",
-    "INTERNET"
-]
+# CẤU TRÚC QUYỀN MỚI CỦA FLET 0.84.0 (Rất quan trọng cho Camera và GPS)
+[tool.flet.android.permission]
+"android.permission.CAMERA" = true
+"android.permission.INTERNET" = true
+"android.permission.ACCESS_FINE_LOCATION" = true
+"android.permission.ACCESS_COARSE_LOCATION" = true
 
 [tool.flet.ios]
 bundle_id = "com.hiep.auedu"
 icon = "icon.png"
-permissions = [
-    "NSCameraUsageDescription: Ứng dụng cần quyền Camera để điểm danh sinh viên."
-]
+
+# Cấu trúc ghi chú quyền cho iOS (Info.plist)
+[tool.flet.ios.info]
+"NSCameraUsageDescription" = "Ứng dụng cần quyền Camera để điểm danh sinh viên."
+"NSLocationWhenInUseUsageDescription" = "Ứng dụng cần quyền Vị trí để ghi nhận địa điểm khi điểm danh."

@@ -2,6 +2,7 @@
 import flet as ft
 import json
 from core.config import get_supabase_client, API_PREFIX
+from core.device_manager import DeviceManager
 
 async def get_auth_token() -> str:
     """Đọc và giải mã token từ SharedPreferences"""
@@ -14,6 +15,23 @@ async def get_auth_token() -> str:
         except Exception:
             pass
     return ""
+
+async def api_post(endpoint: str, json_data: dict = None, use_prefix: bool = False):
+    client = await get_supabase_client()
+    token = await get_auth_token()
+    
+    headers = client.headers.copy()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        
+    # --- ĐÁNH CHẶN: GẮN THÔNG TIN THIẾT BỊ VÀO MỌI HEADER ---
+    dev_manager = DeviceManager.get_instance()
+    headers.update(dev_manager.get_headers())
+    # ---------------------------------------------------------
+        
+    url = f"{API_PREFIX}{endpoint}" if use_prefix and not endpoint.startswith(API_PREFIX) else endpoint
+    response = await client.post(url, json=json_data, headers=headers)
+    return response
 
 async def api_get(endpoint: str, params: dict = None, use_prefix: bool = False):
     """

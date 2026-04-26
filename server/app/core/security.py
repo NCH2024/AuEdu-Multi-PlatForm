@@ -1,5 +1,5 @@
 # Server_Core/app/core/security.py
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import httpx
 import os
@@ -35,3 +35,14 @@ async def verify_token(credentials: HTTPAuthorizationCredentials | str = Depends
         raise HTTPException(status_code=401, detail="Token không hợp lệ hoặc đã hết hạn")
         
     return response.json()
+
+async def get_device_metadata(
+    x_device_id: str = Header(default="Unknown"),
+    x_client_version: str = Header(default="Unknown"),
+    x_platform: str = Header(default="Unknown")
+) -> dict:
+    return {
+        "device_id": x_device_id,
+        "client_version": x_client_version,
+        "platform": x_platform
+    }
