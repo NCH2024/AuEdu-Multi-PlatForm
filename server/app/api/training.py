@@ -123,12 +123,16 @@ async def enroll_face_data(
     req: FaceEnrollRequest, db: AsyncSession = Depends(get_db)
 ):
     try:
+        # Kiểm tra số lượng ảnh tối thiểu
+        if len(req.images) < 10:
+            raise ValueError("Cần ít nhất 10 ảnh chất lượng để tạo biểu diễn khuôn mặt.")
+
         # Lấy embedding trung bình từ AI
         fused = face_engine.extract_fused_embedding(req.images)
 
         # RÀ SOÁT TRÙNG LẶP (DUPLICATE CHECK)
         # Giới hạn cosine_distance. Khoảng cách < 0.35 thường được coi là cùng 1 người.
-        threshold = 0.001 
+        threshold = 0.35  # Empirically chosen for ArcFace embeddings
         distance = FaceEmbedding.embedding.cosine_distance(fused)
         
         check_stmt = (
@@ -162,6 +166,7 @@ async def enroll_face_data(
         )
         await db.execute(stmt)
         await db.commit()
+        print(f"[ENROLL] SV={req.sv_id} GV={req.gv_id} – embedding stored, distance={threshold}")
         return {"status": "success", "message": "Cập nhật dữ liệu khuôn mặt thành công!"}
     except ValueError as ve:
         # Lỗi mình tự raise sẽ bay ra đây, trả về 400 Client Error

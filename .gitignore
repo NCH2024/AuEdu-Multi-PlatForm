@@ -13,3 +13,8 @@ venv/
 # Bỏ qua thư mục build app 
 build/
 
+# Bỏ qua calibration data (machine-generated)
+calib.npy
+
+# Bỏ qua file môi trường
+.env

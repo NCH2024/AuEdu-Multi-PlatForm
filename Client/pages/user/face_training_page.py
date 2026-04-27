@@ -12,6 +12,11 @@ from components.options.top_notification import show_top_notification
 from core.config import get_supabase_client
 from core.helper import safe_json_load
 
+# FIQA Threshold – consistent với Server-side config
+# Client mặc định 0.05 nếu không set trong .env
+import os as _os
+FIQA_THRESHOLD = float(_os.getenv("FIQA_THRESHOLD", "0.05"))
+
 class FaceTrainingPage(ft.Container):
     def __init__(self, page: ft.Page):
         super().__init__()
@@ -263,8 +268,8 @@ class FaceTrainingPage(ft.Container):
             # Check 1: Độ mờ (Laplacian variance) - Chống rung/Anti-Motion Blur
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-            if blur_score < 100:
-                return False, "Ảnh mờ, vui lòng giữ yên đầu!"
+            if blur_score / 200.0 < FIQA_THRESHOLD:
+                return False, "Ảnh quá mờ – FIQA=%.2f" % (blur_score / 200.0)
 
             # Check 2: Khoảng cách (Diện tích khuôn mặt)
             # Tích hợp MediaPipe (nếu có)
@@ -327,6 +332,9 @@ class FaceTrainingPage(ft.Container):
                     self.update()
                     # Flet 0.84.0: Bỏ qua page.snack_bar, có thể không cần hiện SnackBar khi thành công để tránh rối
                     await asyncio.sleep(0.3)
+                    # Auto-disable start button when target reached
+                    if len(self.captured_frames) >= self.target_frames:
+                        self.btn_start.disabled = True
                 else:
                     self.txt_status.value = msg
                     self.txt_status.color = ft.Colors.RED_400
