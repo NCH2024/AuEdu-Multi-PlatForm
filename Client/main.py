@@ -16,6 +16,8 @@ from pages.user.attendance_session_page import AttendanceSessionPage
 from pages.user.face_training_page import FaceTrainingPage
 from pages.user.attendance_history_page import AttendanceHistoryPage
 from pages.user.student_search_page import StudentSearchPage
+# ── ADMIN IMPORTS ──
+from pages.admin.admin_home_page import AdminHomePage
 import core.theme as theme_module
 
 DEBUG_LOADING = False
@@ -58,7 +60,9 @@ async def main(page: ft.Page):
     page.padding = 0 
     page.bgcolor = theme_module.current_theme.bg_color
     
-    dashboard = BaseDashboard(page)
+    # ── Dashboard instances: User + Admin dùng chung BaseDashboard ──
+    dashboard = BaseDashboard(page, role="giangvien")
+    admin_dashboard = BaseDashboard(page, role="admin")
     
     async def handle_routing(route_str: str):
         try:
@@ -112,40 +116,57 @@ async def main(page: ft.Page):
             
             # Xử lý cơ chế thay ruột SPA trong Dashboard
             else:
-                if not page.views or page.views[-1].route != "/dashboard_layout":
-                    page.views.clear()
-                    page.views.append(ft.View(route="/dashboard_layout", controls=[dashboard], padding=0, bgcolor=theme_module.current_theme.bg_color))
-                    page.update()
+                # ── ADMIN ROUTES: Dùng admin_dashboard layout ──
+                if current_route.startswith("/admin/"):
+                    if not page.views or page.views[-1].route != "/admin_dashboard_layout":
+                        page.views.clear()
+                        page.views.append(ft.View(route="/admin_dashboard_layout", controls=[admin_dashboard], padding=0, bgcolor=theme_module.current_theme.bg_color))
+                        page.update()
 
-                if current_route == "/user/home":
-                    dashboard.set_content("TRANG CHỦ", UserHomePage(page), current_route)
-                    
-                elif current_route == "/user/attendance":
-                    dashboard.set_content("ĐIỂM DANH SINH VIÊN", AttendancePage(page), current_route)
-                    
-                elif current_route == "/user/attendance/history":
-                    dashboard.set_content("LỊCH SỬ ĐIỂM DANH", AttendanceHistoryPage(page), current_route)
-                    
-                elif current_route == "/user/attendance/search":
-                    dashboard.set_content("TÌM KIẾM SINH VIÊN", StudentSearchPage(page), current_route)
-                    
-                elif current_route == "/user/settings":
-                    dashboard.set_content("CÀI ĐẶT PHẦN MỀM", SettingsPage(page), current_route)
-                    
-                elif current_route == "/user/schedule":
-                    dashboard.set_content("LỊCH HỌC / LỊCH THI", SchedulePage(page), current_route)
-                    
-                elif current_route == "/user/stats":
-                    dashboard.set_content("THỐNG KÊ ĐIỂM DANH", StatsPage(page), current_route)
-                    
-                elif current_route == "/user/about":
-                    dashboard.set_content("THÔNG TIN PHẦN MỀM", AboutPage(page), current_route)
-                    
-                elif current_route == "/user/profile":
-                    dashboard.set_content("HỒ SƠ TÀI KHOẢN", ProfilePage(page), current_route)
-                    
-                elif current_route == "/user/attendance/training":
-                    dashboard.set_content("ĐÀO TẠO DỮ LIỆU", FaceTrainingPage(page), current_route)
+                    if current_route == "/admin/home":
+                        admin_dashboard.set_content("TỔNG QUAN QUẢN TRỊ", AdminHomePage(page), current_route)
+                    # TODO: Bổ sung thêm các trang admin khác khi implement
+                    # elif current_route == "/admin/users": ...
+                    # elif current_route == "/admin/reports": ...
+                    # elif current_route == "/admin/settings": ...
+                    # elif current_route == "/admin/audit": ...
+
+                # ── USER ROUTES: Dùng dashboard layout ──
+                else:
+                    if not page.views or page.views[-1].route != "/dashboard_layout":
+                        page.views.clear()
+                        page.views.append(ft.View(route="/dashboard_layout", controls=[dashboard], padding=0, bgcolor=theme_module.current_theme.bg_color))
+                        page.update()
+
+                    if current_route == "/user/home":
+                        dashboard.set_content("TRANG CHỦ", UserHomePage(page), current_route)
+                        
+                    elif current_route == "/user/attendance":
+                        dashboard.set_content("ĐIỂM DANH SINH VIÊN", AttendancePage(page), current_route)
+                        
+                    elif current_route == "/user/attendance/history":
+                        dashboard.set_content("LỊCH SỬ ĐIỂM DANH", AttendanceHistoryPage(page), current_route)
+                        
+                    elif current_route == "/user/attendance/search":
+                        dashboard.set_content("TÌM KIẾM SINH VIÊN", StudentSearchPage(page), current_route)
+                        
+                    elif current_route == "/user/settings":
+                        dashboard.set_content("CÀI ĐẶT PHẦN MỀM", SettingsPage(page), current_route)
+                        
+                    elif current_route == "/user/schedule":
+                        dashboard.set_content("LỊCH HỌC / LỊCH THI", SchedulePage(page), current_route)
+                        
+                    elif current_route == "/user/stats":
+                        dashboard.set_content("THỐNG KÊ ĐIỂM DANH", StatsPage(page), current_route)
+                        
+                    elif current_route == "/user/about":
+                        dashboard.set_content("THÔNG TIN PHẦN MỀM", AboutPage(page), current_route)
+                        
+                    elif current_route == "/user/profile":
+                        dashboard.set_content("HỒ SƠ TÀI KHOẢN", ProfilePage(page), current_route)
+                        
+                    elif current_route == "/user/attendance/training":
+                        dashboard.set_content("ĐÀO TẠO DỮ LIỆU", FaceTrainingPage(page), current_route)
 
             page.update()
             
@@ -178,10 +199,19 @@ async def main(page: ft.Page):
             return
 
         prefs = ft.SharedPreferences()
-        session = await prefs.get("user_session")
+        session_str = await prefs.get("user_session")
 
-        if session:
-            await page.push_route("/user/home")
+        if session_str:
+            # ── Phân luồng theo vai trò khi khởi động lại app ──
+            try:
+                session_data = json.loads(session_str)
+                role = session_data.get("role", "giangvien")
+                if role in ["admin", "super_admin"]:
+                    await page.push_route("/admin/home")
+                else:
+                    await page.push_route("/user/home")
+            except Exception:
+                await page.push_route("/user/home")
         else:
             await page.push_route("/login")
 

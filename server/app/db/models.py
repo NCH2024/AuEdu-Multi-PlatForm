@@ -200,4 +200,4 @@ class AuditLog(Base):
     details = Column(JSON, nullable=True) # Chi tiết nội dung thay đổi
     ip_address = Column(String, nullable=True)
     user_agent = Column(Text, nullable=True)
-    created_at = Column(DateTime, server_default=text('now()'))
+    created_at = Column(DateTime, server_default=text('now()'))

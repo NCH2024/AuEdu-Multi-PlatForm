@@ -10,31 +10,51 @@ import core.theme as theme_module
 from components.options.confirm_dialog import show_confirm_dialog 
 
 class BaseDashboard(ft.Container):
-    def __init__(self, page: ft.Page):
+    """
+    Dashboard layout dùng chung cho Giảng viên (User) và Quản trị viên (Admin).
+    Khác biệt được điều khiển qua tham số `role`:
+    - "giangvien": Đầy đủ Geolocator, mobile bottom nav, menu 4 mục.
+    - "admin"/"super_admin": PC-only, không GPS, header có badge vai trò.
+    """
+    def __init__(self, page: ft.Page, role: str = "giangvien", menu_items: list = None):
         super().__init__()
         self.app_page = page
         self.expand = True
         self.active_route = ""
         self.is_sidebar_expanded = False
-        
-        self.menu_items = [
-            {"label": "Tổng quan", "icon": ft.Icons.DASHBOARD_ROUNDED, "route": "/user/home"},
-            {"label": "Điểm danh", "icon": ft.Icons.CAMERA_ALT_ROUNDED, "route": "/user/attendance"},
-            {"label": "Lịch học", "icon": ft.Icons.CALENDAR_MONTH_ROUNDED, "route": "/user/schedule"},
-            {"label": "Thống kê", "icon": ft.Icons.PIE_CHART_ROUNDED, "route": "/user/stats"},
-        ]
+
+        # ── PHÂN QUYỀN ──
+        self.role = role
+        self.is_admin = role in ["admin", "super_admin"]
+
+        # ── MENU ITEMS theo vai trò ──
+        if menu_items is not None:
+            self.menu_items = menu_items
+        elif self.is_admin:
+            self.menu_items = [
+                {"label": "Tổng quan", "icon": ft.Icons.DASHBOARD_ROUNDED, "route": "/admin/home"},
+            ]
+        else:
+            self.menu_items = [
+                {"label": "Tổng quan", "icon": ft.Icons.DASHBOARD_ROUNDED, "route": "/user/home"},
+                {"label": "Điểm danh", "icon": ft.Icons.CAMERA_ALT_ROUNDED, "route": "/user/attendance"},
+                {"label": "Lịch học", "icon": ft.Icons.CALENDAR_MONTH_ROUNDED, "route": "/user/schedule"},
+                {"label": "Thống kê", "icon": ft.Icons.PIE_CHART_ROUNDED, "route": "/user/stats"},
+            ]
 
         self.user_name_text = ft.Text("Đang tải...", size=13, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
-        
-        # ___ Khởi tạo quyền truy cập vị trí _____
-        self.geo = Geolocator(
-            on_error=lambda e: print(f"[Geolocator Error] {e.data}")
-        )
-        self.app_page.services.append(self.geo)
-            
+
+        # ── GEOLOCATOR: Chỉ dành cho Giảng viên ──
+        if not self.is_admin:
+            self.geo = Geolocator(
+                on_error=lambda e: print(f"[Geolocator Error] {e.data}")
+            )
+            self.app_page.services.append(self.geo)
+
         # ─── KHỐI TIÊU ĐỀ TRANG ───
+        default_title = "TỔNG QUAN QUẢN TRỊ" if self.is_admin else "TỔNG QUAN"
         self._page_title_raw_text = ft.Text(
-            "TỔNG QUAN", size=13, 
+            default_title, size=13, 
             weight=ft.FontWeight.BOLD, 
             color=theme_module.current_theme.surface_color 
         )
@@ -45,37 +65,56 @@ class BaseDashboard(ft.Container):
             border_radius=20, 
             alignment=ft.Alignment(0, 0)
         )
-        
-        # ─── KHỐI THỜI GIAN & VỊ TRÍ (CỤM PILL) ───
+
+        # ─── KHỐI THỜI GIAN & VỊ TRÍ / ADMIN PILLS ───
         self.clock_text = ft.Text("00:00:00", size=13, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.primary)
-        self.location_text = ft.Text("Đang định vị...", size=12, color=theme_module.current_theme.text_muted)
-        
-        # Các thành phần trang trí bên trong cụm
         self.clock_icon = ft.Icon(ft.Icons.ACCESS_TIME_ROUNDED, size=16, color=theme_module.current_theme.primary)
-        self.loc_icon = ft.Icon(ft.Icons.LOCATION_ON_ROUNDED, size=15, color=theme_module.current_theme.text_muted)
-        self.time_loc_divider = ft.Container(width=1, height=14, bgcolor=theme_module.current_theme.divider_color, margin=ft.Margin(6, 0, 6, 0))
-        
-        # Container bọc toàn bộ lại
-        self.time_location_container = ft.Container(
-            content=ft.Row([
-                self.clock_icon,
-                self.clock_text,
-                self.time_loc_divider,
-                self.loc_icon,
-                self.location_text
-            ], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
-            bgcolor=theme_module.current_theme.surface_variant,
-            border=ft.Border.all(1, theme_module.current_theme.divider_color),
-            padding=ft.Padding(12, 6, 12, 6),
-            border_radius=20, # Bo tròn viên thuốc
-            visible=False # Mặc định ẩn, sẽ bật lên khi ở trên Desktop
-        )
+
+        if self.is_admin:
+            # Admin: Clock + Badge vai trò + Trạng thái hệ thống (viên nan / pill)
+            self._admin_divider = ft.Container(width=1, height=14, bgcolor=theme_module.current_theme.divider_color, margin=ft.Margin(4, 0, 4, 0))
+            self._admin_role_text = ft.Text("QUẢN TRỊ", size=11, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.secondary)
+            self._admin_status_text = ft.Text("Ổn định", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.GREEN_600)
+            self._admin_status_dot = ft.Container(width=7, height=7, border_radius=4, bgcolor=ft.Colors.GREEN_500)
+            self.time_location_container = ft.Container(
+                content=ft.Row([
+                    self.clock_icon, self.clock_text,
+                    self._admin_divider,
+                    ft.Icon(ft.Icons.SHIELD_ROUNDED, size=13, color=theme_module.current_theme.secondary),
+                    self._admin_role_text,
+                    ft.Container(width=1, height=14, bgcolor=theme_module.current_theme.divider_color, margin=ft.Margin(4, 0, 4, 0)),
+                    self._admin_status_dot,
+                    self._admin_status_text,
+                ], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=theme_module.current_theme.surface_variant,
+                border=ft.Border.all(1, theme_module.current_theme.divider_color),
+                padding=ft.Padding(12, 6, 12, 6),
+                border_radius=20,
+                visible=False
+            )
+        else:
+            # User: Clock + Divider + Định vị GPS
+            self.location_text = ft.Text("Đang định vị...", size=12, color=theme_module.current_theme.text_muted)
+            self.loc_icon = ft.Icon(ft.Icons.LOCATION_ON_ROUNDED, size=15, color=theme_module.current_theme.text_muted)
+            self.time_loc_divider = ft.Container(width=1, height=14, bgcolor=theme_module.current_theme.divider_color, margin=ft.Margin(6, 0, 6, 0))
+            self.time_location_container = ft.Container(
+                content=ft.Row([
+                    self.clock_icon, self.clock_text,
+                    self.time_loc_divider,
+                    self.loc_icon, self.location_text
+                ], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=theme_module.current_theme.surface_variant,
+                border=ft.Border.all(1, theme_module.current_theme.divider_color),
+                padding=ft.Padding(12, 6, 12, 6),
+                border_radius=20,
+                visible=False
+            )
 
         self.content_area = ft.Container(expand=True, padding=5, alignment=ft.Alignment.TOP_CENTER)
-        
+
         self.sidebar_controls = []
         self.bottom_nav_controls = []
-        
+
         self.content = ft.Container()
 
     def did_mount(self):
@@ -84,8 +123,9 @@ class BaseDashboard(ft.Container):
         
         # --- BẬT TÍNH NĂNG GIÁM SÁT BẢO MẬT ---
         self.app_page.run_task(self._monitor_session)
-        
-        if self._is_desktop_platform():
+
+        # Geolocator chỉ chạy cho Giảng viên trên Desktop
+        if self._is_desktop_platform() and not self.is_admin:
             self.app_page.run_task(self._update_location)
             
     def _is_desktop_platform(self):
@@ -237,9 +277,15 @@ class BaseDashboard(ft.Container):
         
         self.clock_text.color = theme_module.current_theme.primary
         self.clock_icon.color = theme_module.current_theme.primary
-        self.location_text.color = theme_module.current_theme.text_muted
-        self.loc_icon.color = theme_module.current_theme.text_muted
-        self.time_loc_divider.bgcolor = theme_module.current_theme.divider_color
+
+        # Cập nhật theme cho các thành phần riêng theo vai trò
+        if self.is_admin:
+            self._admin_role_text.color = theme_module.current_theme.secondary
+            self._admin_divider.bgcolor = theme_module.current_theme.divider_color
+        else:
+            self.location_text.color = theme_module.current_theme.text_muted
+            self.loc_icon.color = theme_module.current_theme.text_muted
+            self.time_loc_divider.bgcolor = theme_module.current_theme.divider_color
         
         self.time_location_container.bgcolor = theme_module.current_theme.surface_variant
         self.time_location_container.border = ft.Border.all(1, theme_module.current_theme.divider_color)
@@ -433,8 +479,12 @@ class BaseDashboard(ft.Container):
         await self.app_page.push_route("/login")
 
     def build_windows_title_bar(self):
+        # Admin và User dùng chung title bar, chỉ khác tiêu đề và icon
         if self.app_page.platform != ft.PagePlatform.WINDOWS:
             return ft.Container(height=0, visible=False)
+        
+        _title_bar_text = "AuEdu PC - Quản trị" if self.is_admin else "AuEdu PC"
+        _title_bar_icon = ft.Icons.SHIELD_ROUNDED if self.is_admin else ft.Icons.AUTO_AWESOME
 
         btn_style_normal = ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=0),
@@ -479,8 +529,8 @@ class BaseDashboard(ft.Container):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
                         ft.Row([
-                            ft.Icon(ft.Icons.AUTO_AWESOME, color=theme_module.current_theme.text_main, size=16),
-                            ft.Text("AuEdu PC", color=theme_module.current_theme.text_main, size=12, weight=ft.FontWeight.BOLD)
+                            ft.Icon(_title_bar_icon, color=theme_module.current_theme.text_main, size=16),
+                            ft.Text(_title_bar_text, color=theme_module.current_theme.text_main, size=12, weight=ft.FontWeight.BOLD)
                         ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         ft.Row(
                             spacing=0, 
@@ -497,8 +547,11 @@ class BaseDashboard(ft.Container):
         )
 
     def build_layout(self):
-        async def go_to_profile(e): await self.app_page.push_route("/user/profile")
-        async def go_to_settings(e): await self.app_page.push_route("/user/settings")
+        # Định tuyến profile/settings theo vai trò
+        _profile_route = "/admin/profile" if self.is_admin else "/user/profile"
+        _settings_route = "/user/settings"
+        async def go_to_profile(e): await self.app_page.push_route(_profile_route)
+        async def go_to_settings(e): await self.app_page.push_route(_settings_route)
         async def handle_about(e): await self.app_page.push_route("/user/about")
 
         def handle_normal_logout(e):
@@ -508,8 +561,11 @@ class BaseDashboard(ft.Container):
                 lambda: self.app_page.run_task(self._do_normal_logout)
             )
 
-        is_mobile = (self.app_page.width and self.app_page.width < 768) or \
-                    self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+        # Admin luôn dùng desktop layout, User kiểm tra kích thước
+        is_mobile = False if self.is_admin else (
+            (self.app_page.width and self.app_page.width < 768) or
+            self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+        )
 
         self.btn_menu_toggle = ft.IconButton(
             icon=ft.Icons.MENU_ROUNDED,
@@ -517,7 +573,6 @@ class BaseDashboard(ft.Container):
             on_click=self.toggle_sidebar, visible=not is_mobile
         )
         self.user_name_text.visible = not is_mobile
-        
         self.time_location_container.visible = not is_mobile
 
         popup_items = [
@@ -535,12 +590,18 @@ class BaseDashboard(ft.Container):
                 )
             )
 
-        popup_items.extend([
-            ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.ACCOUNT_CIRCLE_OUTLINED, color=theme_module.current_theme.text_main), ft.Text("Hồ sơ tài khoản", color=theme_module.current_theme.text_main)]), on_click=go_to_profile),
-            ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.SETTINGS_OUTLINED, color=theme_module.current_theme.text_main), ft.Text("Cài đặt phần mềm", color=theme_module.current_theme.text_main)]), on_click=go_to_settings),
-            ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.INFO_OUTLINED, color=theme_module.current_theme.text_main), ft.Text("Thông tin phần mềm", color=theme_module.current_theme.text_main)]), on_click=handle_about),
-            ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.LOGOUT, color=ft.Colors.RED_500), ft.Text("Đăng xuất", color=ft.Colors.RED_500)]), on_click=handle_normal_logout),
-        ])
+        popup_items.append(
+            ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.ACCOUNT_CIRCLE_OUTLINED, color=theme_module.current_theme.text_main), ft.Text("Hồ sơ tài khoản", color=theme_module.current_theme.text_main)]), on_click=go_to_profile)
+        )
+        # Cài đặt & Thông tin chỉ hiển thị cho User, Admin không cần
+        if not self.is_admin:
+            popup_items.extend([
+                ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.SETTINGS_OUTLINED, color=theme_module.current_theme.text_main), ft.Text("Cài đặt phần mềm", color=theme_module.current_theme.text_main)]), on_click=go_to_settings),
+                ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.INFO_OUTLINED, color=theme_module.current_theme.text_main), ft.Text("Thông tin phần mềm", color=theme_module.current_theme.text_main)]), on_click=handle_about),
+            ])
+        popup_items.append(
+            ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.LOGOUT, color=ft.Colors.RED_500), ft.Text("Đăng xuất", color=ft.Colors.RED_500)]), on_click=handle_normal_logout)
+        )
 
         # Header Desktop Nổi - Header Mobile Phẳng
         header_content = ft.Container(
@@ -569,7 +630,14 @@ class BaseDashboard(ft.Container):
                             padding=ft.Padding(3, 3, 3, 3),
                             bgcolor=ft.Colors.with_opacity(0.08, theme_module.current_theme.text_main),
                             content=ft.Row(spacing=8, controls=[
-                                ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=theme_module.current_theme.bg_color, size=16), bgcolor=theme_module.current_theme.secondary, radius=16),
+                                # Admin dùng icon Shield, User dùng icon Person
+                                ft.CircleAvatar(
+                                    content=ft.Icon(
+                                        ft.Icons.ADMIN_PANEL_SETTINGS if self.is_admin else ft.Icons.PERSON,
+                                        color=theme_module.current_theme.bg_color, size=16
+                                    ),
+                                    bgcolor=theme_module.current_theme.secondary, radius=16
+                                ),
                                 self.user_name_text,
                                 ft.Container(width=3, visible=not is_mobile),
                             ])
@@ -617,7 +685,8 @@ class BaseDashboard(ft.Container):
                         controls=[
                             ft.Container(
                                 padding=ft.Padding(0, 20, 0, 20), alignment=ft.Alignment.CENTER,
-                                content=ft.Image(src="icon-1.png", width=35, height=35, fit=ft.BoxFit.CONTAIN)
+                                # Admin: icon Shield, User: logo app
+                                content=ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS, size=35, color=ft.Colors.BLACK_87 if theme_module.current_theme.is_dark else ft.Colors.WHITE) if self.is_admin else ft.Image(src="icon-1.png", width=35, height=35, fit=ft.BoxFit.CONTAIN)
                             )
                         ] + self.sidebar_controls
                     ),
@@ -666,7 +735,8 @@ class BaseDashboard(ft.Container):
             expand=True, spacing=0
         )
 
-        return ft.SafeArea(content=self.mobile_layout if is_mobile else self.desktop_layout)
+        # Admin luôn dùng desktop layout
+        return ft.SafeArea(content=self.desktop_layout if self.is_admin else (self.mobile_layout if is_mobile else self.desktop_layout))
 
     def build_navigation(self):
         self.sidebar_controls.clear()
@@ -719,6 +789,9 @@ class BaseDashboard(ft.Container):
             )
 
     async def handle_resize(self, e):
+        # Admin: luôn desktop, không cần xử lý resize
+        if self.is_admin:
+            return
         if not getattr(self, "page", None): return
         
         is_mobile = self.app_page.width and self.app_page.width < 768
