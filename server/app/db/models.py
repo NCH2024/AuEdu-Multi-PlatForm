@@ -1,5 +1,5 @@
 # Server_Core/app/db/models.py
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Date, DateTime, Time, ForeignKey, text, Identity, Float, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Date, DateTime, Time, ForeignKey, text, Identity, Float, UniqueConstraint, Index, CheckConstraint, JSON
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.db.session import Base
@@ -40,9 +40,13 @@ class GiangVien(Base):
     sodienthoai = Column(Text)
     khoa_id = Column(String, ForeignKey('khoa.id'))
     auth_id = Column(String)  
-    vai_tro = Column(Text)
+    vai_tro = Column(Text, server_default='giangvien')
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+
+    __table_args__ = (
+        CheckConstraint(vai_tro.in_(['giangvien', 'admin', 'super_admin']), name='chk_vai_tro'),
+    )
 
 class Lop(Base):
     __tablename__ = 'lop'
@@ -150,7 +154,7 @@ class FaceEmbedding(Base):
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
     trained_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
-    model_version = Column(Text, nullable=True, default="MiniFASNetV2_MobileFaceNet") # Thêm version model
+    model_version = Column(Text, nullable=True, default="insightface_buffalo_s")  # Model version dùng để trích xuất embedding
 
 class ThongBao(Base):
     __tablename__ = 'thongbao'
@@ -176,3 +180,24 @@ class TuanHoc(Base):
     ten_tuan = Column(Text)
     ngay_bat_dau = Column(Date)
     ngay_ket_thuc = Column(Date)
+
+class SystemConfig(Base):
+    __tablename__ = 'system_config'
+    key = Column(String, primary_key=True)
+    value = Column(JSON, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+
+class AuditLog(Base):
+    __tablename__ = 'audit_log'
+    id = Column(BigInteger, Identity(always=True), primary_key=True)
+    user_id = Column(Integer, ForeignKey('giangvien.id'), nullable=False)
+    action = Column(String, nullable=False) # VD: CREATE, UPDATE, DELETE, LOGIN
+    entity = Column(String, nullable=True) # VD: SinhVien, DiemDanh, SystemConfig
+    entity_id = Column(String, nullable=True)
+    details = Column(JSON, nullable=True) # Chi tiết nội dung thay đổi
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=text('now()'))

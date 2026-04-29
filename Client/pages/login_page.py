@@ -250,9 +250,24 @@ class LoginPage(ft.Container):
             if gv_data:
                 giangvien = gv_data[0]
                 ho_ten = f"{giangvien.get('hodem', '')} {giangvien.get('ten', '')}".strip()
+                vai_tro = giangvien.get("vai_tro", "giangvien")
+
+                # ✅ Ràng buộc nền tảng: Admin/Super Admin chỉ được đăng nhập trên PC
+                if vai_tro in ["admin", "super_admin"]:
+                    if self.app_page.platform not in [ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX]:
+                        show_top_notification(
+                            self.app_page, 
+                            "Lỗi quyền truy cập", 
+                            "Tài khoản Quản trị viên chỉ được phép đăng nhập trên nền tảng Máy tính (PC).", 
+                            color=ft.Colors.RED_600, 
+                            sound="E"
+                        )
+                        self.reset_login_button()
+                        return
+
                 session_dict = {
                     "email": email,
-                    "role": giangvien.get("vai_tro", "giangvien"),
+                    "role": vai_tro,
                     "name": ho_ten,
                     "id": giangvien.get("id"),
                     "auth_id": user_id,
@@ -267,9 +282,14 @@ class LoginPage(ft.Container):
                     self.saved_accounts.append(session_dict)
                     await prefs.set("saved_accounts", json.dumps(self.saved_accounts))
 
-                print(f"Tài khoản {ho_ten} đã đăng nhập thành công!")
+                print(f"Tài khoản {ho_ten} đã đăng nhập thành công với vai trò {vai_tro}!")
                 show_top_notification(self.app_page, "Thành công", f"Chào mừng {ho_ten} trở lại!", duration_ms=4000, color=ft.Colors.GREEN_600, sound="S")
-                await self.app_page.push_route("/user/home")
+                
+                # ✅ Phân luồng định tuyến
+                if vai_tro in ["admin", "super_admin"]:
+                    await self.app_page.push_route("/admin/home")
+                else:
+                    await self.app_page.push_route("/user/home")
             else:
                 show_top_notification(self.app_page, "Lỗi phân quyền", "Tài khoản chưa được liên kết với Giảng viên nào!", color=ft.Colors.ORANGE_700)
                 self.reset_login_button()

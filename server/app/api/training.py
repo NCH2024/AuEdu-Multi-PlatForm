@@ -161,7 +161,7 @@ async def enroll_face_data(
                 "embedding": fused,
                 "trained_by": req.gv_id,
                 "updated_at": text("now()"),
-                "model_version": "mobilefacenet_model_best.pth"
+                "model_version": "insightface_buffalo_s"
             },
         )
         await db.execute(stmt)

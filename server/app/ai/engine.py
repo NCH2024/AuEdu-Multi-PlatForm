@@ -4,7 +4,7 @@ server/app/ai/engine.py
 Lõi AI Nhận diện Khuôn mặt (Face Recognition Core Engine)
 
 Kiến trúc:
-    - InsightFace FaceAnalysis (buffalo_s): RetinaFace detector + MobileFaceNet/ArcFace 512-D embedding
+    - InsightFace FaceAnalysis (buffalo_s): RetinaFace detector + ArcFace 512-D embedding
     - FIQA (Face Image Quality Assessment): Laplacian Variance để lọc ảnh mờ
     - Anti-Spoof: MiniFASNet liveness detection via ONNX Runtime
     - Calibration: Giải méo quang học cho webcam góc rộng (tuỳ chọn, graceful fallback)
@@ -66,7 +66,7 @@ class FaceEngine:
         # -----------------------------------------------------------------
         # 1. KHỞI TẠO INSIGHTFACE (với OpenCV DNN Fallback)
         #    - providers=[CUDA, CPU]: Tự động dùng GPU nếu có, fallback CPU
-        #    - name='buffalo_s': Model nhẹ - RetinaFace + MobileFaceNet 512-D
+        #    - name='buffalo_s': Model nhẹ - RetinaFace + ArcFace 512-D
         # -----------------------------------------------------------------
         providers = ort.get_available_providers()
         ctx_id = 0 if "CUDAExecutionProvider" in providers else -1

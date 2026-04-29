@@ -14,7 +14,7 @@ Về Threshold (Ngưỡng Nhận diện):
         * 0.0 = giống hệt nhau (cùng người, cùng ảnh)
         * 1.0 = vuông góc (không tương quan)
         * 2.0 = ngược chiều hoàn toàn
-    - InsightFace buffalo_s (MobileFaceNet + ArcFace):
+    - InsightFace buffalo_s (ArcFace 512-D):
         * Cùng người    → cosine_distance thường < 0.40
         * Khác người    → cosine_distance thường > 0.55
         * Vùng "mơ hồ" → 0.40 – 0.55
