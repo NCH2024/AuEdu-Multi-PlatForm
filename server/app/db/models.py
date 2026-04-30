@@ -1,5 +1,5 @@
 # Server_Core/app/db/models.py
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Date, DateTime, Time, ForeignKey, text, Identity, Float, UniqueConstraint, Index, CheckConstraint, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Date, DateTime, Time, ForeignKey, text, Identity, Float, UniqueConstraint, Index, CheckConstraint, JSON, Boolean, ARRAY
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.db.session import Base
@@ -7,7 +7,9 @@ from app.db.session import Base
 class Khoa(Base):
     __tablename__ = 'khoa'
     id = Column(String, primary_key=True)
+    code = Column(String, unique=True, index=True, nullable=True) # Mã khoa
     tenkhoa = Column(Text)
+    description = Column(Text, nullable=True) # Mô tả
     created_at = Column(DateTime, server_default=text('now()'))
 
 class LoaiHocPhan(Base):
@@ -19,8 +21,10 @@ class LoaiHocPhan(Base):
 class HocKy(Base):
     __tablename__ = 'hocky'
     id = Column(Integer, primary_key=True)
-    tenhocky = Column(Text)
-    namhoc = Column(Text)
+    tenhocky = Column(Text) # term
+    namhoc = Column(Text) # year
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
     created_at = Column(DateTime, server_default=text('now()'))
 
 class Tiet(Base):
@@ -51,8 +55,10 @@ class GiangVien(Base):
 class Lop(Base):
     __tablename__ = 'lop'
     id = Column(String, primary_key=True)
-    tenlop = Column(Text)
-    khoa_id = Column(String, ForeignKey('khoa.id'))
+    code = Column(String, nullable=True) # Mã lớp
+    tenlop = Column(Text) # Tên lớp
+    khoa_id = Column(String, ForeignKey('khoa.id')) # department_id
+    semester_id = Column(Integer, ForeignKey('hocky.id'), nullable=True)
     nambd = Column(Integer)
     namkt = Column(Integer)
     khoahoc = Column(Integer)
@@ -61,6 +67,9 @@ class Lop(Base):
 class SinhVien(Base):
     __tablename__ = 'sinhvien'
     id = Column(Integer, primary_key=True)
+    student_id = Column(String, unique=True, index=True, nullable=True)
+    full_name = Column(String, nullable=True)
+    email = Column(String, unique=True, index=True, nullable=True)
     hodem = Column(Text)
     ten = Column(Text)
     gioitinh = Column(Text)
@@ -70,6 +79,7 @@ class SinhVien(Base):
     ghichu = Column(Text)
     anhdaidien = Column(Text)
     sinhtrachoc = Column(Text) 
+    face_vector = Column(Vector(512), nullable=True) 
     
     # --- AUDIT TRAIL & SOFT DELETE ---
     created_at = Column(DateTime, server_default=text('now()'))
@@ -201,3 +211,23 @@ class AuditLog(Base):
     ip_address = Column(String, nullable=True)
     user_agent = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=text('now()'))
+
+# Hướng dẫn tạo Migration:
+# 1. alembic revision --autogenerate -m "Add admin tables and columns"
+# 2. alembic upgrade head
+
+class AttendanceSchedule(Base):
+    __tablename__ = 'attendance_schedules'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(255), nullable=False)
+    date = Column(Date, nullable=False)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    class_ids = Column(JSON, nullable=False) # Array các class_id
+    semester_id = Column(Integer, ForeignKey('hocky.id'), nullable=False)
+    recurrence = Column(String(50), nullable=True, default='none')
+    
+    # AI Config Parameters
+    ai_threshold = Column(Float, default=0.6)
+    anti_spoofing = Column(Boolean, default=True)
+    fiqa_threshold = Column(Float, default=0.5)

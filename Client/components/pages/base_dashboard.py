@@ -33,6 +33,12 @@ class BaseDashboard(ft.Container):
         elif self.is_admin:
             self.menu_items = [
                 {"label": "Tổng quan", "icon": ft.Icons.DASHBOARD_ROUNDED, "route": "/admin/home"},
+                {"label": "Quản lý Khoa", "icon": ft.Icons.ACCOUNT_BALANCE_ROUNDED, "route": "/admin/departments"},
+                {"label": "Học kỳ", "icon": ft.Icons.DATE_RANGE_ROUNDED, "route": "/admin/semesters"},
+                {"label": "Lớp học", "icon": ft.Icons.CLASS_ROUNDED, "route": "/admin/classes"},
+                {"label": "Sinh viên", "icon": ft.Icons.PEOPLE_ROUNDED, "route": "/admin/students"},
+                {"label": "Lịch điểm danh", "icon": ft.Icons.SCHEDULE_ROUNDED, "route": "/admin/schedules"},
+                {"label": "Cài đặt AI", "icon": ft.Icons.SETTINGS_ROUNDED, "route": "/admin/settings"},
             ]
         else:
             self.menu_items = [

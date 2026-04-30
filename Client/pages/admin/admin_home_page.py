@@ -194,10 +194,12 @@ class AdminHomePage(ft.Container):
             ]),
             ft.Container(height=5),
             ft.ResponsiveRow([
-                create_action_btn(ft.Icons.MANAGE_ACCOUNTS_ROUNDED, "Quản lý User", current_theme.secondary, ft.Colors.WHITE, "/admin/users"),
-                create_action_btn(ft.Icons.ANALYTICS_ROUNDED, "Xem Báo cáo", current_theme.surface_color, current_theme.secondary, "/admin/reports"),
-                create_action_btn(ft.Icons.SETTINGS_ROUNDED, "Cấu hình AI", current_theme.surface_color, current_theme.secondary, "/admin/settings"),
-                create_action_btn(ft.Icons.MANAGE_HISTORY_ROUNDED, "Full Nhật ký", current_theme.surface_color, current_theme.secondary, "/admin/audit"),
+                create_action_btn(ft.Icons.BUSINESS_ROUNDED, "Quản lý Khoa", current_theme.secondary, ft.Colors.WHITE, "/admin/departments"),
+                create_action_btn(ft.Icons.DATE_RANGE_ROUNDED, "Quản lý Học kỳ", current_theme.secondary, ft.Colors.WHITE, "/admin/semesters"),
+                create_action_btn(ft.Icons.CLASS_ROUNDED, "Quản lý Lớp", current_theme.surface_color, current_theme.secondary, "/admin/classes"),
+                create_action_btn(ft.Icons.PEOPLE_ROUNDED, "Quản lý Sinh viên", current_theme.surface_color, current_theme.secondary, "/admin/students"),
+                create_action_btn(ft.Icons.SCHEDULE_ROUNDED, "Lịch Điểm Danh", current_theme.surface_color, current_theme.secondary, "/admin/schedules"),
+                create_action_btn(ft.Icons.SETTINGS_ROUNDED, "Cài đặt AI", current_theme.surface_color, current_theme.secondary, "/admin/settings"),
             ], run_spacing=5, spacing=5)
         ], spacing=0))
 
@@ -233,15 +235,11 @@ class AdminHomePage(ft.Container):
                     pass
 
         try:
-            client = await get_supabase_client()
-            # Fetch giả lập hoặc fetch thật. Ở đây sẽ dùng logic đếm đơn giản.
-            users_res = await client.get("/giangvien", params={"select": "id", "limit": 1000})
-            classes_res = await client.get("/lop", params={"select": "id", "limit": 1000})
-            
-            # TODO: Lấy số liệu thực tế, tạm thời dùng mock data như yêu cầu
+            # TODO: Tích hợp gọi API FastAPI thật
+            # Hiện tại sử dụng mock data để Admin Panel load thành công
             self.stats_data = {
-                "total_users": len(users_res.json()) if users_res.status_code == 200 else 42,
-                "total_classes": len(classes_res.json()) if classes_res.status_code == 200 else 18,
+                "total_users": 128,
+                "total_classes": 24,
                 "today_att": random.randint(150, 300),
                 "sys_load": f"{random.randint(10, 45)}%"
             }

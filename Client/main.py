@@ -18,6 +18,12 @@ from pages.user.attendance_history_page import AttendanceHistoryPage
 from pages.user.student_search_page import StudentSearchPage
 # ── ADMIN IMPORTS ──
 from pages.admin.admin_home_page import AdminHomePage
+from pages.admin.departments_page import DepartmentsPage
+from pages.admin.semesters_page import SemestersPage
+from pages.admin.classes_page import ClassesPage
+from pages.admin.students_page import StudentsPage
+from pages.admin.attendance_schedule_page import AttendanceSchedulePage
+from pages.admin.system_settings_page import SystemSettingsPage
 import core.theme as theme_module
 
 DEBUG_LOADING = False
@@ -125,11 +131,18 @@ async def main(page: ft.Page):
 
                     if current_route == "/admin/home":
                         admin_dashboard.set_content("TỔNG QUAN QUẢN TRỊ", AdminHomePage(page), current_route)
-                    # TODO: Bổ sung thêm các trang admin khác khi implement
-                    # elif current_route == "/admin/users": ...
-                    # elif current_route == "/admin/reports": ...
-                    # elif current_route == "/admin/settings": ...
-                    # elif current_route == "/admin/audit": ...
+                    elif current_route == "/admin/departments":
+                        admin_dashboard.set_content("QUẢN LÝ KHOA", DepartmentsPage(page), current_route)
+                    elif current_route == "/admin/semesters":
+                        admin_dashboard.set_content("QUẢN LÝ HỌC KỲ", SemestersPage(page), current_route)
+                    elif current_route == "/admin/classes":
+                        admin_dashboard.set_content("QUẢN LÝ LỚP HỌC", ClassesPage(page), current_route)
+                    elif current_route == "/admin/students":
+                        admin_dashboard.set_content("QUẢN LÝ SINH VIÊN", StudentsPage(page), current_route)
+                    elif current_route == "/admin/schedules":
+                        admin_dashboard.set_content("TẠO LỊCH ĐIỂM DANH", AttendanceSchedulePage(page), current_route)
+                    elif current_route == "/admin/settings":
+                        admin_dashboard.set_content("CÀI ĐẶT HỆ THỐNG", SystemSettingsPage(page), current_route)
 
                 # ── USER ROUTES: Dùng dashboard layout ──
                 else:

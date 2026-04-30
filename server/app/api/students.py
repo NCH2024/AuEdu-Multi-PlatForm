@@ -104,3 +104,61 @@ async def get_student_personal_history(sv_id: int, gv_id: int, db: AsyncSession 
             "tong_so_buoi": row.sobuoi # Đưa dữ liệu này về Frontend
         })
     return data
+
+# --- ADMIN CRUD ---
+
+from pydantic import BaseModel
+from typing import Optional
+
+class StudentCreate(BaseModel):
+    id: int
+    student_id: Optional[str] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    hodem: str
+    ten: str
+    gioitinh: str
+    diachi: str
+    ngaysinh: date
+    class_id: str
+    ghichu: Optional[str] = None
+
+class StudentUpdate(BaseModel):
+    student_id: Optional[str] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    hodem: Optional[str] = None
+    ten: Optional[str] = None
+    gioitinh: Optional[str] = None
+    diachi: Optional[str] = None
+    ngaysinh: Optional[date] = None
+    class_id: Optional[str] = None
+    ghichu: Optional[str] = None
+
+@router.post("/")
+async def create_student(sv: StudentCreate, db: AsyncSession = Depends(get_db)):
+    db_sv = SinhVien(**sv.model_dump())
+    db.add(db_sv)
+    await db.commit()
+    await db.refresh(db_sv)
+    return {"id": db_sv.id, "message": "Created successfully"}
+
+@router.put("/{id}")
+async def update_student(id: int, sv: StudentUpdate, db: AsyncSession = Depends(get_db)):
+    db_sv = await db.get(SinhVien, id)
+    if not db_sv:
+        raise HTTPException(status_code=404, detail="Student not found")
+    for k, v in sv.model_dump(exclude_unset=True).items():
+        setattr(db_sv, k, v)
+    await db.commit()
+    return {"message": "Updated successfully"}
+
+@router.delete("/{id}")
+async def delete_student(id: int, db: AsyncSession = Depends(get_db)):
+    db_sv = await db.get(SinhVien, id)
+    if not db_sv:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Student not found")
+    await db.delete(db_sv)
+    await db.commit()
+    return {"message": "Deleted successfully"}

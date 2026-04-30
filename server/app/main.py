@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import auth, teachers, schedule, training, students, system
+from app.api import departments, semesters, classes, attendance_schedules, system_config
 from app.api.attendance import routes as attendance_routes
 from app.api.attendance import ws as attendance_ws
 from app.api.export import excel
@@ -31,6 +32,13 @@ def create_app() -> FastAPI:
     app.include_router(schedule.router, tags=["schedule"])
     app.include_router(system.router, tags=["system"])
     app.include_router(training.router, prefix="/training", tags=["training"])
+    
+    # ── admin CRUD ────────
+    app.include_router(departments.router, prefix="/api/admin/departments", tags=["admin-departments"])
+    app.include_router(semesters.router, prefix="/api/admin/semesters", tags=["admin-semesters"])
+    app.include_router(classes.router, prefix="/api/admin/classes", tags=["admin-classes"])
+    app.include_router(attendance_schedules.router, prefix="/api/admin/attendance-schedules", tags=["admin-schedules"])
+    app.include_router(system_config.router, prefix="/api/admin/system-config", tags=["admin-system-config"])
     
     # ── reports ───────
     app.include_router(excel.router, prefix="/export", tags=["reports"])
