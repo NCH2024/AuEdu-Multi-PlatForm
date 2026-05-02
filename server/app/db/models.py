@@ -7,9 +7,9 @@ from app.db.session import Base
 class Khoa(Base):
     __tablename__ = 'khoa'
     id = Column(String, primary_key=True)
-    code = Column(String, unique=True, index=True, nullable=True) # Mã khoa
     tenkhoa = Column(Text)
-    description = Column(Text, nullable=True) # Mô tả
+    email = Column(String, nullable=True) # Thêm email cho Khoa
+    description = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=text('now()'))
 
 class LoaiHocPhan(Base):
@@ -23,6 +23,7 @@ class HocKy(Base):
     id = Column(Integer, primary_key=True)
     tenhocky = Column(Text) # term
     namhoc = Column(Text) # year
+    so_tuan_hoc = Column(Integer, default=15) # Số tuần học
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
     created_at = Column(DateTime, server_default=text('now()'))
@@ -47,6 +48,7 @@ class GiangVien(Base):
     vai_tro = Column(Text, server_default='giangvien')
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    last_login = Column(DateTime, nullable=True)
 
     __table_args__ = (
         CheckConstraint(vai_tro.in_(['giangvien', 'admin', 'super_admin']), name='chk_vai_tro'),
@@ -105,6 +107,11 @@ class ThoiKhoaBieu(Base):
     hocky_id = Column(Integer, ForeignKey('hocky.id'))
     lop_id = Column(String, ForeignKey('lop.id'))
     giangvien_id = Column(Integer, ForeignKey('giangvien.id'))
+    
+    # AI Config Parameters (Chuyển từ bảng cũ sang đây)
+    ai_threshold = Column(Float, default=0.6)
+    anti_spoofing = Column(Boolean, default=True)
+    fiqa_threshold = Column(Float, default=0.5)
     
     # --- AUDIT TRAIL & SOFT DELETE ---
     created_at = Column(DateTime, server_default=text('now()'))
@@ -212,22 +219,14 @@ class AuditLog(Base):
     user_agent = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=text('now()'))
 
+    __table_args__ = (
+        Index('idx_audit_action', 'action'),
+        Index('idx_audit_created_at', 'created_at'),
+        Index('idx_audit_user', 'user_id'),
+    )
+
 # Hướng dẫn tạo Migration:
 # 1. alembic revision --autogenerate -m "Add admin tables and columns"
 # 2. alembic upgrade head
 
-class AttendanceSchedule(Base):
-    __tablename__ = 'attendance_schedules'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String(255), nullable=False)
-    date = Column(Date, nullable=False)
-    start_time = Column(Time, nullable=False)
-    end_time = Column(Time, nullable=False)
-    class_ids = Column(JSON, nullable=False) # Array các class_id
-    semester_id = Column(Integer, ForeignKey('hocky.id'), nullable=False)
-    recurrence = Column(String(50), nullable=True, default='none')
-    
-    # AI Config Parameters
-    ai_threshold = Column(Float, default=0.6)
-    anti_spoofing = Column(Boolean, default=True)
-    fiqa_threshold = Column(Float, default=0.5)
+# Bảng AttendanceSchedule cũ đã bị xóa để gom vào ThoiKhoaBieu

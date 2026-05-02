@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
@@ -111,15 +111,15 @@ from pydantic import BaseModel
 from typing import Optional
 
 class StudentCreate(BaseModel):
-    id: int
+    """Schema tạo sinh viên mới — id do DB auto-increment, ngaysinh có thể null."""
     student_id: Optional[str] = None
     full_name: Optional[str] = None
     email: Optional[str] = None
     hodem: str
     ten: str
     gioitinh: str
-    diachi: str
-    ngaysinh: date
+    diachi: Optional[str] = None
+    ngaysinh: Optional[date] = None
     class_id: str
     ghichu: Optional[str] = None
 
@@ -155,9 +155,9 @@ async def update_student(id: int, sv: StudentUpdate, db: AsyncSession = Depends(
 
 @router.delete("/{id}")
 async def delete_student(id: int, db: AsyncSession = Depends(get_db)):
+    """Xóa sinh viên theo ID hệ thống."""
     db_sv = await db.get(SinhVien, id)
     if not db_sv:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Student not found")
     await db.delete(db_sv)
     await db.commit()

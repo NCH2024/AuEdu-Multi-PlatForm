@@ -71,7 +71,7 @@ class StatsPage(ft.Container):
 
         client = await get_supabase_client()
         try:
-            res = await client.get("/thoikhoabieu", params={
+            res = await client.get("/api/schedule/thoikhoabieu", params={
                 "select": "id,lop_id,lop(tenlop),hocphan(tenhocphan,sobuoi)",
                 "giangvien_id": f"eq.{self.gv_id}"
             })
@@ -116,17 +116,17 @@ class StatsPage(ft.Container):
             lop_id = selected_tkb["lop_id"]
             sobuoi = selected_tkb["hocphan"]["sobuoi"] or 15
 
-            res_sv = await client.get("/sinhvien", params={"select": "id", "class_id": f"eq.{lop_id}"})
+            res_sv = await client.get("/api/schedule/sinhvien", params={"select": "id", "class_id": f"eq.{lop_id}"})
             sv_list = res_sv.json()
             total_students = len(sv_list)
 
-            res_tiet = await client.get("/tkb_tiet", params={"select": "id", "tkb_id": f"eq.{tkb_id}"})
+            res_tiet = await client.get("/api/schedule/tkb_tiet", params={"select": "id", "tkb_id": f"eq.{tkb_id}"})
             tiet_list = res_tiet.json()
             
             dd_list = []
             if tiet_list:
                 tiet_ids_str = ",".join([str(t["id"]) for t in tiet_list])
-                res_dd = await client.get("/diemdanh", params={
+                res_dd = await client.get("/api/schedule/diemdanh", params={
                     "select": "sv_id,trang_thai,ngay_diem_danh",
                     "tkb_tiet_id": f"in.({tiet_ids_str})"
                 })

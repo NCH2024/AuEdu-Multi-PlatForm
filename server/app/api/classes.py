@@ -10,7 +10,6 @@ router = APIRouter()
 
 class ClassCreate(BaseModel):
     id: str
-    code: Optional[str] = None
     tenlop: str
     khoa_id: Optional[str] = None
     semester_id: Optional[int] = None
@@ -19,7 +18,6 @@ class ClassCreate(BaseModel):
     khoahoc: Optional[int] = None
 
 class ClassUpdate(BaseModel):
-    code: Optional[str] = None
     tenlop: Optional[str] = None
     khoa_id: Optional[str] = None
     semester_id: Optional[int] = None

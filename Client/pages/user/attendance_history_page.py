@@ -41,7 +41,7 @@ class AttendanceHistoryPage(ft.Container):
             self.gv_id = data.get("id", "N/A")
 
         client = await get_supabase_client()
-        res = await client.get("/thoikhoabieu", params={
+        res = await client.get("/api/schedule/thoikhoabieu", params={
             "giangvien_id": f"eq.{self.gv_id}", 
             "select": "id,lop(tenlop),hocphan(tenhocphan)"
         })

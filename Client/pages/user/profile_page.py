@@ -196,7 +196,7 @@ class ProfilePage(ft.Container):
             # ✅ Fetch profile và TKB song song
             res_gv, res_tkb = await asyncio.gather(
                 client.get("/giangvien", params={"select": "*, khoa(tenkhoa)", "id": f"eq.{gv_id}"}),
-                client.get("/thoikhoabieu", params={"select": "id", "giangvien_id": f"eq.{gv_id}"}),
+                client.get("/api/schedule/thoikhoabieu", params={"select": "id", "giangvien_id": f"eq.{gv_id}"}),
                 return_exceptions=True
             )
 

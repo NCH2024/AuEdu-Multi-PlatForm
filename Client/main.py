@@ -23,7 +23,10 @@ from pages.admin.semesters_page import SemestersPage
 from pages.admin.classes_page import ClassesPage
 from pages.admin.students_page import StudentsPage
 from pages.admin.attendance_schedule_page import AttendanceSchedulePage
+from pages.admin.subjects_page import SubjectsPage
+from pages.admin.notifications_page import NotificationsPage
 from pages.admin.system_settings_page import SystemSettingsPage
+from pages.admin.weeks_page import WeeksPage
 import core.theme as theme_module
 
 DEBUG_LOADING = False
@@ -141,6 +144,12 @@ async def main(page: ft.Page):
                         admin_dashboard.set_content("QUẢN LÝ SINH VIÊN", StudentsPage(page), current_route)
                     elif current_route == "/admin/schedules":
                         admin_dashboard.set_content("TẠO LỊCH ĐIỂM DANH", AttendanceSchedulePage(page), current_route)
+                    elif current_route == "/admin/subjects":
+                        admin_dashboard.set_content("QUẢN LÝ HỌC PHẦN", SubjectsPage(page), current_route)
+                    elif current_route == "/admin/notifications":
+                        admin_dashboard.set_content("QUẢN LÝ THÔNG BÁO", NotificationsPage(page), current_route)
+                    elif current_route.startswith("/admin/weeks"):
+                        admin_dashboard.set_content("QUẢN LÝ TUẦN HỌC", WeeksPage(page), current_route)
                     elif current_route == "/admin/settings":
                         admin_dashboard.set_content("CÀI ĐẶT HỆ THỐNG", SystemSettingsPage(page), current_route)
 

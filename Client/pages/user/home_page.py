@@ -522,7 +522,7 @@ class UserHomePage(ft.Container):
         if self.gv_id == "N/A":
             return []
         try:
-            res = await client.get("/thoikhoabieu", params={
+            res = await client.get("/api/schedule/thoikhoabieu", params={
                 "select": "id,lop_id,lop(tenlop),hocphan(tenhocphan,sobuoi),hocky(namhoc,tenhocky)",
                 "giangvien_id": f"eq.{self.gv_id}"
             })
@@ -550,7 +550,7 @@ class UserHomePage(ft.Container):
             return {"classes": []}
         try:
             # Lấy TKB của GV (fetch nhẹ, chỉ lấy id)
-            res_all = await client.get("/thoikhoabieu", params={
+            res_all = await client.get("/api/schedule/thoikhoabieu", params={
                 "select": "id,lop_id,lop(tenlop),hocphan(tenhocphan)",
                 "giangvien_id": f"eq.{self.gv_id}"
             })
@@ -563,7 +563,7 @@ class UserHomePage(ft.Container):
             thu_hom_nay = today_date.weekday() + 2  # Flet dùng 2=Thứ 2 … 8=CN
 
             tkb_ids_str = ",".join(str(x["id"]) for x in all_tkb)
-            res_tiet = await client.get("/tkb_tiet", params={
+            res_tiet = await client.get("/api/schedule/tkb_tiet", params={
                 "select": "id,tkb_id,thu,phong_hoc,tiet(thoigianbd,thoigiankt)",
                 "tkb_id": f"in.({tkb_ids_str})",
                 "thu": f"eq.{thu_hom_nay}",
@@ -576,7 +576,7 @@ class UserHomePage(ft.Container):
                 return {"classes": []}
 
             tiet_ids_str = ",".join(str(t["id"]) for t in tiet_list)
-            res_dd = await client.get("/diemdanh", params={
+            res_dd = await client.get("/api/schedule/diemdanh", params={
                 "select": "tkb_tiet_id",
                 "tkb_tiet_id": f"in.({tiet_ids_str})",
                 "ngay_diem_danh": f"eq.{today_date.isoformat()}"

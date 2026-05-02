@@ -88,8 +88,8 @@ class SchedulePage(ft.Container):
 
             # ✅ Fetch tuan_hoc và TKB song song
             res_th, res_tkb = await asyncio.gather(
-                client.get("/tuan_hoc", params={"select": "*", "order": "id.asc"}),
-                client.get("/thoikhoabieu", params={"select": "id,hocphan(tenhocphan),lop(tenlop)", "giangvien_id": f"eq.{self.gv_id}"}) if self.gv_id != "N/A" else asyncio.sleep(0),
+                client.get("/api/schedule/tuan_hoc", params={"select": "*", "order": "id.asc"}),
+                client.get("/api/schedule/thoikhoabieu", params={"select": "id,hocphan(tenhocphan),lop(tenlop)", "giangvien_id": f"eq.{self.gv_id}"}) if self.gv_id != "N/A" else asyncio.sleep(0),
                 return_exceptions=True
             )
 
@@ -112,7 +112,7 @@ class SchedulePage(ft.Container):
                         for row in tkb_list
                     }
                     tkb_ids_str = ",".join(map(str, tkb_dict.keys()))
-                    res_tiet = await client.get("/tkb_tiet", params={"select": "tkb_id,tiet_id,thu,phong_hoc", "tkb_id": f"in.({tkb_ids_str})"})
+                    res_tiet = await client.get("/api/schedule/tkb_tiet", params={"select": "tkb_id,tiet_id,thu,phong_hoc", "tkb_id": f"in.({tkb_ids_str})"})
                     res_tiet.raise_for_status()
                     tkb_tiet_data = res_tiet.json()
 

@@ -14,7 +14,7 @@ class AdminHomePage(ft.Container):
         super().__init__()
         self.app_page = page
         self.expand = True
-        self.padding = 0
+        self.padding = ft.Padding.all(0)
 
         self.admin_name = "Quản trị viên"
         self.stats_data = {}
@@ -38,7 +38,7 @@ class AdminHomePage(ft.Container):
             border_radius=height / 2 if is_circle else border_radius
         )
 
-    def make_pro_card(self, content, padding=20, ink=False, on_click=None):
+    def make_pro_card(self, content, padding=ft.Padding.all(20), ink=False, on_click=None):
         return ft.Container(
             content=content, padding=padding, border_radius=12,
             bgcolor=current_theme.surface_color,
@@ -66,7 +66,7 @@ class AdminHomePage(ft.Container):
                         ft.DataCell(ft.Text(log.get("user", "N/A"), color=current_theme.text_main)),
                         ft.DataCell(
                             ft.Container(
-                                padding=ft.Padding(8, 4, 8, 4),
+                                padding=ft.Padding.symmetric(horizontal=8, vertical=4),
                                 border_radius=6,
                                 bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.BLUE if log.get("action") == "LOGIN" else ft.Colors.GREEN),
                                 content=ft.Text(log.get("action", "N/A"), size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE if log.get("action") == "LOGIN" else ft.Colors.GREEN)
@@ -115,7 +115,7 @@ class AdminHomePage(ft.Container):
         greeting_text = ft.Text(f"{greeting},", size=14, color=current_theme.text_muted, weight=ft.FontWeight.W_500)
         date_text = ft.Text(f"Hôm nay là {now.strftime('%d/%m/%Y')} • Hệ thống đang hoạt động ổn định!", size=12, color=current_theme.text_muted, weight=ft.FontWeight.W_500)
         
-        shield_icon = ft.Container(padding=10, border_radius=12, bgcolor=current_theme.surface_variant, content=ft.Icon(ft.Icons.SECURITY_ROUNDED, color=current_theme.secondary, size=24))
+        shield_icon = ft.Container(padding=ft.Padding.all(10), border_radius=12, bgcolor=current_theme.surface_variant, content=ft.Icon(ft.Icons.SECURITY_ROUNDED, color=current_theme.secondary, size=24))
         header_section = ft.Row([
             ft.Column([greeting_text, self._name_text, date_text], spacing=0, expand=True),
             shield_icon
@@ -125,7 +125,7 @@ class AdminHomePage(ft.Container):
             return ft.Container(
                 col={"xs": 6, "sm": 6, "md": 3, "lg": 3},
                 content=self.make_pro_card(
-                    padding=15, ink=True,
+                    padding=ft.Padding.all(15), ink=True,
                     on_click=lambda e, r=route: self.app_page.run_task(self.app_page.push_route, r),
                     content=ft.Column([
                         ft.Row([
@@ -177,7 +177,7 @@ class AdminHomePage(ft.Container):
             return ft.Container(
                 col={"xs": 6, "sm": 6, "md": 6, "lg": 6},
                 content=ft.Container(
-                    padding=15, border_radius=12, bgcolor=bg_color, ink=True,
+                    padding=ft.Padding.all(15), border_radius=12, bgcolor=bg_color, ink=True,
                     on_click=lambda e, r=route: self.app_page.run_task(self.app_page.push_route, r),
                     border=ft.Border.all(1, current_theme.divider_color) if bg_color == current_theme.surface_color else None,
                     content=ft.Column([
@@ -197,8 +197,10 @@ class AdminHomePage(ft.Container):
                 create_action_btn(ft.Icons.BUSINESS_ROUNDED, "Quản lý Khoa", current_theme.secondary, ft.Colors.WHITE, "/admin/departments"),
                 create_action_btn(ft.Icons.DATE_RANGE_ROUNDED, "Quản lý Học kỳ", current_theme.secondary, ft.Colors.WHITE, "/admin/semesters"),
                 create_action_btn(ft.Icons.CLASS_ROUNDED, "Quản lý Lớp", current_theme.surface_color, current_theme.secondary, "/admin/classes"),
+                create_action_btn(ft.Icons.BOOK_ROUNDED, "Quản lý Môn", current_theme.surface_color, current_theme.secondary, "/admin/subjects"),
                 create_action_btn(ft.Icons.PEOPLE_ROUNDED, "Quản lý Sinh viên", current_theme.surface_color, current_theme.secondary, "/admin/students"),
                 create_action_btn(ft.Icons.SCHEDULE_ROUNDED, "Lịch Điểm Danh", current_theme.surface_color, current_theme.secondary, "/admin/schedules"),
+                create_action_btn(ft.Icons.NOTIFICATIONS_ROUNDED, "Quản lý TB", current_theme.surface_color, current_theme.secondary, "/admin/notifications"),
                 create_action_btn(ft.Icons.SETTINGS_ROUNDED, "Cài đặt AI", current_theme.surface_color, current_theme.secondary, "/admin/settings"),
             ], run_spacing=5, spacing=5)
         ], spacing=0))
@@ -222,6 +224,7 @@ class AdminHomePage(ft.Container):
         )
 
     async def load_data(self):
+        # 1. Load Admin Name từ session
         prefs = ft.SharedPreferences()
         session_str = await prefs.get("user_session")
         if session_str:
@@ -234,28 +237,25 @@ class AdminHomePage(ft.Container):
                 except Exception:
                     pass
 
+        # 2. Gọi API lấy Stats và Audit Logs
         try:
-            # TODO: Tích hợp gọi API FastAPI thật
-            # Hiện tại sử dụng mock data để Admin Panel load thành công
-            self.stats_data = {
-                "total_users": 128,
-                "total_classes": 24,
-                "today_att": random.randint(150, 300),
-                "sys_load": f"{random.randint(10, 45)}%"
-            }
-
-            # Mock Audit Log
-            self.audit_logs = [
-                {"time": datetime.datetime.now().strftime("%H:%M"), "user": self.admin_name, "action": "LOGIN", "details": "Đăng nhập hệ thống PC"},
-                {"time": (datetime.datetime.now() - datetime.timedelta(minutes=15)).strftime("%H:%M"), "user": "Nguyễn Văn A", "action": "UPDATE", "details": "Cập nhật ngưỡng AI thành 0.6"},
-                {"time": (datetime.datetime.now() - datetime.timedelta(hours=1)).strftime("%H:%M"), "user": "Trần Thị B", "action": "CREATE", "details": "Thêm sinh viên mới vào lớp DCT123"},
-                {"time": (datetime.datetime.now() - datetime.timedelta(hours=2)).strftime("%H:%M"), "user": "Lê Hoàng C", "action": "LOGIN", "details": "Đăng nhập từ Mobile App"},
-            ]
+            client = await get_supabase_client()
+            
+            # Fetch Stats
+            stats_res = await client.get("/api/admin/system/stats")
+            if stats_res.status_code == 200:
+                self.stats_data = stats_res.json()
+            
+            # Fetch Audit Logs
+            audit_res = await client.get("/api/admin/system/audit?limit=5")
+            if audit_res.status_code == 200:
+                self.audit_logs = audit_res.json()
 
             self.is_loading = False
             self.apply_theme()
 
         except Exception as e:
             print(f"ADMIN load_data ERROR: {e}")
+            show_top_notification(self.app_page, f"Lỗi kết nối máy chủ: {e}", ft.Colors.RED)
             self.is_loading = False
             self.apply_theme()

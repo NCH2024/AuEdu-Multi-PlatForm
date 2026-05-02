@@ -1,6 +1,6 @@
 """
-Trang quản lý Khoa — Admin Panel.
-Cung cấp CRUD hoàn chỉnh (Thêm/Sửa/Xóa) cho bảng Khoa,
+Trang quản lý Học Phần — Admin Panel.
+Cung cấp CRUD hoàn chỉnh cho bảng Học Phần (môn học),
 hiển thị bằng AdminDataGrid với tìm kiếm và phân trang.
 """
 
@@ -12,8 +12,8 @@ from core.admin_service import AdminService
 from components.admin.data_grid import AdminDataGrid
 
 
-class DepartmentsPage(ft.Container):
-    """Trang quản lý danh sách Khoa dành cho Admin."""
+class SubjectsPage(ft.Container):
+    """Trang quản lý danh sách Học Phần dành cho Admin."""
 
     def __init__(self, page: ft.Page):
         super().__init__()
@@ -30,35 +30,31 @@ class DepartmentsPage(ft.Container):
 
         # -- UI Elements --
         self.title_text = ft.Text(
-            "QUẢN LÝ KHOA", size=20,
+            "QUẢN LÝ HỌC PHẦN", size=20,
             weight=ft.FontWeight.BOLD, color=current_theme.text_main
         )
         self.btn_add = ft.Button(
-            "THÊM MỚI", icon=ft.Icons.ADD_HOME_WORK_ROUNDED,
+            "THÊM MỚI", icon=ft.Icons.BOOK_ROUNDED,
             bgcolor=current_theme.primary, color=ft.Colors.WHITE,
             on_click=self.open_add_dialog,
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=ft.Padding.all(10))
         )
 
         self.search_field = ft.TextField(
-            hint_text="Tìm mã hoặc tên khoa...", prefix_icon=ft.Icons.SEARCH,
+            hint_text="Tìm tên học phần...", prefix_icon=ft.Icons.SEARCH,
             height=38, expand=True, border_radius=8, text_size=13
         )
         self.search_field.on_change = self.filter_data
 
-        self.page_size_dropdown = ft.Dropdown(
-            options=[ft.dropdown.Option("10"), ft.dropdown.Option("20"), ft.dropdown.Option("50")],
-            value="10", width=70, height=38, border_radius=8,
-            content_padding=ft.Padding.only(left=10, right=10, bottom=10), text_size=13
-        )
-        self.page_size_dropdown.on_change = self.change_page_size
-
         # AdminDataGrid — bảng dữ liệu responsive
         self.grid = AdminDataGrid(
             columns=[
-                {"label": "MÃ KHOA", "key": "id", "col": {"xs": 4, "sm": 2}, "sortable": True},
-                {"label": "TÊN KHOA", "key": "tenkhoa", "col": {"xs": 8, "sm": 5}, "sortable": True},
-                {"label": "EMAIL", "key": "email", "col": {"xs": 12, "sm": 4}},
+                {"label": "ID", "key": "id", "col": {"xs": 2, "sm": 1}, "sortable": True},
+                {"label": "TÊN HỌC PHẦN", "key": "tenhocphan", "col": {"xs": 10, "sm": 4}, "sortable": True},
+                {"label": "MÃ HP", "key": "mahocphan", "col": {"xs": 6, "sm": 2}},
+                {"label": "SỐ TC", "key": "sotinchi", "col": {"xs": 3, "sm": 1}},
+                {"label": "SỐ BUỔI", "key": "sobuoi", "col": {"xs": 3, "sm": 1}},
+                {"label": "LOẠI", "key": "loai", "col": {"xs": 6, "sm": 2}},
                 {"label": "THAO TÁC", "key": "actions", "col": {"xs": 12, "sm": 1}, "render": self.render_actions},
             ],
             on_row_click=self.open_edit_dialog,
@@ -86,15 +82,15 @@ class DepartmentsPage(ft.Container):
         ], expand=True, spacing=0)
 
         # -- Form Dialog --
-        self.form_id = ft.TextField(label="Mã Khoa (ID)", border_radius=8, text_size=13, height=45)
-        self.form_ten = ft.TextField(label="Tên Khoa", border_radius=8, text_size=13, height=45)
-        self.form_email = ft.TextField(label="Email", border_radius=8, text_size=13, height=45)
-        self.form_description = ft.TextField(label="Mô tả", border_radius=8, multiline=True, min_lines=3, text_size=13)
+        self.form_id = ft.TextField(label="Mã định danh", disabled=True, border_radius=8, text_size=13, height=45)
+        self.form_ten = ft.TextField(label="Tên Học Phần", border_radius=8, text_size=13, height=45)
+        self.form_tinchi = ft.TextField(label="Số Tín Chỉ", border_radius=8, text_size=13, height=45)
+        self.form_sobuoi = ft.TextField(label="Số Buổi Học", border_radius=8, text_size=13, height=45)
 
         self.dialog = ft.AlertDialog(
-            title=ft.Text("THÔNG TIN KHOA", weight=ft.FontWeight.BOLD, size=18),
-            content=ft.Container(width=450, content=ft.Column([
-                self.form_id, self.form_ten, self.form_email, self.form_description
+            title=ft.Text("THÔNG TIN HỌC PHẦN", weight=ft.FontWeight.BOLD, size=18),
+            content=ft.Container(width=400, content=ft.Column([
+                self.form_id, self.form_ten, self.form_tinchi, self.form_sobuoi
             ], tight=True, spacing=12)),
             actions=[
                 ft.TextButton("HỦY", on_click=self.close_dialog),
@@ -110,11 +106,11 @@ class DepartmentsPage(ft.Container):
         self.app_page.run_task(self.load_data)
 
     async def load_data(self):
-        """Tải danh sách Khoa từ AdminService."""
+        """Tải danh sách Học Phần từ AdminService."""
         self.progress_bar.visible = True
         self.update()
         try:
-            self.all_data = await self.svc.get_departments(force=True)
+            self.all_data = await self.svc.get_subjects(force=True)
             self.filter_data(None)
         except Exception as e:
             show_top_notification(self.app_page, f"Lỗi tải dữ liệu: {e}", ft.Colors.RED)
@@ -129,7 +125,7 @@ class DepartmentsPage(ft.Container):
         q = self.search_field.value.lower() if self.search_field.value else ""
         self.filtered_data = [
             i for i in self.all_data
-            if q in str(i.get("id", "")).lower() or q in str(i.get("tenkhoa", "")).lower()
+            if q in str(i.get("tenhocphan", "")).lower()
         ]
         self.render_table()
 
@@ -145,25 +141,21 @@ class DepartmentsPage(ft.Container):
         self.grid.set_data(self.filtered_data)
         self.update()
 
-    def change_page_size(self, e):
-        """Thay đổi số dòng mỗi trang."""
-        self.grid.update_page_size(int(self.page_size_dropdown.value))
-
     # ─── Dialog CRUD ──────────────────────────────────────────────
 
     def _clear_errors(self):
         """Xóa thông báo lỗi trên form nhập liệu."""
-        self.form_id.error_text = None
         self.form_ten.error_text = None
+        self.form_tinchi.error_text = None
+        self.form_sobuoi.error_text = None
 
     def open_add_dialog(self, e):
-        """Mở dialog thêm Khoa mới."""
+        """Mở dialog thêm Học Phần mới."""
         self.is_edit = False
-        self.form_id.value = ""
-        self.form_id.disabled = False
+        self.form_id.value = "Tự động"
         self.form_ten.value = ""
-        self.form_email.value = ""
-        self.form_description.value = ""
+        self.form_tinchi.value = "3"
+        self.form_sobuoi.value = "15"
         self._clear_errors()
         if self.dialog not in self.app_page.overlay:
             self.app_page.overlay.append(self.dialog)
@@ -171,13 +163,12 @@ class DepartmentsPage(ft.Container):
         self.app_page.update()
 
     def open_edit_dialog(self, data):
-        """Mở dialog chỉnh sửa Khoa đã chọn."""
+        """Mở dialog chỉnh sửa Học Phần đã chọn."""
         self.is_edit = True
         self.form_id.value = str(data["id"])
-        self.form_id.disabled = True
-        self.form_ten.value = data["tenkhoa"]
-        self.form_email.value = data.get("email", "")
-        self.form_description.value = data.get("description", "")
+        self.form_ten.value = data["tenhocphan"]
+        self.form_tinchi.value = str(data.get("sotinchi", ""))
+        self.form_sobuoi.value = str(data.get("sobuoi", ""))
         self._clear_errors()
         if self.dialog not in self.app_page.overlay:
             self.app_page.overlay.append(self.dialog)
@@ -193,10 +184,22 @@ class DepartmentsPage(ft.Container):
         """Validate form và gọi lưu dữ liệu."""
         has_error = False
         if not self.form_ten.value or not self.form_ten.value.strip():
-            self.form_ten.error_text = "Vui lòng nhập tên khoa"
+            self.form_ten.error_text = "Vui lòng nhập tên học phần"
             has_error = True
         else:
             self.form_ten.error_text = None
+
+        if not self.form_tinchi.value or not self.form_tinchi.value.isdigit():
+            self.form_tinchi.error_text = "Số tín chỉ phải là số"
+            has_error = True
+        else:
+            self.form_tinchi.error_text = None
+
+        if not self.form_sobuoi.value or not self.form_sobuoi.value.isdigit():
+            self.form_sobuoi.error_text = "Số buổi học phải là số"
+            has_error = True
+        else:
+            self.form_sobuoi.error_text = None
 
         if has_error:
             self.app_page.update()
@@ -205,20 +208,19 @@ class DepartmentsPage(ft.Container):
         self.app_page.run_task(self._save_data_async)
 
     async def _save_data_async(self):
-        """Gửi request tạo/cập nhật Khoa qua AdminService."""
+        """Gửi request tạo/cập nhật Học Phần qua AdminService."""
         try:
             payload = {
-                "id": self.form_id.value,
-                "tenkhoa": self.form_ten.value,
-                "email": self.form_email.value,
-                "description": self.form_description.value
+                "tenhocphan": self.form_ten.value,
+                "sotinchi": int(self.form_tinchi.value),
+                "sobuoi": int(self.form_sobuoi.value)
             }
             if self.is_edit:
-                await self.svc.update(f"/api/admin/departments/{self.form_id.value}", payload)
+                await self.svc.update(f"/api/admin/subjects/{self.form_id.value}", payload)
             else:
-                await self.svc.create("/api/admin/departments/", payload)
+                await self.svc.create("/api/admin/subjects/", payload)
 
-            self.svc.invalidate("departments")
+            self.svc.invalidate("subjects")
             self.close_dialog()
             show_top_notification(self.app_page, "Lưu dữ liệu thành công!", ft.Colors.GREEN)
             await self.load_data()
@@ -228,17 +230,17 @@ class DepartmentsPage(ft.Container):
     # ─── Delete ───────────────────────────────────────────────────
 
     def delete_data(self, data):
-        """Mở hộp thoại xác nhận xóa Khoa."""
+        """Mở hộp thoại xác nhận xóa Học Phần."""
         def on_confirm():
             self.app_page.run_task(self._delete_data_async, data["id"])
-        show_confirm_dialog(self.app_page, "XÁC NHẬN", f"Xóa khoa {data['tenkhoa']}?", on_confirm)
+        show_confirm_dialog(self.app_page, "XÁC NHẬN", f"Xóa học phần {data['tenhocphan']}?", on_confirm)
 
     async def _delete_data_async(self, id):
-        """Gửi request xóa Khoa qua AdminService."""
+        """Gửi request xóa Học Phần qua AdminService."""
         try:
-            await self.svc.delete(f"/api/admin/departments/{id}")
-            self.svc.invalidate("departments")
-            show_top_notification(self.app_page, "Đã xóa khoa thành công!", ft.Colors.GREEN)
+            await self.svc.delete(f"/api/admin/subjects/{id}")
+            self.svc.invalidate("subjects")
+            show_top_notification(self.app_page, "Đã xóa học phần thành công!", ft.Colors.GREEN)
             await self.load_data()
         except Exception as e:
             show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)

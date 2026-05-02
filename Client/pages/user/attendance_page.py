@@ -289,7 +289,7 @@ class AttendancePage(ft.Container):
             # ✅ Dùng singleton client, KHÔNG dùng async with
             client = await get_supabase_client()
 
-            res_tkb = await client.get("/thoikhoabieu", params={
+            res_tkb = await client.get("/api/schedule/thoikhoabieu", params={
                 "select": "id,lop_id,hocphan_id,hocky_id,lop(tenlop),hocphan(tenhocphan),hocky(tenhocky,namhoc)",
                 "giangvien_id": f"eq.{self.gv_id}"
             })
@@ -298,7 +298,7 @@ class AttendancePage(ft.Container):
 
             if self.tkb_data:
                 tkb_ids = [str(item['id']) for item in self.tkb_data]
-                res_tiet = await client.get("/tkb_tiet", params={
+                res_tiet = await client.get("/api/schedule/tkb_tiet", params={
                     "select": "id,tkb_id,thu",
                     "tkb_id": f"in.({','.join(tkb_ids)})"
                 })
@@ -446,15 +446,15 @@ class AttendancePage(ft.Container):
             # Singleton client
             client = await get_supabase_client()
 
-            res_tiet = await client.get("/tkb_tiet", params={"select": "id", "tkb_id": f"eq.{tkb_id}", "thu": f"eq.{thu}"})
+            res_tiet = await client.get("/api/schedule/tkb_tiet", params={"select": "id", "tkb_id": f"eq.{tkb_id}", "thu": f"eq.{thu}"})
             res_tiet.raise_for_status()
             tkb_tiet_id = res_tiet.json()[0]["id"] if res_tiet.json() else None
             if not tkb_tiet_id: raise Exception("Không tìm thấy tiết học cho ngày này!")
 
             # Fetch sinh viên và điểm danh song song
             res_sv, res_dd = await asyncio.gather(
-                client.get("/sinhvien", params={"select": "*", "class_id": f"eq.{lop_id}", "order": "id.asc"}),
-                client.get("/diemdanh", params={"select": "sv_id,trang_thai", "tkb_tiet_id": f"eq.{tkb_tiet_id}", "ngay_diem_danh": f"eq.{date_obj.isoformat()}"}),
+                client.get("/api/schedule/sinhvien", params={"select": "*", "class_id": f"eq.{lop_id}", "order": "id.asc"}),
+                client.get("/api/schedule/diemdanh", params={"select": "sv_id,trang_thai", "tkb_tiet_id": f"eq.{tkb_tiet_id}", "ngay_diem_danh": f"eq.{date_obj.isoformat()}"}),
                 return_exceptions=True
             )
 

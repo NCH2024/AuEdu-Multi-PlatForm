@@ -1,18 +1,34 @@
-# server/app/api/schedule.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
-from datetime import datetime
 from sqlalchemy import or_, cast, String, text, func, case, select
+from pydantic import BaseModel
+from typing import List, Optional, Any
+from datetime import datetime
 
 from app.db.session import get_db
 from app.db.models import (
     TuanHoc, SinhVien, ThongBao,
     ThoiKhoaBieu, Lop, HocPhan, HocKy,
-    TKBTiet, Tiet, DiemDanh, DiemDanh, GiangVien,
+    TKBTiet, Tiet, DiemDanh, GiangVien,
 )
 
 router = APIRouter()
+
+class TKBSlot(BaseModel):
+    thu: int # 0=Mon, ...
+    start_tiet: int
+    end_tiet: int
+    phong_hoc: str
+
+class TKBBatchSetup(BaseModel):
+    hocphan_id: int
+    hocky_id: int
+    lop_id: str
+    giangvien_id: int
+    ai_threshold: float = 0.6
+    anti_spoofing: bool = True
+    fiqa_threshold: float = 0.5
+    slots: List[TKBSlot]
 
 
 def model_to_dict(obj):
@@ -21,8 +37,12 @@ def model_to_dict(obj):
 
 # --------- Tuần học ----------
 @router.get("/tuan_hoc")
-async def get_tuan_hoc(db: AsyncSession = Depends(get_db)) -> List[dict]:
-    stmt = select(TuanHoc).order_by(TuanHoc.id.asc())
+async def get_tuan_hoc(hocky_id: Optional[str] = None, db: AsyncSession = Depends(get_db)) -> List[dict]:
+    stmt = select(TuanHoc)
+    if hocky_id:
+        if hocky_id.startswith("eq."):
+            stmt = stmt.where(TuanHoc.hocky_id == int(hocky_id.replace("eq.", "")))
+    stmt = stmt.order_by(TuanHoc.ngay_bat_dau.asc())
     result = await db.execute(stmt)
     data = []
     for t in result.scalars().all():
@@ -133,3 +153,45 @@ async def get_diemdanh(
         d_dict["created_at"] = str(d.created_at) if d.created_at else None
         data.append(d_dict)
     return data
+
+
+# --------- Thiết lập TKB hàng loạt ----------
+@router.post("/thoikhoabieu/setup_batch")
+async def setup_batch_schedule(payload: TKBBatchSetup, db: AsyncSession = Depends(get_db)):
+    """
+    Thiết lập thời khóa biểu hàng loạt cho một lớp-học phần.
+    Tạo bản ghi ThoiKhoaBieu chính, sau đó tạo các TKBTiet
+    cho mỗi slot (thứ + tiết + phòng) được chỉ định.
+    """
+    from fastapi import HTTPException
+
+    # 1. Tạo ThoiKhoaBieu chính
+    new_tkb = ThoiKhoaBieu(
+        hocphan_id=payload.hocphan_id,
+        hocky_id=payload.hocky_id,
+        lop_id=payload.lop_id,
+        giangvien_id=payload.giangvien_id,
+        ai_threshold=payload.ai_threshold,
+        anti_spoofing=payload.anti_spoofing,
+        fiqa_threshold=payload.fiqa_threshold,
+    )
+    db.add(new_tkb)
+    await db.flush()  # Lấy ID mà chưa commit
+
+    # 2. Tạo TKBTiet cho mỗi slot
+    for slot in payload.slots:
+        for tiet_num in range(slot.start_tiet, slot.end_tiet + 1):
+            new_tiet = TKBTiet(
+                tkb_id=new_tkb.id,
+                thu=slot.thu,
+                tiet_id=tiet_num,
+                phong_hoc=slot.phong_hoc,
+            )
+            db.add(new_tiet)
+
+    await db.commit()
+    return {
+        "message": "Thiết lập TKB thành công",
+        "tkb_id": new_tkb.id,
+        "total_slots": len(payload.slots),
+    }

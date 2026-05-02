@@ -10,19 +10,19 @@ router = APIRouter()
 
 class DepartmentCreate(BaseModel):
     id: str
-    code: Optional[str] = None
     tenkhoa: str
+    email: Optional[str] = None
     description: Optional[str] = None
 
 class DepartmentUpdate(BaseModel):
-    code: Optional[str] = None
     tenkhoa: Optional[str] = None
+    email: Optional[str] = None
     description: Optional[str] = None
 
 @router.get("/")
 async def get_departments(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Khoa))
-    return [{"id": d.id, "code": d.code, "tenkhoa": d.tenkhoa, "description": d.description} for d in result.scalars().all()]
+    return [{"id": d.id, "tenkhoa": d.tenkhoa, "email": d.email, "description": d.description} for d in result.scalars().all()]
 
 @router.post("/")
 async def create_department(dept: DepartmentCreate, db: AsyncSession = Depends(get_db)):
