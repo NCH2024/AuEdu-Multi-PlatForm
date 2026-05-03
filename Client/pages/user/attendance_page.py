@@ -26,6 +26,10 @@ class AttendancePage(ft.Container):
         self.selected_tkb = None
         self.selected_date = None
         
+        # --- CỜ DEBUG & CẤU HÌNH KIỂM TRA ---
+        self.STRICT_DATE_CHECK = False # Nếu True, chỉ cho phép điểm danh ngày hôm nay
+        
+        
         # Khai báo nút bấm PC
         self.btn_start_session = ft.Button(
             content=ft.Text("BẮT ĐẦU ĐIỂM DANH", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13), 
@@ -296,7 +300,7 @@ class AttendancePage(ft.Container):
             client = await get_supabase_client()
 
             res_tkb = await client.get("/api/schedule/thoikhoabieu", params={
-                "select": "id,lop_id,hocphan_id,hocky_id,lop(tenlop),hocphan(tenhocphan),hocky(tenhocky,namhoc)",
+                "select": "id,lop_id,hocphan_id,hocky_id,lop(tenlop),hocphan(tenhocphan),hocky(tenhocky,namhoc,start_date,end_date)",
                 "giangvien_id": f"eq.{self.gv_id}"
             })
             res_tkb.raise_for_status()
@@ -328,12 +332,28 @@ class AttendancePage(ft.Container):
             ten_lop = tkb.get("lop", {}).get("tenlop", "N/A")
             hk_info = f"{tkb.get('hocky', {}).get('tenhocky', '')} ({tkb.get('hocky', {}).get('namhoc', '')})"
 
+            # Lấy ngày bắt đầu và kết thúc của học kỳ để giới hạn danh sách
+            hk_start_str = tkb.get("hocky", {}).get("start_date")
+            hk_end_str = tkb.get("hocky", {}).get("end_date")
+            
+            try:
+                start_dt = datetime.date.fromisoformat(hk_start_str) if hk_start_str else today - datetime.timedelta(days=30)
+                end_dt = datetime.date.fromisoformat(hk_end_str) if hk_end_str else today + datetime.timedelta(days=30)
+            except ValueError:
+                start_dt, end_dt = today - datetime.timedelta(days=30), today + datetime.timedelta(days=30)
+
             thus = set([t["thu"] for t in self.tiet_data if str(t["tkb_id"]) == str(tkb["id"])])
             dates = []
-            for i in range(-60, 60):
-                d = today + datetime.timedelta(days=i)
-                if (d.weekday() + 2) in thus: dates.append(d)
-            dates.sort(reverse=True)
+            
+            # Chỉ sinh các ngày trong phạm vi học kỳ
+            curr = start_dt
+            while curr <= end_dt:
+                if (curr.weekday() + 2) in thus:
+                    dates.append(curr)
+                curr += datetime.timedelta(days=1)
+            
+            # Sắp xếp: Ưu tiên ngày hôm nay lên đầu, sau đó mới đến các ngày khác theo độ gần gũi
+            dates.sort(key=lambda x: (x != today, abs((x - today).days)))
 
             if not dates: continue
 
@@ -536,12 +556,38 @@ class AttendancePage(ft.Container):
         self.app_page.update()
 
     async def handle_start_session(self, e):
+        """Xử lý khi giảng viên bấm nút Bắt đầu điểm danh (Bản Desktop/Web)"""
         if not getattr(self, "page", None): return
+        
+        # 1. KIỂM TRA ĐÃ CHỌN LỊCH CHƯA
+        if not self.selected_tkb or not self.selected_date:
+            show_top_notification(
+                self.app_page, "Thiếu thông tin", 
+                "Vui lòng chọn Lịch giảng dạy và Ngày điểm danh trước!", 
+                ft.Colors.ORANGE_700, sound="E"
+            )
+            return
+
+        # 2. KIỂM TRA NGÀY (CỜ STRICT_DATE_CHECK)
+        today_str = datetime.date.today().strftime("%d/%m/%Y")
+        if self.STRICT_DATE_CHECK and self.selected_date != today_str:
+            show_top_notification(
+                self.app_page, "Sai ngày", 
+                f"Hệ thống đang ở chế độ kiểm tra nghiêm ngặt. Bạn chỉ có thể điểm danh ngày hôm nay ({today_str})", 
+                ft.Colors.RED_700, sound="E"
+            )
+            return
+
         e.control.disabled = True
         e.control.update()
+        
         mode = self.rg_mode.value if hasattr(self, 'rg_mode') else "1"
         prefs = ft.SharedPreferences()
         await prefs.set("attendance_mode", str(mode))
+        
+        # Log thông tin phiên chuyên nghiệp
+        print(f"[Attendance Page] Khởi tạo phiên: Lớp={self.info_lop_text.value} | Ngày={self.selected_date} | Mode={mode}")
+        
         await self.camera_view.stop_camera()
         await self.app_page.push_route("/user/attendance/session")
     
@@ -558,14 +604,31 @@ class AttendancePage(ft.Container):
         await self.app_page.push_route("/face-training")
 
     async def handle_start_session_mobile(self, e):
+        """Xử lý khi giảng viên bấm nút Bắt đầu điểm danh (Bản Mobile - BottomSheet)"""
         if not getattr(self, "page", None): return
+        
+        if not self.selected_tkb or not self.selected_date:
+            show_top_notification(self.app_page, "Thiếu thông tin", "Vui lòng chọn lịch dạy và ngày trước!", ft.Colors.ORANGE_700, sound="E")
+            return
+
+        # Kiểm tra ngày (Strict Mode)
+        today_str = datetime.date.today().strftime("%d/%m/%Y")
+        if self.STRICT_DATE_CHECK and self.selected_date != today_str:
+            show_top_notification(self.app_page, "Sai ngày", f"Chỉ cho phép điểm danh ngày {today_str}", ft.Colors.RED_700, sound="E")
+            return
+
         e.control.disabled = True
         e.control.update()
+        
         mode = self.mobile_rg_mode.value if hasattr(self, 'mobile_rg_mode') else "1"
         prefs = ft.SharedPreferences()
         await prefs.set("attendance_mode", str(mode))
+        
         self.attendance_bottom_sheet.open = False
         self.app_page.update()
+        
+        print(f"[Attendance Page][Mobile] Khởi tạo phiên: Ngày={self.selected_date} | Mode={mode}")
+        
         await self.camera_view.stop_camera()
         await self.app_page.push_route("/user/attendance/session")
 

@@ -165,10 +165,11 @@ async def _save_attendance(
 
         if existing_record:
             if existing_record.trang_thai == "Có mặt":
-                # Đã điểm danh rồi, không làm gì thêm (idempotent)
+                print(f"[Attendance Service] SV_ID={sv_id} đã có mặt (ID={existing_record.id}). Bỏ qua.")
                 return "ALREADY_PRESENT"
 
             # Trạng thái là "Vắng" → Cho phép cập nhật thành "Có mặt"
+            print(f"[Attendance Service] Cập nhật trạng thái 'Có mặt' cho SV_ID={sv_id} (ID={existing_record.id})")
             existing_record.trang_thai = "Có mặt"
             existing_record.vitri = vitri
             existing_record.device_id = device_id
@@ -181,6 +182,7 @@ async def _save_attendance(
 
         else:
             # Chưa có bản ghi → Tạo mới
+            print(f"[Attendance Service] Ghi nhận mới 'Có mặt' cho SV_ID={sv_id} tại {attend_date}")
             new_record = DiemDanh(
                 sv_id=sv_id,
                 tkb_tiet_id=tkb_tiet_id,
@@ -199,7 +201,7 @@ async def _save_attendance(
     except SQLAlchemyError as err:
         # Rollback transaction khi gặp lỗi DB
         await db.rollback()
-        print(f"[Attendance Service][DB Error] Lỗi ghi điểm danh SV_ID={sv_id}: {err}")
+        print(f"[Attendance Service][CRITICAL] Lỗi ghi DB cho SV_ID={sv_id}: {err}")
         return "ERROR"
 
 

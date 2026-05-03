@@ -206,7 +206,7 @@ class AttendanceSessionPage(ft.Container):
         try:
             self.ws = await websockets.connect(ws_url)
             self.ws_connected = True
-            print(f"[Client] Đã kết nối WebSocket thành công tới tiết: {self.tkb_tiet_id}")
+            print(f"[Attendance Session] ✓ Đã kết nối WebSocket | Tiết ID: {self.tkb_tiet_id} | Ngày: {self.attendance_date} | Chế độ: {self.mode}")
             self.app_page.run_task(self.receive_ws_messages)
         except Exception as e:
             print(f"[Client] Lỗi kết nối WebSocket: {e}")

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, String
 from typing import List, Optional
 from app.db.session import get_db
 from app.db.models import SinhVien, FaceEmbedding, Lop
@@ -26,47 +26,53 @@ async def get_students_face_list(
     db: AsyncSession = Depends(get_db)
 ):
     """Lấy danh sách sinh viên kèm trạng thái khuôn mặt."""
-    query = select(
-        SinhVien.id,
-        SinhVien.hodem,
-        SinhVien.ten,
-        SinhVien.anhdaidien,
-        Lop.tenlop,
-        FaceEmbedding.updated_at.label("trained_at")
-    ).outerjoin(FaceEmbedding, SinhVien.id == FaceEmbedding.sv_id)\
-     .outerjoin(Lop, SinhVien.class_id == Lop.id)
+    try:
+        query = select(
+            SinhVien.id,
+            SinhVien.hodem,
+            SinhVien.ten,
+            SinhVien.anhdaidien,
+            Lop.tenlop,
+            FaceEmbedding.updated_at.label("trained_at")
+        ).outerjoin(FaceEmbedding, SinhVien.id == FaceEmbedding.sv_id)\
+         .outerjoin(Lop, SinhVien.class_id == Lop.id)
 
-    filters = []
-    if class_id and class_id != "all":
-        filters.append(SinhVien.class_id == class_id)
-    if search:
-        filters.append(and_(
-            (SinhVien.ten.ilike(f"%{search}%")) | (func.cast(SinhVien.id, str).ilike(f"%{search}%"))
-        ))
-    
-    if status == "trained":
-        filters.append(FaceEmbedding.sv_id.isnot(None))
-    elif status == "pending":
-        filters.append(FaceEmbedding.sv_id.is_(None))
+        filters = []
+        if class_id and class_id != "all":
+            filters.append(SinhVien.class_id == class_id)
+        if search:
+            filters.append(and_(
+                (SinhVien.ten.ilike(f"%{search}%")) | (func.cast(SinhVien.id, String).ilike(f"%{search}%"))
+            ))
+        
+        if status == "trained":
+            filters.append(FaceEmbedding.sv_id.isnot(None))
+        elif status == "pending":
+            filters.append(FaceEmbedding.sv_id.is_(None))
 
-    if filters:
-        query = query.where(and_(*filters))
+        if filters:
+            query = query.where(and_(*filters))
 
-    query = query.order_by(Lop.tenlop, SinhVien.ten)
-    result = await db.execute(query)
-    
-    data = []
-    for r in result.all():
-        data.append({
-            "id": r.id,
-            "full_name": f"{r.hodem} {r.ten}",
-            "tenlop": r.tenlop or "N/A",
-            "anhdaidien": r.anhdaidien,
-            "has_face": r.trained_at is not None,
-            "trained_at": r.trained_at.strftime("%d/%m/%Y %H:%M") if r.trained_at else None
-        })
-    
-    return data
+        query = query.order_by(Lop.tenlop, SinhVien.ten)
+        result = await db.execute(query)
+        
+        data = []
+        for r in result.all():
+            data.append({
+                "id": r.id,
+                "full_name": f"{r.hodem} {r.ten}",
+                "tenlop": r.tenlop or "N/A",
+                "anhdaidien": r.anhdaidien,
+                "has_face": r.trained_at is not None,
+                "trained_at": r.trained_at.strftime("%d/%m/%Y %H:%M") if r.trained_at else None
+            })
+        
+        return data
+    except Exception as e:
+        print(f"Error in get_students_face_list: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/{sv_id}")
 async def delete_face_data(sv_id: int, db: AsyncSession = Depends(get_db)):

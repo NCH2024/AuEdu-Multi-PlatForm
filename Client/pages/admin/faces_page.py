@@ -167,7 +167,7 @@ class AdminFacesPage(ft.Container):
             self.app_page.session.store.set("faces_filter_class", self.class_filter.value)
             self.app_page.session.store.set("faces_filter_search", self.search_field.value)
             
-            data = await self.svc.get("/api/admin/faces/list/", params=params)
+            data = await self.svc.get("/api/admin/faces/list", params=params)
             self.grid.set_data(data)
             self.update()
         except Exception as ex:
