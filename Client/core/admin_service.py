@@ -263,6 +263,17 @@ class AdminService(BaseService):
             return res.json()
         raise Exception(f"HTTP {res.status_code}: {res.text}")
 
+    async def get_server_env(self) -> dict:
+        """Lấy cấu hình môi trường cục bộ từ Server (Read-only)."""
+        try:
+            client = await get_supabase_client()
+            res = await client.get("/api/admin/system/env")
+            if res.status_code == 200:
+                return res.json()
+        except Exception as e:
+            print(f"[AdminService] get_server_env error: {e}")
+        return {}
+
     async def logout(self) -> dict:
         """Ghi nhận đăng xuất lên server."""
         try:

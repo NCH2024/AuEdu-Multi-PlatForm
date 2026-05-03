@@ -19,6 +19,7 @@ from app.db.models import SystemConfig, GiangVien
 from app.core.security import get_current_user_id
 from app.core.audit import log_audit
 from fastapi import Request
+from app.services.system_config_service import config_service
 
 router = APIRouter()
 
@@ -92,6 +93,9 @@ async def update_config(
     await db.commit()
     await db.refresh(db_cfg)
 
+    # Làm mới Cache nội bộ Server
+    await config_service.refresh_cache()
+
     # Audit Log
     await log_audit(
         db=db,
@@ -136,6 +140,9 @@ async def update_configs_batch(
             db_cfg.value = value
 
     await db.commit()
+
+    # Làm mới Cache nội bộ Server
+    await config_service.refresh_cache()
 
     # Audit Log
     await log_audit(

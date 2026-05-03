@@ -19,7 +19,7 @@ SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "public")
 
 # ── AI Quality ────────────────────────────────────
 FIQA_THRESHOLD: float = float(os.getenv("FIQA_THRESHOLD", "0.05"))
-ANTI_SPOOF_MODEL: str = os.getenv("ANTI_SPOOF_MODEL", "MiniFASNetV2.pth")
+ANTI_SPOOF_MODEL: str = os.getenv("ANTI_SPOOF_MODEL", "modelrgb.onnx")
 
 # ── WebSocket Queue ──────────────────────────────
 MAX_QUEUE_SIZE: int = int(os.getenv("MAX_QUEUE_SIZE", "8"))

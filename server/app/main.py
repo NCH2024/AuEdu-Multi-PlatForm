@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 import os
 
@@ -17,8 +18,15 @@ from app.api.attendance import ws as attendance_ws
 from app.api.export import excel
 from app.api.admin import faces as admin_faces, attendance as admin_attendance, ws_monitor as admin_ws_monitor
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Khởi tạo System Config Service
+    from app.services.system_config_service import config_service
+    await config_service.refresh_cache()
+    yield
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="AuEdu")
+    app = FastAPI(title="AuEdu", lifespan=lifespan)
     
     # Audit Middleware (Ghi nhật ký truy cập)
     from app.core.middleware import AuditMiddleware

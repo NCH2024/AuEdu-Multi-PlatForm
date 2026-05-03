@@ -39,6 +39,7 @@ from app.db.models import SinhVien, DiemDanh, FaceEmbedding
 from app.ai.engine import face_engine
 from app.core.broadcaster import broadcaster
 from app.core.audit import log_audit
+from app.services.system_config_service import config_service
 from app.services.attendance_cache import attendance_cache
 from sqlalchemy.dialects.postgresql import insert
 
@@ -47,17 +48,14 @@ from sqlalchemy.dialects.postgresql import insert
 # HẰNG SỐ CẤU HÌNH NHẬN DIỆN
 # ==============================================================================
 
-# Ngưỡng khoảng cách Cosine tối đa để chấp nhận là "cùng người"
-# Giá trị nhỏ hơn → Nghiêm ngặt hơn (ít false positive, nhiều false negative)
-# Giá trị lớn hơn → Dễ chấp nhận hơn (nhiều false positive, ít false negative)
-RECOGNITION_THRESHOLD: float = 0.45
+# RECOGNITION_THRESHOLD đã chuyển sang lấy động từ Database (config_service)
 
 
 # ==============================================================================
 # PRIVATE HELPER FUNCTIONS
 # ==============================================================================
 
-async def _get_embeddings_from_frame(image_b64: str, mode: str) -> list:
+async def _get_embeddings_from_frame(image_b64: str, mode: str) -> dict:
     """
     Gọi AI Engine (chạy đồng bộ nặng) trong một thread riêng biệt bằng
     asyncio.to_thread() để không chặn event loop của FastAPI/WebSocket.
@@ -67,7 +65,7 @@ async def _get_embeddings_from_frame(image_b64: str, mode: str) -> list:
         mode: "1" (1 người) hoặc "all" (toàn lớp).
 
     Returns:
-        list[list[float]]: Danh sách embedding 512-D.
+        dict: {"embeddings": list[list[float]], "spoof_detected": bool}
     """
     # asyncio.to_thread: Chạy hàm CPU-intensive trong ThreadPoolExecutor,
     # giải phóng event loop để tiếp tục xử lý các coroutine khác.
@@ -80,8 +78,10 @@ async def _find_best_match(
     """
     Tìm sinh viên khớp nhất. Thử tìm trong Cache trước, nếu không có hoặc lỗi thì fallback DB.
     """
+    threshold = config_service.get_ai_threshold()
+
     # 1. Thử In-Memory Cache (siêu tốc)
-    match, score = attendance_cache.find_best_match(tkb_tiet_id, embedding, RECOGNITION_THRESHOLD)
+    match, score = attendance_cache.find_best_match(tkb_tiet_id, embedding, threshold)
     
     # Nếu score != -1.0, tức là Cache đã được tải thành công
     if score is not None and score != -1.0:
@@ -89,12 +89,12 @@ async def _find_best_match(
             # Có trong cache nhưng vượt ngưỡng, từ chối nhận diện
             print(
                 f"[Attendance Service][Threshold Guard] "
-                f"Từ chối nhận diện (Cache) – Cosine Distance: {score:.4f} ≥ {RECOGNITION_THRESHOLD}"
+                f"Từ chối nhận diện (Cache) – Cosine Distance: {score:.4f} ≥ {threshold}"
             )
         else:
             print(
                 f"[Attendance Service] Nhận diện thành công (Cache) – SV_ID: {match['id']}, "
-                f"Cosine Distance: {score:.4f} (< {RECOGNITION_THRESHOLD})"
+                f"Cosine Distance: {score:.4f} (< {threshold})"
             )
         return match, score
 
@@ -268,9 +268,11 @@ async def handle_attendance_frame(
     # BƯỚC 2: Gọi AI Engine để trích xuất embedding
     #         (asyncio.to_thread() giúp không block event loop)
     # ------------------------------------------------------------------
-    embeddings: list = await _get_embeddings_from_frame(image_b64, mode)
+    result: dict = await _get_embeddings_from_frame(image_b64, mode)
+    embeddings = result.get("embeddings", [])
+    spoof_detected = result.get("spoof_detected", False)
 
-    if not embeddings:
+    if not embeddings and not spoof_detected:
         # Không phát hiện được khuôn mặt nào đủ chất lượng → Bỏ qua frame này
         return
 
@@ -294,7 +296,8 @@ async def handle_attendance_frame(
     match_results = await asyncio.gather(*(process_embedding(emb) for emb in embeddings))
     valid_matches = [res for res in match_results if res is not None]
 
-    if not valid_matches:
+    if not valid_matches and not spoof_detected:
+        # Không có ai khớp và cũng không có giả mạo -> Bỏ qua frame
         return
 
     # ------------------------------------------------------------------
@@ -362,14 +365,24 @@ async def handle_attendance_frame(
         return
 
     # ------------------------------------------------------------------
-    # BƯỚC 4: Phản hồi về Client nếu có sinh viên được nhận diện
+    # BƯỚC 4: Phản hồi về Client
     # ------------------------------------------------------------------
-    if recognized:
-        # Gửi phản hồi cho Client (giảng viên) đang thực hiện điểm danh
-        response = {"status": "success", "students": recognized}
-        await websocket.send_text(
-            json.dumps(response, ensure_ascii=False)
-        )
+    if recognized or spoof_detected:
+        if spoof_detected:
+            print(f"\033[91m[AI Core] ⚠️ CẢNH BÁO: Phát hiện khuôn mặt giả mạo (Spoofing Detected)!\033[0m")
+            await log_audit(
+                db=db, user_id=giangvien_id, action="SPOOF_ATTEMPT", entity="SinhVien",
+                details={"tkb_tiet_id": tkb_tiet_id, "date": str(target_date), "message": "Chặn nỗ lực giả mạo."},
+                request=None
+            )
+
+        # Gửi phản hồi cho Client
+        response = {
+            "status": "success", 
+            "students": recognized,
+            "spoof_detected": spoof_detected
+        }
+        await websocket.send_text(json.dumps(response, ensure_ascii=False))
         
         # Broadcast cho Admin để giám sát thời gian thực
         # Thêm thông tin bổ sung nếu cần (ví dụ: tên môn học, lớp - nhưng hiện tại ta chỉ gửi student info)

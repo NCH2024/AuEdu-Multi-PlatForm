@@ -26,7 +26,7 @@ class AttendanceSessionPage(ft.Container):
         
         # Lấy dữ liệu từ trang trước truyền sang
         self.tkb_tiet_id = self.app_page.session.store.get("current_tkb_tiet_id") or "1" 
-        self.mode = "1" # Sẽ lấy từ cấu hình trong hàm khởi tạo
+        self.mode = "all" # Mặc định điểm danh tất cả khuôn mặt trong khung hình
         
         # NHẬN DANH SÁCH SINH VIÊN THỰC TẾ
         self.real_students = self.app_page.session.store.get("current_student_list") or []
@@ -141,7 +141,7 @@ class AttendanceSessionPage(ft.Container):
         
         async def delayed_init():
             prefs = ft.SharedPreferences()
-            self.mode = await prefs.get("attendance_mode") or "1"
+            self.mode = "all"
             
             saved_cam = await prefs.get("selected_camera")
             await self.camera_view.load_available_cameras()
@@ -219,7 +219,11 @@ class AttendanceSessionPage(ft.Container):
                 data = json.loads(message)
                 
                 if data.get("status") == "success":
-                    await self.update_scanned_ui(data.get("students", []))
+                    await self.update_scanned_ui(
+                        data.get("students", []),
+                        data.get("spoof_detected", False),
+                        data.get("too_many_faces", False)
+                    )
                     
         except websockets.exceptions.ConnectionClosed as e:
             self.ws_connected = False
@@ -230,38 +234,56 @@ class AttendanceSessionPage(ft.Container):
             print(f"[Client] WS Nhận tin nhắn bị lỗi: {e}")
             self.ws_connected = False
 
-    async def update_scanned_ui(self, recognized_students):
+    async def update_scanned_ui(self, recognized_students, spoof_detected=False, too_many_faces=False):
         updated = False
+        new_names = []
+        
+        # 1. Xử lý danh sách sinh viên nhận diện được (Nếu không bị chặn bởi too_many_faces)
         for rec_sv in recognized_students:
-            # Tìm ID một cách an toàn (tránh trường hợp server trả về 'sv_id' thay vì 'id')
             rec_id = str(rec_sv.get("id", rec_sv.get("sv_id", "")))
-            is_new = rec_sv.get("is_new", False) # Đọc cờ từ Server
+            is_new = rec_sv.get("is_new", False) 
             
             for sv in self.real_students: 
                 if str(sv["id"]) == rec_id:
-                    # Trường hợp 1: Sinh viên chưa điểm danh hoặc is_new = True -> Ghi nhận mới
                     if sv.get("trang_thai_diem_danh") != "Có mặt" or is_new:
                         sv["trang_thai_diem_danh"] = "Có mặt" 
-                        
-                        # Xóa khỏi danh sách thẻ (nếu trước đó đã có) để chống bị trùng lặp
                         self.scanned_session_students = [s for s in self.scanned_session_students if str(s["id"]) != rec_id]
-                        
-                        # Thêm vào đầu danh sách thẻ
                         self.scanned_session_students.insert(0, {
                             "id": sv["id"],
                             "name": f"{sv.get('hodem', '')} {sv.get('ten', '')}".strip(),
                             "time": rec_sv.get("time", datetime.now().strftime("%H:%M:%S"))
                         })
+                        new_names.append(sv.get("ten"))
                         updated = True
-                        
-                        # Hiển thị text thẳng trên khung hình Camera
-                        self.app_page.run_task(self.show_camera_toast, f"Đã ghi nhận: {sv.get('ten')}", True)
-                        
-                    # Trường hợp 2: Sinh viên đã điểm danh rồi nhưng camera lại quét trúng
-                    else:
-                        # Hiển thị text màu cam
-                        self.app_page.run_task(self.show_camera_toast, f"{sv.get('ten')} đã điểm danh trước đó!", False)
                     break
+        
+        # 2. LOGIC ƯU TIÊN THÔNG BÁO (Toast)
+        if too_many_faces:
+            # Ưu tiên cảnh báo vi phạm quy trình (nhiều người)
+            self.app_page.run_task(self.show_camera_toast, "⚠️ Phát hiện quá nhiều người!", False)
+        elif spoof_detected:
+            # Cảnh báo giả mạo
+            self.app_page.run_task(self.show_camera_toast, "⚠️ Phát hiện khuôn mặt giả mạo!", False)
+        elif new_names:
+            # Thông báo ghi nhận thành công
+            if len(new_names) == 1:
+                msg = f"Đã ghi nhận: {new_names[0]}"
+            elif len(new_names) <= 3:
+                msg = f"Đã ghi nhận: {', '.join(new_names)}"
+            else:
+                msg = f"Đã ghi nhận: {new_names[0]}, {new_names[1]} và {len(new_names)-2} người khác"
+            
+            self.app_page.run_task(self.show_camera_toast, msg, True)
+            # Hiển thị Toast gộp (Batched)
+            if len(new_names) == 1:
+                msg = f"Đã ghi nhận: {new_names[0]}"
+            elif len(new_names) <= 3:
+                msg = f"Đã ghi nhận: {', '.join(new_names)}"
+            else:
+                msg = f"Đã ghi nhận: {new_names[0]}, {new_names[1]} và {len(new_names)-2} người khác"
+            
+            self.app_page.run_task(self.show_camera_toast, msg, True)
+        # Không báo gì nếu tất cả sinh viên trong frame đều đã được quét trước đó để tránh spam UI
         
         if updated:
             if self.show_grid:
@@ -504,7 +526,7 @@ class AttendanceSessionPage(ft.Container):
             # Payload bắt buộc có format JSON chứa các key thiết yếu theo yêu cầu
             payload = {
                 "image": frame_base64,
-                "mode": self.mode, # "1" hoặc "all" lấy từ Dropdown
+                "mode": "all", 
                 "date": getattr(self, "attendance_date", datetime.now().strftime("%Y-%m-%d")),
                 **meta # Merge metadata vào payload
             }

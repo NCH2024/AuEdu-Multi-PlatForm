@@ -36,7 +36,7 @@ class AttendancePage(ft.Container):
             bgcolor=current_theme.secondary, 
             on_click=self.handle_start_session, 
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=15),
-            disabled=True # KHÓA MẶC ĐỊNH
+            disabled=False # Cho phép bấm để nhận thông báo nếu thiếu thông tin
         )
 
         # Khai báo nút bấm Mobile
@@ -45,7 +45,7 @@ class AttendancePage(ft.Container):
             bgcolor=current_theme.secondary, 
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=15), 
             on_click=self.handle_start_session_mobile,
-            disabled=True # KHÓA MẶC ĐỊNH
+            disabled=False # Cho phép bấm để nhận thông báo nếu thiếu thông tin
         )
 
         self.dd_row_limit = CustomDropdown(
@@ -65,26 +65,14 @@ class AttendancePage(ft.Container):
         self.schedule_list_ui = ft.Column(scroll=ft.ScrollMode.AUTO, height=450, spacing=10)
         self.student_detail_content = ft.Column(tight=True, spacing=8, scroll=ft.ScrollMode.AUTO)
 
-        self.mobile_rg_mode = ft.RadioGroup(value="1", content=ft.Column([ft.Radio(value="1", label="Từng sinh viên"), ft.Radio(value="all", label="Cả lớp")]))
-        self.rg_mode = ft.RadioGroup(value="1", content=ft.Row([ft.Radio(value="1", label="Từng sinh viên"), ft.Radio(value="all", label="Cả lớp")], alignment=ft.MainAxisAlignment.CENTER))
+        # Chế độ điểm danh được cố định là 'all' (Cả lớp)
+        self.attendance_mode = "all"
 
         self.info_lop_text = ft.Text("Chưa chọn lớp", weight=ft.FontWeight.BOLD, size=14)
         self.info_mon_text = ft.Text("Vui lòng bấm nút để tìm và chọn lịch dạy", size=12)
         self.info_ngay_text = ft.Text("-", size=12, weight=ft.FontWeight.BOLD)
 
-        self.attendance_bottom_sheet = ft.BottomSheet(
-            ft.Container(
-                padding=25, border_radius=20,
-                content=ft.Column(
-                    tight=True, spacing=15, horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-                    controls=[
-                        ft.Text("CHẾ ĐỘ ĐIỂM DANH", weight=ft.FontWeight.BOLD, size=14, color=current_theme.secondary, text_align=ft.TextAlign.CENTER),
-                        self.mobile_rg_mode,
-                        self.btn_start_session_mobile,
-                    ]
-                )
-            )
-        )
+        # Gỡ bỏ BottomSheet vì đã vào thẳng phiên điểm danh
 
         self.schedule_dialog = ft.AlertDialog(
             title=ft.Row([ft.Icon(ft.Icons.CALENDAR_MONTH, color=current_theme.secondary), ft.Text("Chọn lịch giảng dạy", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=16)], alignment=ft.MainAxisAlignment.CENTER),
@@ -109,12 +97,14 @@ class AttendancePage(ft.Container):
                 margin=ft.Margin.only(bottom=80),
                 content=ft.FloatingActionButton(
                     content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT_ROUNDED, color=ft.Colors.WHITE), ft.Text("Điểm danh", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD)], spacing=5, alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=current_theme.secondary, width=140, on_click=self.open_mobile_attendance_sheet,
+                    bgcolor=current_theme.secondary, width=140, 
+                    # Bấm vào đây là vào thẳng phiên điểm danh
+                    on_click=self.handle_start_session_mobile,
                 )
             )
             self.app_page.update()
 
-        for overlay_ui in [self.attendance_bottom_sheet, self.schedule_dialog, self.student_detail_dialog]:
+        for overlay_ui in [self.schedule_dialog, self.student_detail_dialog]:
             if overlay_ui not in self.app_page.overlay:
                 self.app_page.overlay.append(overlay_ui)
 
@@ -181,7 +171,7 @@ class AttendancePage(ft.Container):
         nang_cao_tile = ft.ExpansionTile(title=ft.Text("Chức năng nâng cao", weight=ft.FontWeight.BOLD, size=13), controls=[ft.Container(content=nang_cao_content, padding=15)], collapsed_text_color=current_theme.secondary, text_color=current_theme.secondary, icon_color=current_theme.secondary, collapsed_icon_color=current_theme.secondary)
 
         diem_danh_content = ft.Column([
-            ft.Container(content=self.rg_mode, padding=5),
+            # Loại bỏ phần chọn chế độ trên PC
             self.btn_start_session,
         ], horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         diem_danh_tile = ft.ExpansionTile(title=ft.Text("Thao tác điểm danh", weight=ft.FontWeight.BOLD, size=13), controls=[ft.Container(content=diem_danh_content, padding=15)], expanded=True, collapsed_text_color=current_theme.secondary, text_color=current_theme.secondary, icon_color=current_theme.secondary, collapsed_icon_color=current_theme.secondary, visible=not is_mobile)
@@ -284,8 +274,9 @@ class AttendancePage(ft.Container):
             self.info_ngay_text.value = saved_date
             
             # Khóa nút lại trong lúc đợi API tải để chống Spam
-            self.btn_start_session.disabled = True
-            self.btn_start_session_mobile.disabled = True
+            # Giữ nút luôn mở để nhận tương tác
+            self.btn_start_session.disabled = False
+            self.btn_start_session_mobile.disabled = False
             
             # Tự động fetch lại sinh viên và cập nhật giao diện
             await self.execute_load_students()
@@ -551,9 +542,7 @@ class AttendancePage(ft.Container):
         self.current_limit = int(self.dd_row_limit.value)
         self.render_table()
 
-    def open_mobile_attendance_sheet(self, e):
-        self.attendance_bottom_sheet.open = True
-        self.app_page.update()
+    # Đã gỡ bỏ open_mobile_attendance_sheet
 
     async def handle_start_session(self, e):
         """Xử lý khi giảng viên bấm nút Bắt đầu điểm danh (Bản Desktop/Web)"""
@@ -581,9 +570,9 @@ class AttendancePage(ft.Container):
         e.control.disabled = True
         e.control.update()
         
-        mode = self.rg_mode.value if hasattr(self, 'rg_mode') else "1"
+        mode = "all"
         prefs = ft.SharedPreferences()
-        await prefs.set("attendance_mode", str(mode))
+        await prefs.set("attendance_mode", "all")
         
         # Log thông tin phiên chuyên nghiệp
         print(f"[Attendance Page] Khởi tạo phiên: Lớp={self.info_lop_text.value} | Ngày={self.selected_date} | Mode={mode}")
@@ -620,14 +609,11 @@ class AttendancePage(ft.Container):
         e.control.disabled = True
         e.control.update()
         
-        mode = self.mobile_rg_mode.value if hasattr(self, 'mobile_rg_mode') else "1"
+        mode = "all"
         prefs = ft.SharedPreferences()
-        await prefs.set("attendance_mode", str(mode))
+        await prefs.set("attendance_mode", "all")
         
-        self.attendance_bottom_sheet.open = False
-        self.app_page.update()
-        
-        print(f"[Attendance Page][Mobile] Khởi tạo phiên: Ngày={self.selected_date} | Mode={mode}")
+        print(f"[Attendance Page][Mobile] Khởi tạo phiên trực tiếp: Ngày={self.selected_date}")
         
         await self.camera_view.stop_camera()
         await self.app_page.push_route("/user/attendance/session")

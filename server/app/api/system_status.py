@@ -115,3 +115,23 @@ async def get_audit_metadata(db: AsyncSession = Depends(get_db)):
         "actions": [a for a in actions_res.scalars().all()],
         "entities": [e for e in entities_res.scalars().all()]
     }
+
+@router.get("/env")
+async def get_system_env():
+    """Lấy cấu hình môi trường cục bộ của Server (Read-only)."""
+    from app.core.config import (
+        SUPABASE_URL, SUPABASE_KEY, SUPABASE_STORAGE_BUCKET, 
+        ANTI_SPOOF_MODEL, MAX_QUEUE_SIZE
+    )
+    
+    # Masking key nhạy cảm để bảo mật
+    masked_key = f"{SUPABASE_KEY[:6]}...{SUPABASE_KEY[-4:]}" if SUPABASE_KEY else "N/A"
+    
+    return {
+        "supabase_url": SUPABASE_URL,
+        "supabase_key_masked": masked_key,
+        "supabase_bucket": SUPABASE_STORAGE_BUCKET,
+        "anti_spoof_model": ANTI_SPOOF_MODEL,
+        "max_queue_size": MAX_QUEUE_SIZE,
+        "server_status": "Running"
+    }
