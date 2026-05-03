@@ -43,6 +43,7 @@ from app.db.models import GiangVien
 from app.services.attendance_service import handle_attendance_frame
 from app.core.security import verify_token
 from app.core.config import MAX_QUEUE_SIZE, DROP_OLDEST
+from app.core.audit import log_audit
 
 
 router = APIRouter()
@@ -122,6 +123,17 @@ async def attendance_websocket(
         f"[WS Attendance] ✓ Kết nối mới | "
         f"TKB_Tiet_ID={tkb_tiet_id} | GV_ID={gv_id}"
     )
+
+    # --- AUDIT LOG: SESSION START ---
+    await log_audit(
+        db=db,
+        user_id=gv_id,
+        action="SESSION_START",
+        entity="AttendanceWS",
+        entity_id=tkb_tiet_id,
+        request=websocket # WebSocket object cũng có headers để lấy IP/UA
+    )
+    await db.commit()
 
     # ==========================================================================
     # BƯỚC 2: KHỞI TẠO HÀNG ĐỢI FRAME (ASYNC QUEUE)
@@ -257,5 +269,16 @@ async def attendance_websocket(
             await websocket.close(code=1000, reason="Phiên điểm danh kết thúc")
         except Exception:
             pass  # Kết nối đã đóng hoặc không còn valid
+
+        # --- AUDIT LOG: SESSION END ---
+        await log_audit(
+            db=db,
+            user_id=gv_id,
+            action="SESSION_END",
+            entity="AttendanceWS",
+            entity_id=tkb_tiet_id,
+            request=websocket
+        )
+        await db.commit()
 
         print(f"[WS Attendance] ✓ Đã dọn dẹp hoàn tất | TKB_Tiet_ID={tkb_tiet_id}")

@@ -498,11 +498,15 @@ class AttendanceSessionPage(ft.Container):
             return
 
         if self.ws_connected and getattr(self, "ws", None):
+            # Lấy metadata từ DeviceManager (vị trí, device_id, client_version)
+            meta = DeviceManager.get_instance().get_metadata_payload()
+            
             # Payload bắt buộc có format JSON chứa các key thiết yếu theo yêu cầu
             payload = {
                 "image": frame_base64,
                 "mode": self.mode, # "1" hoặc "all" lấy từ Dropdown
-                "date": getattr(self, "attendance_date", datetime.now().strftime("%Y-%m-%d"))
+                "date": getattr(self, "attendance_date", datetime.now().strftime("%Y-%m-%d")),
+                **meta # Merge metadata vào payload
             }
             try:
                 await self.ws.send(json.dumps(payload))

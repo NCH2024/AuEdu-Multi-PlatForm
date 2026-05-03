@@ -20,11 +20,36 @@ class AdminHomePage(ft.Container):
         self.stats_data = {}
         self.audit_logs = []
         self.is_loading = True
+        self._is_active = True # Cờ theo dõi trạng thái trang
 
         self._name_text = None
+        self._audit_container = ft.Container() # Container chứa bảng để cập nhật riêng
+        
+        self.exclude_admin_switch = ft.Switch(
+            label="Chỉ xem người dùng", value=True, 
+            label_position=ft.LabelPosition.LEFT,
+            scale=0.8,
+            on_change=lambda e: self.app_page.run_task(self.load_data)
+        )
 
         self.content = self.build_ui()
         self.app_page.run_task(self.load_data)
+        self.app_page.run_task(self.refresh_loop) # Chạy vòng lặp làm mới
+
+    def did_unmount(self):
+        self._is_active = False # Dừng vòng lặp khi rời trang
+        super().did_unmount()
+
+    async def refresh_loop(self):
+        """Vòng lặp làm mới dữ liệu mỗi 5 giây."""
+        while self._is_active:
+            await asyncio.sleep(5)
+            if not self._is_active:
+                break
+            try:
+                await self.load_data(silent=True)
+            except Exception as e:
+                print(f"Refresh Error: {e}")
 
     def apply_theme(self):
         self.content = self.build_ui()
@@ -59,20 +84,23 @@ class AdminHomePage(ft.Container):
 
         rows = []
         for log in self.audit_logs:
+            action = log.get("action", "N/A")
+            action_color = ft.Colors.BLUE if action == "LOGIN" else ft.Colors.GREEN if action == "CREATE" else ft.Colors.ORANGE if action == "UPDATE" else ft.Colors.RED
+            
             rows.append(
                 ft.DataRow(
                     cells=[
-                        ft.DataCell(ft.Text(log.get("time", "N/A"), color=current_theme.text_main)),
-                        ft.DataCell(ft.Text(log.get("user", "N/A"), color=current_theme.text_main)),
+                        ft.DataCell(ft.Text(log.get("time", "N/A"), color=current_theme.text_main, size=12)),
+                        ft.DataCell(ft.Text(log.get("user", "N/A"), color=current_theme.text_main, size=12, weight=ft.FontWeight.W_500)),
                         ft.DataCell(
                             ft.Container(
                                 padding=ft.Padding.symmetric(horizontal=8, vertical=4),
                                 border_radius=6,
-                                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.BLUE if log.get("action") == "LOGIN" else ft.Colors.GREEN),
-                                content=ft.Text(log.get("action", "N/A"), size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE if log.get("action") == "LOGIN" else ft.Colors.GREEN)
+                                bgcolor=ft.Colors.with_opacity(0.1, action_color),
+                                content=ft.Text(action, size=11, weight=ft.FontWeight.BOLD, color=action_color)
                             )
                         ),
-                        ft.DataCell(ft.Text(log.get("details", "N/A"), color=current_theme.text_muted)),
+                        ft.DataCell(ft.Text(log.get("details", "N/A"), color=current_theme.text_muted, size=12, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)),
                     ]
                 )
             )
@@ -86,24 +114,22 @@ class AdminHomePage(ft.Container):
         audit_table = ft.DataTable(
             expand=True,
             columns=[
-                ft.DataColumn(ft.Text("THỜI GIAN", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=12)),
-                ft.DataColumn(ft.Text("NGƯỜI DÙNG", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=12)),
-                ft.DataColumn(ft.Text("HÀNH ĐỘNG", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=12)),
-                ft.DataColumn(ft.Text("CHI TIẾT", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=12)),
+                ft.DataColumn(ft.Text("THỜI GIAN", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=11)),
+                ft.DataColumn(ft.Text("NGƯỜI DÙNG", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=11)),
+                ft.DataColumn(ft.Text("HÀNH ĐỘNG", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=11)),
+                ft.DataColumn(ft.Text("CHI TIẾT", color=current_theme.text_muted, weight=ft.FontWeight.BOLD, size=11)),
             ],
             rows=rows,
-            heading_row_height=40,
-            data_row_max_height=50,
-            column_spacing=40,
-            horizontal_margin=20,
+            heading_row_height=35,
+            data_row_max_height=45,
+            column_spacing=30,
+            horizontal_margin=15,
             divider_thickness=1,
             heading_row_color=current_theme.surface_variant,
-            border=ft.Border.all(1, current_theme.divider_color),
-            border_radius=8,
         )
 
         return ft.Container(
-            padding=ft.Padding(20, 10, 20, 20),
+            padding=ft.Padding(10, 5, 10, 10),
             content=ft.Row([audit_table], scroll=ft.ScrollMode.AUTO)
         )
 
@@ -159,17 +185,35 @@ class AdminHomePage(ft.Container):
             create_stat_card(ft.Icons.SPEED_ROUNDED, "Tải hệ thống", sys_load, ft.Colors.RED_400, "/admin/settings"),
         ], run_spacing=5, spacing=5)
 
+        self._audit_container.content = self._build_audit_table()
+
         audit_section = self.make_pro_card(
             padding=0,
             content=ft.Column([
                 ft.Container(
-                    padding=ft.Padding(20, 20, 20, 5),
+                    padding=ft.Padding(20, 15, 20, 5),
                     content=ft.Row([
-                        ft.Icon(ft.Icons.HISTORY_ROUNDED, color=current_theme.secondary, size=20),
-                        ft.Text("NHẬT KÝ HOẠT ĐỘNG GẦN ĐÂY", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=14)
-                    ])
+                        ft.Row([
+                            ft.Icon(ft.Icons.HISTORY_ROUNDED, color=current_theme.secondary, size=20),
+                            ft.Text("HOẠT ĐỘNG GẦN ĐÂY", weight=ft.FontWeight.BOLD, color=current_theme.secondary, size=13),
+                            ft.Container(
+                                padding=ft.Padding.symmetric(horizontal=8, vertical=2),
+                                border_radius=10,
+                                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.GREEN),
+                                content=ft.Text("Live", size=10, color=ft.Colors.GREEN, weight=ft.FontWeight.BOLD)
+                            )
+                        ], spacing=10),
+                        ft.Row([
+                            self.exclude_admin_switch,
+                            ft.TextButton(
+                                "Xem tất cả", 
+                                icon=ft.Icons.ARROW_FORWARD_ROUNDED,
+                                on_click=lambda e: self.app_page.run_task(self.app_page.push_route, "/admin/system-history")
+                            )
+                        ], spacing=10)
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                 ),
-                self._build_audit_table()
+                self._audit_container
             ], spacing=0)
         )
 
@@ -223,19 +267,16 @@ class AdminHomePage(ft.Container):
             scroll=ft.ScrollMode.AUTO, expand=True
         )
 
-    async def load_data(self):
-        # 1. Load Admin Name từ session
-        prefs = ft.SharedPreferences()
-        session_str = await prefs.get("user_session")
-        if session_str:
-            session_data = safe_json_load(session_str)
-            self.admin_name = session_data.get("name", "Quản trị viên")
-            if self._name_text:
-                self._name_text.value = f"QTV. {self.admin_name}"
-                try:
-                    self._name_text.update()
-                except Exception:
-                    pass
+    async def load_data(self, silent=False):
+        # 1. Load Admin Name từ session (chỉ khi không phải làm mới ngầm)
+        if not silent:
+            prefs = ft.SharedPreferences()
+            session_str = await prefs.get("user_session")
+            if session_str:
+                session_data = safe_json_load(session_str)
+                self.admin_name = session_data.get("name", "Quản trị viên")
+                if self._name_text:
+                    self._name_text.value = f"QTV. {self.admin_name}"
 
         # 2. Gọi API lấy Stats và Audit Logs
         try:
@@ -246,16 +287,27 @@ class AdminHomePage(ft.Container):
             if stats_res.status_code == 200:
                 self.stats_data = stats_res.json()
             
-            # Fetch Audit Logs
-            audit_res = await client.get("/api/admin/system/audit?limit=5")
+            # Fetch Audit Logs (Tùy chọn loại trừ Admin)
+            exclude_param = "true" if self.exclude_admin_switch.value else "false"
+            audit_res = await client.get(f"/api/admin/system/audit?limit=8&exclude_admins={exclude_param}")
             if audit_res.status_code == 200:
                 self.audit_logs = audit_res.json()
 
             self.is_loading = False
-            self.apply_theme()
+            
+            if silent:
+                # Chỉ cập nhật phần bảng và stats nếu đang làm mới ngầm
+                self._audit_container.content = self._build_audit_table()
+                try:
+                    self.update()
+                except Exception: pass
+            else:
+                self.apply_theme()
 
         except Exception as e:
             print(f"ADMIN load_data ERROR: {e}")
-            show_top_notification(self.app_page, "Lỗi", f"Không thể kết nối tới máy chủ API: {e}", ft.Colors.RED, sound="E")
+            if not silent:
+                show_top_notification(self.app_page, "Lỗi", f"Không thể kết nối tới máy chủ API: {e}", ft.Colors.RED, sound="E")
             self.is_loading = False
-            self.apply_theme()
+            if not silent:
+                self.apply_theme()

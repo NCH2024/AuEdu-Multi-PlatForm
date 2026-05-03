@@ -1,5 +1,5 @@
 # server/app/api/training.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, cast, String, text
 from sqlalchemy.dialects.postgresql import insert
@@ -11,6 +11,7 @@ from app.db.models import (
 )
 from pydantic import BaseModel
 from app.ai.engine import face_engine
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -120,7 +121,9 @@ async def search_sinhvien(gv_id: int, keyword: str, db: AsyncSession = Depends(g
 # -------------------------------------------------
 @router.post("/face/enroll")
 async def enroll_face_data(
-    req: FaceEnrollRequest, db: AsyncSession = Depends(get_db)
+    req: FaceEnrollRequest, 
+    request: Request,
+    db: AsyncSession = Depends(get_db)
 ):
     try:
         # Kiểm tra số lượng ảnh tối thiểu
@@ -167,6 +170,19 @@ async def enroll_face_data(
         await db.execute(stmt)
         await db.commit()
         print(f"[ENROLL] SV={req.sv_id} GV={req.gv_id} – embedding stored, distance={threshold}")
+        
+        # Audit Log
+        await log_audit(
+            db=db,
+            user_id=req.gv_id,
+            action="FACE_ENROLL",
+            entity="FaceEmbedding",
+            entity_id=req.sv_id,
+            details={"match_score": threshold}, # Hoặc thông tin khác hữu ích
+            request=request
+        )
+        await db.commit()
+
         return {"status": "success", "message": "Cập nhật dữ liệu khuôn mặt thành công!"}
     except ValueError as ve:
         # Lỗi mình tự raise sẽ bay ra đây, trả về 400 Client Error

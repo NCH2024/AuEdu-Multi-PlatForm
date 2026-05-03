@@ -38,6 +38,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.db.models import SinhVien, DiemDanh, FaceEmbedding
 from app.ai.engine import face_engine
 from app.core.broadcaster import broadcaster
+from app.core.audit import log_audit
 
 
 # ==============================================================================
@@ -303,6 +304,27 @@ async def handle_attendance_frame(
 
         if save_status == "ERROR":
             continue
+
+        # --- AUDIT LOG: RECOGNITION ---
+        # Chỉ log khi sinh viên thực sự được ghi nhận mới (INSERTED) hoặc đổi trạng thái (UPDATED)
+        if save_status in ("INSERTED", "UPDATED"):
+            await log_audit(
+                db=db,
+                user_id=giangvien_id,
+                action="RECOGNITION",
+                entity="SinhVien",
+                entity_id=str(sv_id),
+                details={
+                    "tkb_tiet_id": tkb_tiet_id,
+                    "date": str(target_date),
+                    "score": round(float(score), 4),
+                    "vitri": vitri,
+                    "save_status": save_status
+                },
+                request=None # WS không có Request object trực tiếp dễ dàng ở đây, log_audit sẽ lấy IP từ metadata nếu có
+            )
+            # Commit log riêng lẻ để đảm bảo lưu trữ ngay cả khi các frame sau lỗi
+            await db.commit()
 
         # 3e. Đánh dấu "is_new" để Client biết đây có phải lần quét đầu tiên không
         #     (INSERTED/UPDATED = mới quét; ALREADY_PRESENT = đã quét trước đó)

@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, String
 from typing import List, Optional
 from app.db.session import get_db
 from app.db.models import SinhVien, FaceEmbedding, Lop
+from app.core.security import get_current_user_id
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -75,7 +77,12 @@ async def get_students_face_list(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/{sv_id}")
-async def delete_face_data(sv_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_face_data(
+    sv_id: int, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """Xóa dữ liệu khuôn mặt của sinh viên."""
     stmt = select(FaceEmbedding).where(FaceEmbedding.sv_id == sv_id)
     result = await db.execute(stmt)
@@ -85,5 +92,16 @@ async def delete_face_data(sv_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu khuôn mặt")
     
     await db.delete(face)
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="DELETE",
+        entity="FaceEmbedding",
+        entity_id=sv_id,
+        request=request
+    )
+    
     await db.commit()
     return {"message": "Đã xóa dữ liệu khuôn mặt thành công"}

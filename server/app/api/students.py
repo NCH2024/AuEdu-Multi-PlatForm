@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, cast, String, text, func, case, update
 from app.db.session import get_db
 from app.db.models import DiemDanh, TKBTiet, SinhVien, ThoiKhoaBieu
+from app.core.security import get_current_user_id
+from app.core.audit import log_audit
 from datetime import datetime, date
 from typing import List, Optional
 
@@ -169,17 +171,42 @@ class StudentBatch(BaseModel):
     items: List[StudentCreate]
 
 @router.post("/")
-async def create_student(sv: StudentCreate, db: AsyncSession = Depends(get_db)):
+async def create_student(
+    sv: StudentCreate, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     db_sv = SinhVien(**sv.model_dump())
+    db_sv.created_by = current_user_id
+    db_sv.updated_by = current_user_id
     db.add(db_sv)
     await db.commit()
     await db.refresh(db_sv)
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="CREATE",
+        entity="SinhVien",
+        entity_id=db_sv.id,
+        details=sv.model_dump(),
+        request=request
+    )
+    await db.commit()
+
     return {"id": db_sv.id, "message": "Created successfully"}
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 @router.post("/batch")
-async def create_students_batch(batch: StudentBatch, db: AsyncSession = Depends(get_db)):
+async def create_students_batch(
+    batch: StudentBatch, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """Tạo nhiều sinh viên cùng lúc (Báo lỗi nếu trùng MSSV)."""
     if not batch.items:
         return {"message": "Không có dữ liệu", "count": 0}
@@ -198,10 +225,27 @@ async def create_students_batch(batch: StudentBatch, db: AsyncSession = Depends(
         }
     
     # 2. Nếu không trùng, tiến hành INSERT
-    data = [item.model_dump() for item in batch.items]
+    data = []
+    for item in batch.items:
+        d = item.model_dump()
+        d["created_by"] = current_user_id
+        d["updated_by"] = current_user_id
+        data.append(d)
+        
     stmt = pg_insert(SinhVien).values(data)
     
     result = await db.execute(stmt)
+    await db.commit()
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="BATCH_CREATE",
+        entity="SinhVien",
+        details={"count": result.rowcount, "ids": ids},
+        request=request
+    )
     await db.commit()
     
     return {
@@ -210,17 +254,42 @@ async def create_students_batch(batch: StudentBatch, db: AsyncSession = Depends(
     }
 
 @router.put("/{id}")
-async def update_student(id: int, sv: StudentUpdate, db: AsyncSession = Depends(get_db)):
+async def update_student(
+    id: int, 
+    sv: StudentUpdate, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     db_sv = await db.get(SinhVien, id)
     if not db_sv:
         raise HTTPException(status_code=404, detail="Student not found")
     for k, v in sv.model_dump(exclude_unset=True).items():
         setattr(db_sv, k, v)
+    
+    db_sv.updated_by = current_user_id
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="UPDATE",
+        entity="SinhVien",
+        entity_id=id,
+        details=sv.model_dump(exclude_unset=True),
+        request=request
+    )
+    
     await db.commit()
     return {"message": "Updated successfully"}
 
 @router.delete("/{id}")
-async def delete_student(id: int, db: AsyncSession = Depends(get_db)):
+async def delete_student(
+    id: int, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """Xóa sinh viên theo ID hệ thống."""
     db_sv = await db.get(SinhVien, id)
     if not db_sv or db_sv.deleted_at is not None:
@@ -228,5 +297,17 @@ async def delete_student(id: int, db: AsyncSession = Depends(get_db)):
     
     # Soft delete
     db_sv.deleted_at = datetime.now()
+    db_sv.deleted_by = current_user_id
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="DELETE",
+        entity="SinhVien",
+        entity_id=id,
+        request=request
+    )
+    
     await db.commit()
     return {"message": "Deleted successfully"}

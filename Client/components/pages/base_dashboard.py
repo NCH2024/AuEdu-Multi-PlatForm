@@ -43,6 +43,7 @@ class BaseDashboard(ft.Container):
                 {"label": "Lịch điểm danh", "icon": ft.Icons.SCHEDULE_ROUNDED, "route": "/admin/schedules"},
                 {"label": "Báo cáo Điểm danh", "icon": ft.Icons.ASSESSMENT_ROUNDED, "route": "/admin/attendance-report"},
                 {"label": "Thông báo", "icon": ft.Icons.NOTIFICATIONS_ROUNDED, "route": "/admin/notifications"},
+                {"label": "Lịch sử hệ thống", "icon": ft.Icons.HISTORY_ROUNDED, "route": "/admin/system-history"},
                 {"label": "Cài đặt AI", "icon": ft.Icons.SETTINGS_ROUNDED, "route": "/admin/settings"},
             ]
         else:
@@ -485,6 +486,13 @@ class BaseDashboard(ft.Container):
             self.update()
 
     async def _do_normal_logout(self):
+        # Gọi API logout để server ghi log
+        try:
+            from core.admin_service import AdminService
+            await AdminService.instance().logout()
+        except Exception:
+            pass
+            
         prefs = ft.SharedPreferences()
         await prefs.remove("user_session")
         await self.app_page.push_route("/login")

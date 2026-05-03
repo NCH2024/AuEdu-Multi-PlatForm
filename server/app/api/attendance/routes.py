@@ -1,5 +1,5 @@
 # server/app/api/attendance/routes.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Union
 from app.db.session import get_db
@@ -8,6 +8,8 @@ from datetime import datetime, date
 from sqlalchemy import or_, cast, String, text, func, case, select, update
 from pydantic import BaseModel
 import traceback
+from app.core.security import get_current_user_id
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -123,7 +125,12 @@ async def get_attendance_detail(tkb_tiet_id: int, date_str: str, db: AsyncSessio
     return data
 
 @router.patch("/update-manual")
-async def update_attendance_manual(payload: UpdateManualReq, db: AsyncSession = Depends(get_db)):
+async def update_attendance_manual(
+    payload: UpdateManualReq, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     from fastapi import HTTPException
     try:
         # 1. Tự ép kiểu ngày tháng cực kỳ an toàn
@@ -153,6 +160,19 @@ async def update_attendance_manual(payload: UpdateManualReq, db: AsyncSession = 
             db.add(new_record)
 
         await db.commit()
+        
+        # Audit Log
+        await log_audit(
+            db=db,
+            user_id=current_user_id,
+            action="UPDATE_MANUAL",
+            entity="DiemDanh",
+            entity_id=str(record.id if record else new_record.id),
+            details=payload.model_dump(),
+            request=request
+        )
+        await db.commit()
+        
         return {"status": "success", "message": "Đã lưu trạng thái"}
 
     except Exception as e:

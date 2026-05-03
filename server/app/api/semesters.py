@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -6,6 +6,8 @@ from typing import Optional, List
 from datetime import date
 from app.db.session import get_db
 from app.db.models import HocKy, TuanHoc
+from app.core.security import get_current_user_id
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -36,44 +38,104 @@ async def get_semester_weeks(id: int, db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 @router.post("/")
-async def create_semester(sem: SemesterCreate, db: AsyncSession = Depends(get_db)):
+async def create_semester(
+    sem: SemesterCreate, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """Tạo mới học kỳ."""
     try:
         db_sem = HocKy(**sem.model_dump())
+        db_sem.created_by = current_user_id
+        db_sem.updated_by = current_user_id
         db.add(db_sem)
         await db.commit()
         await db.refresh(db_sem)
+        
+        # Audit Log
+        await log_audit(
+            db=db,
+            user_id=current_user_id,
+            action="CREATE",
+            entity="HocKy",
+            entity_id=db_sem.id,
+            details=sem.model_dump(),
+            request=request
+        )
+        await db.commit()
+
         return db_sem
     except Exception as e:
         await db.rollback()
-        print(f"Error creating semester: {str(e)}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.put("/{id}")
-async def update_semester(id: int, sem: SemesterUpdate, db: AsyncSession = Depends(get_db)):
+async def update_semester(
+    id: int, 
+    sem: SemesterUpdate, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     db_sem = await db.get(HocKy, id)
     if not db_sem:
         raise HTTPException(status_code=404, detail="Semester not found")
     for k, v in sem.model_dump(exclude_unset=True).items():
         setattr(db_sem, k, v)
+    
+    db_sem.updated_by = current_user_id
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="UPDATE",
+        entity="HocKy",
+        entity_id=id,
+        details=sem.model_dump(exclude_unset=True),
+        request=request
+    )
+    
     await db.commit()
     return {"message": "Updated successfully"}
 
 @router.delete("/{id}")
-async def delete_semester(id: int, db: AsyncSession = Depends(get_db)):
+async def delete_semester(
+    id: int, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     db_sem = await db.get(HocKy, id)
     if not db_sem or db_sem.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Semester not found")
     
     from datetime import datetime
     db_sem.deleted_at = datetime.now()
+    db_sem.deleted_by = current_user_id
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="DELETE",
+        entity="HocKy",
+        entity_id=id,
+        request=request
+    )
+    
     await db.commit()
     return {"message": "Deleted successfully (Soft Delete)"}
 
 @router.post("/{id}/generate_weeks")
-async def generate_semester_weeks(id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+async def generate_semester_weeks(
+    id: int, 
+    payload: dict, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """
     Tạo hoặc cập nhật danh sách tuần học cho một học kỳ.
     Cơ chế: Tìm kiếm các tuần có sẵn trong CSDL theo ngày để reuse (link), 
@@ -138,18 +200,22 @@ async def generate_semester_weeks(id: int, payload: dict, db: AsyncSession = Dep
             # Reuse tuần cũ: cập nhật link tới học kỳ này
             found_week.hocky_id = id
             found_week.ten_tuan = w_data["ten_tuan"]
+            found_week.updated_by = current_user_id
         elif i < len(existing_weeks):
             # Cập nhật tuần đang có của học kỳ này
             existing_weeks[i].ten_tuan = w_data["ten_tuan"]
             existing_weeks[i].ngay_bat_dau = w_data["ngay_bat_dau"]
             existing_weeks[i].ngay_ket_thuc = w_data["ngay_ket_thuc"]
+            existing_weeks[i].updated_by = current_user_id
         else:
             # Tạo mới hoàn toàn
             db.add(TuanHoc(
                 hocky_id=id,
                 ten_tuan=w_data["ten_tuan"],
                 ngay_bat_dau=w_data["ngay_bat_dau"],
-                ngay_ket_thuc=w_data["ngay_ket_thuc"]
+                ngay_ket_thuc=w_data["ngay_ket_thuc"],
+                created_by=current_user_id,
+                updated_by=current_user_id
             ))
             
     # Xóa các tuần dư thừa (nếu số tuần của học kỳ bị giảm đi)
@@ -157,12 +223,27 @@ async def generate_semester_weeks(id: int, payload: dict, db: AsyncSession = Dep
         for ew in existing_weeks[len(new_weeks_data):]:
             # Chỉ xóa nếu tuần này không trùng với bất kỳ ngày nào trong dải tuần mới
             # (Thực tế existing_weeks[len(new_weeks_data):] chắc chắn là dư thừa)
-            await db.delete(ew)
+            from datetime import datetime
+            ew.deleted_at = datetime.now()
+            ew.deleted_by = current_user_id
     
     # 5. Đồng bộ lại ngày của học kỳ
     db_sem.start_date = start_date
     db_sem.end_date = new_weeks_data[-1]["ngay_ket_thuc"]
+    db_sem.updated_by = current_user_id
     
+    await db.commit()
+
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="GENERATE_WEEKS",
+        entity="HocKy",
+        entity_id=id,
+        details={"start_date": str(start_date), "so_tuan": so_tuan},
+        request=request
+    )
     await db.commit()
     return {
         "status": "success",

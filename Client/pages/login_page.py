@@ -4,7 +4,7 @@ import json
 from components.options.carousel_banner import CarouselBanner
 from components.options.top_notification import show_top_notification
 from components.options.confirm_dialog import show_confirm_dialog
-from core.config import get_supabase_client, SUPABASE_URL, SUPABASE_KEY
+from core.config import get_supabase_client, SUPABASE_URL, SUPABASE_KEY, reset_client, SERVER_API_URL
 from core.theme import current_theme
 
 class LoginPage(ft.Container):
@@ -225,7 +225,7 @@ class LoginPage(ft.Container):
 
             async with httpx.AsyncClient() as auth_client:
                 auth_resp = await auth_client.post(
-                    f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+                    f"{SERVER_API_URL}auth/v1/token?grant_type=password",
                     headers={"apikey": SUPABASE_KEY, "Content-Type": "application/json"},
                     json={"email": email, "password": password}
                 )
@@ -276,6 +276,9 @@ class LoginPage(ft.Container):
 
                 prefs = ft.SharedPreferences()
                 await prefs.set("user_session", json.dumps(session_dict))
+                
+                # ✅ Reset API Client để nhận Token mới
+                reset_client()
 
                 existing_emails = [acc["email"] for acc in self.saved_accounts]
                 if email not in existing_emails:

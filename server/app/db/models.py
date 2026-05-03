@@ -13,12 +13,20 @@ class Khoa(Base):
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
     deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class LoaiHocPhan(Base):
     __tablename__ = 'loaihocphan'
     id = Column(Integer, primary_key=True)
     tenloai = Column(Text)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class HocKy(Base):
     __tablename__ = 'hocky'
@@ -32,6 +40,9 @@ class HocKy(Base):
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
     deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class Tiet(Base):
     __tablename__ = 'tiet'
@@ -39,6 +50,11 @@ class Tiet(Base):
     thoigianbd = Column(Time)
     thoigiankt = Column(Time)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class GiangVien(Base):
     __tablename__ = 'giangvien'
@@ -55,6 +71,9 @@ class GiangVien(Base):
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
     last_login = Column(DateTime, nullable=True)
     deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
     __table_args__ = (
         CheckConstraint(vai_tro.in_(['giangvien', 'admin', 'super_admin']), name='chk_vai_tro'),
@@ -73,6 +92,9 @@ class Lop(Base):
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
     deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class SinhVien(Base):
     __tablename__ = 'sinhvien'
@@ -102,7 +124,6 @@ class SinhVien(Base):
     diachi = Column(Text)
     ghichu = Column(Text)
     anhdaidien = Column(Text)
-    sinhtrachoc = Column(Text) 
     face_vector = Column(Vector(512), nullable=True) 
     
     # --- AUDIT TRAIL & SOFT DELETE ---
@@ -123,6 +144,9 @@ class HocPhan(Base):
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
     deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class ThoiKhoaBieu(Base):
     __tablename__ = 'thoikhoabieu'
@@ -154,6 +178,11 @@ class TKBTiet(Base):
     thu = Column(Integer)
     phong_hoc = Column(Text)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class DiemDanh(Base):
     __tablename__ = 'diemdanh'
@@ -223,6 +252,13 @@ class TuanHoc(Base):
     ngay_bat_dau = Column(Date)
     ngay_ket_thuc = Column(Date)
 
+    created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+    deleted_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
+
 class SystemConfig(Base):
     __tablename__ = 'system_config'
     key = Column(String, primary_key=True)
@@ -230,12 +266,13 @@ class SystemConfig(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    created_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
     updated_by = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
 
 class AuditLog(Base):
     __tablename__ = 'audit_log'
     id = Column(BigInteger, Identity(always=True), primary_key=True)
-    user_id = Column(Integer, ForeignKey('giangvien.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('giangvien.id'), nullable=True)
     action = Column(String, nullable=False) # VD: CREATE, UPDATE, DELETE, LOGIN
     entity = Column(String, nullable=True) # VD: SinhVien, DiemDanh, SystemConfig
     entity_id = Column(String, nullable=True)

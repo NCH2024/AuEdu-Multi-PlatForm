@@ -2,6 +2,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
+import os
+
+# Tải biến môi trường từ .env ngay lập tức
+load_dotenv()
 
 from app.api import (
     auth, teachers, schedule, training, students, system,
@@ -15,6 +20,10 @@ from app.api.admin import faces as admin_faces, attendance as admin_attendance, 
 def create_app() -> FastAPI:
     app = FastAPI(title="AuEdu")
     
+    # Audit Middleware (Ghi nhật ký truy cập)
+    from app.core.middleware import AuditMiddleware
+    app.add_middleware(AuditMiddleware)
+
     # CORS Middleware 
     app.add_middleware(
         CORSMiddleware,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import or_, cast, String, text, func, case, select
 from pydantic import BaseModel
@@ -11,6 +11,8 @@ from app.db.models import (
     ThoiKhoaBieu, Lop, HocPhan, HocKy,
     TKBTiet, Tiet, DiemDanh, GiangVien,
 )
+from app.core.security import get_current_user_id
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -253,7 +255,12 @@ async def get_sinhvien(
 
 # --------- Thiết lập TKB hàng loạt (Grid-based) ----------
 @router.post("/thoikhoabieu/setup_batch")
-async def setup_batch_schedule(payload: TKBBatchSetup, db: AsyncSession = Depends(get_db)):
+async def setup_batch_schedule(
+    payload: TKBBatchSetup, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """
     Thiết lập thời khóa biểu hàng loạt hỗ trợ kiểm tra xung đột.
     """
@@ -320,6 +327,8 @@ async def setup_batch_schedule(payload: TKBBatchSetup, db: AsyncSession = Depend
                 ai_threshold=payload.ai_threshold,
                 anti_spoofing=payload.anti_spoofing,
                 fiqa_threshold=payload.fiqa_threshold,
+                created_by=current_user_id,
+                updated_by=current_user_id,
             )
             db.add(new_tkb)
             await db.flush()
@@ -331,18 +340,37 @@ async def setup_batch_schedule(payload: TKBBatchSetup, db: AsyncSession = Depend
                     tkb_id=new_tkb.id,
                     thu=slot.thu,
                     tiet_id=slot.tiet_id,
-                    phong_hoc=item.phong_hoc
+                    phong_hoc=item.phong_hoc,
+                    created_by=current_user_id,
+                    updated_by=current_user_id,
                 )
                 db.add(new_tkbt)
             
         await db.commit()
+        
+        # Audit Log
+        await log_audit(
+            db=db,
+            user_id=current_user_id,
+            action="BATCH_SETUP",
+            entity="ThoiKhoaBieu",
+            details={"count": len(created_tkb_ids), "ids": created_tkb_ids},
+            request=request
+        )
+        await db.commit()
+
         return {"message": "Thành công", "ids": created_tkb_ids, "total": len(created_tkb_ids)}
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/thoikhoabieu/{id}")
-async def delete_schedule(id: int, db: AsyncSession = Depends(get_db)):
+async def delete_schedule(
+    id: int, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """Xóa thời khóa biểu có kiểm tra dữ liệu điểm danh."""
     from fastapi import HTTPException
     
@@ -365,5 +393,17 @@ async def delete_schedule(id: int, db: AsyncSession = Depends(get_db)):
             )
             
     tkb.deleted_at = datetime.now()
+    tkb.deleted_by = current_user_id
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="DELETE",
+        entity="ThoiKhoaBieu",
+        entity_id=id,
+        request=request
+    )
+    
     await db.commit()
     return {"message": "Đã xóa lịch học thành công"}

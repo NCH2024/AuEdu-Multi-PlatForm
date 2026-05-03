@@ -263,6 +263,15 @@ class AdminService(BaseService):
             return res.json()
         raise Exception(f"HTTP {res.status_code}: {res.text}")
 
+    async def logout(self) -> dict:
+        """Ghi nhận đăng xuất lên server."""
+        try:
+            client = await get_supabase_client()
+            res = await client.post("/auth/logout")
+            return res.json()
+        except Exception:
+            return {"message": "Local logout only"}
+
     # ── ATTENDANCE ADMIN ──────────────────────────────────────────
 
     async def create_manual_attendance(self, payload: dict) -> dict:

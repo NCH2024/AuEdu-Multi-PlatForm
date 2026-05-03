@@ -12,6 +12,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ── Supabase Configuration ────────────────────────
+SUPABASE_URL: str = os.getenv("SUPABASE_URL")
+SUPABASE_KEY: str = os.getenv("SUPABASE_KEY")
+SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "public")
+
 # ── AI Quality ────────────────────────────────────
 FIQA_THRESHOLD: float = float(os.getenv("FIQA_THRESHOLD", "0.05"))
 ANTI_SPOOF_MODEL: str = os.getenv("ANTI_SPOOF_MODEL", "MiniFASNetV2.pth")

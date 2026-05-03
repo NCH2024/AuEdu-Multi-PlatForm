@@ -15,7 +15,10 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional, Any, Dict, List, Union
 from app.db.session import get_db
-from app.db.models import SystemConfig
+from app.db.models import SystemConfig, GiangVien
+from app.core.security import get_current_user_id
+from app.core.audit import log_audit
+from fastapi import Request
 
 router = APIRouter()
 
@@ -69,7 +72,13 @@ async def get_config(key: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{key}")
-async def update_config(key: str, cfg: ConfigUpdate, db: AsyncSession = Depends(get_db)):
+async def update_config(
+    key: str, 
+    cfg: ConfigUpdate, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """Cập nhật hoặc tạo mới config theo key (upsert)."""
     db_cfg = await db.get(SystemConfig, key)
     if not db_cfg:
@@ -82,13 +91,28 @@ async def update_config(key: str, cfg: ConfigUpdate, db: AsyncSession = Depends(
 
     await db.commit()
     await db.refresh(db_cfg)
+
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="UPDATE",
+        entity="SystemConfig",
+        entity_id=key,
+        details=cfg.model_dump(),
+        request=request
+    )
+    await db.commit()
+
     return {"message": "Config updated successfully", "key": db_cfg.key}
 
 
 @router.post("/batch")
 async def update_configs_batch(
     configs: Union[List[ConfigBatchItem], Dict[str, Any]],
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
 ):
     """
     Cập nhật hàng loạt cấu hình hệ thống (upsert).
@@ -112,4 +136,16 @@ async def update_configs_batch(
             db_cfg.value = value
 
     await db.commit()
+
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="BATCH_UPDATE",
+        entity="SystemConfig",
+        details={"count": len(items), "keys": [i[0] for i in items]},
+        request=request
+    )
+    await db.commit()
+
     return {"message": f"Batch updated {len(items)} configs successfully"}

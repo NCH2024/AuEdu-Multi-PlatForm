@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 from typing import List, Optional
 from datetime import date
 from app.db.session import get_db
 from app.db.models import DiemDanh, SinhVien, Lop, ThoiKhoaBieu, HocPhan, TKBTiet
+from app.core.security import get_current_user_id
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -133,7 +135,12 @@ async def get_attendance_logs(limit: int = 30, db: AsyncSession = Depends(get_db
     return data
 
 @router.post("/manual")
-async def create_manual_attendance(payload: dict, db: AsyncSession = Depends(get_db)):
+async def create_manual_attendance(
+    payload: dict, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     """Admin điểm danh thủ công cho sinh viên."""
     sv_id = payload.get("sv_id")
     tkb_tiet_id = payload.get("tkb_tiet_id")
@@ -154,9 +161,12 @@ async def create_manual_attendance(payload: dict, db: AsyncSession = Depends(get
         result = await db.execute(stmt)
         record = result.scalar_one_or_none()
 
+        action_type = "UPDATE" if record else "CREATE"
+
         if record:
             record.trang_thai = trang_thai
             record.note = note
+            record.updated_by = current_user_id
             record.updated_at = func.now()
         else:
             record = DiemDanh(
@@ -165,10 +175,23 @@ async def create_manual_attendance(payload: dict, db: AsyncSession = Depends(get
                 ngay_diem_danh=(date.fromisoformat(ngay) if ngay else date.today()),
                 trang_thai=trang_thai,
                 note=note,
-                confidence_score=1.0 # Thủ công thì độ tin cậy là 100%
+                confidence_score=1.0, # Thủ công thì độ tin cậy là 100%
+                created_by=current_user_id,
+                updated_by=current_user_id
             )
             db.add(record)
         
+        # Audit Log
+        await log_audit(
+            db=db,
+            user_id=current_user_id,
+            action=f"MANUAL_{action_type}",
+            entity="DiemDanh",
+            entity_id=sv_id,
+            details=payload,
+            request=request
+        )
+
         await db.commit()
         return {"status": "success", "id": record.id}
     except Exception as e:
@@ -176,9 +199,14 @@ async def create_manual_attendance(payload: dict, db: AsyncSession = Depends(get
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{id}")
-async def delete_attendance(id: int, db: AsyncSession = Depends(get_db)):
-    """Admin xóa bản ghi điểm danh."""
-    stmt = select(DiemDanh).where(DiemDanh.id == id)
+async def delete_attendance(
+    id: int, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
+    """Admin xóa bản ghi điểm danh (Soft delete)."""
+    stmt = select(DiemDanh).where(DiemDanh.id == id).where(DiemDanh.deleted_at.is_(None))
     result = await db.execute(stmt)
     record = result.scalar_one_or_none()
 
@@ -186,7 +214,20 @@ async def delete_attendance(id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi")
 
     try:
-        await db.delete(record)
+        from datetime import datetime
+        record.deleted_at = datetime.now()
+        record.deleted_by = current_user_id
+        
+        # Audit Log
+        await log_audit(
+            db=db,
+            user_id=current_user_id,
+            action="DELETE",
+            entity="DiemDanh",
+            entity_id=id,
+            request=request
+        )
+        
         await db.commit()
         return {"status": "success"}
     except Exception as e:

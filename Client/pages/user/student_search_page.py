@@ -64,11 +64,10 @@ class StudentSearchPage(ft.Container):
         self.loading.visible = True
         self.update()
 
-        url = f"{SERVER_API_URL.rstrip('/')}/search-students"
         try:
-            async with httpx.AsyncClient() as client:
-                res = await client.get(url, params={"gv_id": self.gv_id, "keyword": keyword})
-                self.search_results = res.json() if res.status_code == 200 else []
+            client = await get_supabase_client()
+            res = await client.get("/search-students", params={"gv_id": self.gv_id, "keyword": keyword})
+            self.search_results = res.json() if res.status_code == 200 else []
         except Exception as e:
             print(f"Lỗi tìm kiếm: {e}")
             self.search_results = []
@@ -84,11 +83,10 @@ class StudentSearchPage(ft.Container):
         self.update()
 
         # ĐÃ GIỮ NGUYÊN ĐƯỜNG DẪN API CỦA EM
-        url = f"{SERVER_API_URL.rstrip('/')}/student/{student_info['id']}/history"
         try:
-            async with httpx.AsyncClient() as client:
-                res = await client.get(url, params={"gv_id": self.gv_id})
-                self.student_history = res.json() if res.status_code == 200 else []
+            client = await get_supabase_client()
+            res = await client.get(f"/student/{student_info['id']}/history", params={"gv_id": self.gv_id})
+            self.student_history = res.json() if res.status_code == 200 else []
         except Exception as e:
             print(f"Lỗi tải lịch sử cá nhân: {e}")
             self.student_history = []

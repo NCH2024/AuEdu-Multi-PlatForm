@@ -16,10 +16,14 @@ API_PREFIX = "/v1"
 
 SERVER_API_URL = "http://127.0.0.1:8000/"
 
-def get_headers():
+import flet as ft
+import json
+
+def get_headers(token: str = None):
+    auth_token = token if token else SUPABASE_KEY
     return {
         "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Authorization": f"Bearer {auth_token}",
         "Content-Type": "application/json"
     }
 
@@ -31,21 +35,39 @@ def reset_client(new_url: str = None):
     if new_url:
         SERVER_API_URL = new_url
     if _shared_client:
-        # Chúng ta không thể await ở đây nếu reset_client là đồng bộ, 
-        # nhưng httpx sẽ tự đóng connection cũ khi bị thay thế hoặc garbage collected.
         _shared_client = None
 
 async def get_supabase_client() -> httpx.AsyncClient:
     global _shared_client
+    
+    # 1. Lấy token thực tế từ SharedPreferences (nếu đã đăng nhập)
+    token = SUPABASE_KEY
+    try:
+        prefs = ft.SharedPreferences()
+        session_str = await prefs.get("user_session")
+        if session_str:
+            session = json.loads(session_str)
+            token = session.get("access_token", SUPABASE_KEY)
+    except Exception:
+        pass
+
+    # 2. Kiểm tra nếu client hiện tại dùng token cũ, cần reset
+    if _shared_client:
+        current_auth = _shared_client.headers.get("Authorization")
+        if current_auth != f"Bearer {token}":
+            _shared_client = None
+
+    # 3. Khởi tạo client nếu cần
     if _shared_client is None or _shared_client.is_closed:
         _shared_client = httpx.AsyncClient(
             base_url=SERVER_API_URL,
-            headers=get_headers(),
+            headers=get_headers(token),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
             timeout=httpx.Timeout(10.0),
             follow_redirects=True
         )
     return _shared_client
+
 
 def get_storage_url() -> str:
     return f"{SUPABASE_URL}/storage/v1/object/public"

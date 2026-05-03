@@ -31,6 +31,7 @@ from pages.admin.weeks_page import WeeksPage
 from pages.admin.teachers_page import TeachersPage
 from pages.admin.faces_page import AdminFacesPage
 from pages.admin.attendance_report_page import AdminAttendanceReportPage
+from pages.admin.system_history_page import SystemHistoryPage
 import core.theme as theme_module
 from core.config import reset_client
 
@@ -182,6 +183,8 @@ async def main(page: ft.Page):
                         admin_dashboard.set_content("QUẢN LÝ KHUÔN MẶT", AdminFacesPage(page), current_route)
                     elif current_route == "/admin/attendance-report":
                         admin_dashboard.set_content("BÁO CÁO ĐIỂM DANH", AdminAttendanceReportPage(page), current_route)
+                    elif current_route == "/admin/system-history":
+                        admin_dashboard.set_content("LỊCH SỬ HỆ THỐNG", SystemHistoryPage(page), current_route)
 
                 # ── USER ROUTES: Dùng dashboard layout ──
                 else:

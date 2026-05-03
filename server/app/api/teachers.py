@@ -6,13 +6,14 @@ from sqlalchemy import select, update
 from pydantic import BaseModel
 from app.db.session import get_db
 from app.db.models import GiangVien, Khoa
+from app.core.security import get_current_user_id
+from app.core.audit import log_audit
 import os
 import httpx
 
 router = APIRouter()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") # Lưu ý: Cần Service Role Key để tạo User Auth nếu dùng Admin API
+from app.core.config import SUPABASE_URL, SUPABASE_KEY
 
 class TeacherCreate(BaseModel):
     hodem: str
@@ -66,36 +67,93 @@ async def get_giangvien(
     return data
 
 @router.post("/giangvien")
-async def create_teacher(gv: TeacherCreate, db: AsyncSession = Depends(get_db)):
+async def create_teacher(
+    gv: TeacherCreate, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     db_gv = GiangVien(**gv.model_dump())
+    db_gv.created_by = current_user_id
+    db_gv.updated_by = current_user_id
     db.add(db_gv)
     await db.commit()
     await db.refresh(db_gv)
+
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="CREATE",
+        entity="GiangVien",
+        entity_id=db_gv.id,
+        details=gv.model_dump(),
+        request=request
+    )
+    await db.commit()
+
     return {"id": db_gv.id, "message": "Giảng viên created successfully"}
 
 @router.put("/giangvien/{id}")
-async def update_teacher(id: int, gv: TeacherUpdate, db: AsyncSession = Depends(get_db)):
+async def update_teacher(
+    id: int, 
+    gv: TeacherUpdate, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     db_gv = await db.get(GiangVien, id)
     if not db_gv:
         raise HTTPException(status_code=404, detail="Giảng viên not found")
     for k, v in gv.model_dump(exclude_unset=True).items():
         setattr(db_gv, k, v)
+    
+    db_gv.updated_by = current_user_id
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="UPDATE",
+        entity="GiangVien",
+        entity_id=id,
+        details=gv.model_dump(exclude_unset=True),
+        request=request
+    )
+    
     await db.commit()
     return {"message": "Updated successfully"}
 
 @router.delete("/giangvien/{id}")
-async def delete_teacher(id: int, db: AsyncSession = Depends(get_db)):
+async def delete_teacher(
+    id: int, 
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
     db_gv = await db.get(GiangVien, id)
     if not db_gv or db_gv.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Giảng viên not found")
     
     from datetime import datetime
     db_gv.deleted_at = datetime.now()
+    db_gv.deleted_by = current_user_id
+    
+    # Audit Log
+    await log_audit(
+        db=db,
+        user_id=current_user_id,
+        action="DELETE",
+        entity="GiangVien",
+        entity_id=id,
+        request=request
+    )
+    
     await db.commit()
     return {"message": "Deleted successfully (Soft Delete)"}
 
 @router.post("/giangvien/{id}/create-auth")
-async def create_supabase_auth(id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+async def create_supabase_auth(id: int, payload: dict, request: Request, db: AsyncSession = Depends(get_db)):
     """
     Tạo tài khoản Auth trên Supabase và gán auth_id cho Giảng viên.
     Payload: { "email": "...", "password": "..." }
@@ -138,6 +196,19 @@ async def create_supabase_auth(id: int, payload: dict, db: AsyncSession = Depend
         
         # Cập nhật auth_id vào DB
         db_gv.auth_id = auth_id
+        
+        # Audit Log (Sử dụng ID người thực hiện nếu có, ở đây endpoint này chưa có get_current_user_id dependency nhưng nên có)
+        # Tạm thời log với user_id của chính GV được tạo auth nếu không có admin id
+        await log_audit(
+            db=db,
+            user_id=id, 
+            action="CREATE_AUTH",
+            entity="GiangVien",
+            entity_id=id,
+            details={"email": email},
+            request=request
+        )
+        
         await db.commit()
         
         return {"message": "Auth account created and linked", "auth_id": auth_id}

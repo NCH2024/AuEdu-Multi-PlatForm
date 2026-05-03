@@ -61,10 +61,9 @@ class AttendanceHistoryPage(ft.Container):
         self.loading.visible = True
         self.update()
 
-        url = f"{SERVER_API_URL.rstrip('/')}/api/attendance/history/{self.dd_lop.value}"
-        async with httpx.AsyncClient() as client:
-            res = await client.get(url)
-            self.history_data = res.json() if res.status_code == 200 else []
+        client = await get_supabase_client()
+        res = await client.get(f"/api/attendance/history/{self.dd_lop.value}")
+        self.history_data = res.json() if res.status_code == 200 else []
             
         self.render_view()
         self.loading.visible = False
@@ -76,10 +75,9 @@ class AttendanceHistoryPage(ft.Container):
         self.loading.visible = True
         self.update()
 
-        url = f"{SERVER_API_URL.rstrip('/')}/api/attendance/details/{item['tkb_tiet_id']}/{item['date']}"
-        async with httpx.AsyncClient() as client:
-            res = await client.get(url)
-            details = res.json() if res.status_code == 200 else []
+        client = await get_supabase_client()
+        res = await client.get(f"/api/attendance/details/{item['tkb_tiet_id']}/{item['date']}")
+        details = res.json() if res.status_code == 200 else []
 
         self.render_view(details)
         self.loading.visible = False
@@ -175,21 +173,19 @@ class AttendanceHistoryPage(ft.Container):
     # --- HÀM XỬ LÝ CẬP NHẬT KÈM HIỆU ỨNG THÔNG BÁO ---
     async def update_status(self, sv_id, is_present, ho_ten):
         status = "Có mặt" if is_present else "Vắng"
-        url = f"{SERVER_API_URL.rstrip('/')}/api/attendance/update-manual"
-        
         try:
-            async with httpx.AsyncClient() as client:
-                res = await client.patch(url, json={
-                    "sv_id": sv_id, 
-                    "tkb_tiet_id": self.selected_item['tkb_tiet_id'], 
-                    "date": self.selected_item['date'], 
-                    "new_status": status
-                })
-                
-                # NẾU CÓ LỖI, BẮT LẤY CÂU CHỮ TỪ SERVER
-                if res.status_code != 200:
-                    error_detail = res.json().get("detail", "Lỗi không xác định")
-                    raise Exception(error_detail)
+            client = await get_supabase_client()
+            res = await client.patch("/api/attendance/update-manual", json={
+                "sv_id": sv_id, 
+                "tkb_tiet_id": self.selected_item['tkb_tiet_id'], 
+                "date": self.selected_item['date'], 
+                "new_status": status
+            })
+            
+            # NẾU CÓ LỖI, BẮT LẤY CÂU CHỮ TỪ SERVER
+            if res.status_code != 200:
+                error_detail = res.json().get("detail", "Lỗi không xác định")
+                raise Exception(error_detail)
             
             show_top_notification(
                 self.app_page, 
