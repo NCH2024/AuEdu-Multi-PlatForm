@@ -10,6 +10,7 @@ from app.api import (
 from app.api.attendance import routes as attendance_routes
 from app.api.attendance import ws as attendance_ws
 from app.api.export import excel
+from app.api.admin import faces as admin_faces, attendance as admin_attendance, ws_monitor as admin_ws_monitor
 
 def create_app() -> FastAPI:
     app = FastAPI(title="AuEdu")
@@ -45,6 +46,8 @@ def create_app() -> FastAPI:
     app.include_router(subjects.router, prefix="/api/admin/subjects", tags=["admin-subjects"])
     app.include_router(notifications.router, prefix="/api/admin/notifications", tags=["admin-notifications"])
     app.include_router(teachers.router, prefix="/api/admin/teachers", tags=["admin-teachers"])
+    app.include_router(admin_faces.router, prefix="/api/admin/faces", tags=["admin-faces"])
+    app.include_router(admin_attendance.router, prefix="/api/admin/attendance", tags=["admin-attendance"])
     
     # ── reports ───────
     app.include_router(excel.router, prefix="/export", tags=["reports"])
@@ -53,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(attendance_routes.router, prefix="/api/attendance", tags=["attendance"])
     # ── attendance (WebSocket) ─
     app.include_router(attendance_ws.router, prefix="/api/ws/attendance", tags=["attendance-ws"])
+    app.include_router(admin_ws_monitor.router, prefix="/api/admin/attendance/ws", tags=["admin-attendance-ws"])
     
     return app
 

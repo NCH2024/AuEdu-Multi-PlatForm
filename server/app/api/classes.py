@@ -27,7 +27,7 @@ class ClassUpdate(BaseModel):
 
 @router.get("/")
 async def get_classes(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Lop))
+    result = await db.execute(select(Lop).where(Lop.deleted_at.is_(None)))
     return result.scalars().all()
 
 @router.post("/")
@@ -51,8 +51,10 @@ async def update_class(id: str, cls: ClassUpdate, db: AsyncSession = Depends(get
 @router.delete("/{id}")
 async def delete_class(id: str, db: AsyncSession = Depends(get_db)):
     db_cls = await db.get(Lop, id)
-    if not db_cls:
+    if not db_cls or db_cls.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Class not found")
-    await db.delete(db_cls)
+    
+    from datetime import datetime
+    db_cls.deleted_at = datetime.now()
     await db.commit()
-    return {"message": "Deleted successfully"}
+    return {"message": "Deleted successfully (Soft Delete)"}

@@ -96,15 +96,38 @@ class AdminService(BaseService):
         """Lấy danh sách Học phần. Cache 5 phút."""
         return await self._cached_fetch("subjects", "/api/admin/subjects/", _TTL_REFERENCE, force)
 
-    async def get_teachers(self, force: bool = False) -> List[dict]:
+    async def get_all_teachers(self, force: bool = False) -> List[dict]:
         """Lấy danh sách Giảng viên. Cache 5 phút."""
         return await self._cached_fetch("teachers", "/api/admin/teachers/giangvien", _TTL_REFERENCE, force)
+
+    async def create_teacher(self, payload: dict) -> dict:
+        res = await self.create("/api/admin/teachers/giangvien", payload)
+        self.invalidate("teachers")
+        return res
+
+    async def update_teacher(self, id: int, payload: dict) -> dict:
+        res = await self.update(f"/api/admin/teachers/giangvien/{id}", payload)
+        self.invalidate("teachers")
+        return res
+
+    async def delete_teacher(self, id: int) -> dict:
+        res = await self.delete(f"/api/admin/teachers/giangvien/{id}")
+        self.invalidate("teachers")
+        return res
+
+    async def create_teacher_auth(self, id: int, email: str, password: str) -> dict:
+        """Tạo tài khoản Supabase Auth cho giảng viên."""
+        return await self.create(f"/api/admin/teachers/giangvien/{id}/create-auth", {"email": email, "password": password})
 
     async def get_weeks(self, semester_id: str, force: bool = False) -> List[dict]:
         """Lấy danh sách Tuần học theo học kỳ. Cache 2 phút."""
         cache_key = f"weeks_{semester_id}"
         url = f"/api/schedule/tuan_hoc?hocky_id=eq.{semester_id}"
         return await self._cached_fetch(cache_key, url, _TTL_WEEKS, force)
+
+    async def get_all_periods(self, force: bool = False) -> List[dict]:
+        """Lấy cấu hình các tiết học (periods). Cache 5 phút."""
+        return await self._cached_fetch("periods", "/api/schedule/tiet", _TTL_REFERENCE, force)
 
     # ─── REALTIME DATA (không cache) ──────────────────────────────
 
@@ -133,6 +156,57 @@ class AdminService(BaseService):
         except Exception as e:
             print(f"[AdminService] get_audit_logs error: {e}")
         return []
+
+    # ─── SCHEDULING (Dữ liệu thời gian thực) ───────────────────────
+
+    async def get_busy_slots(self, hocky_id: int, gv_id: int = None, lop_id: str = None, phong: str = None, week_id: int = None) -> List[dict]:
+        """Lấy danh sách tiết đã bận cho Grid UI."""
+        params = {"hocky_id": hocky_id}
+        if gv_id: params["giangvien_id"] = gv_id
+        if lop_id: params["lop_id"] = lop_id
+        if phong: params["phong_hoc"] = phong
+        if week_id: params["week_id"] = week_id
+        
+        try:
+            client = await get_supabase_client()
+            res = await client.get("/api/schedule/busy_slots", params=params)
+            if res.status_code == 200:
+                return res.json()
+        except Exception as e:
+            print(f"[AdminService] get_busy_slots error: {e}")
+        return []
+
+    async def setup_schedule_batch(self, payload: dict) -> dict:
+        """Lưu toàn bộ lịch đã sắp vào DB."""
+        return await self.create("/api/schedule/thoikhoabieu/setup_batch", payload)
+
+    async def delete_schedule(self, id: int) -> dict:
+        """Xóa một lịch học (kiểm tra điểm danh ở backend)."""
+        return await self.delete(f"/api/schedule/thoikhoabieu/{id}")
+
+    async def get(self, url: str, params: dict = None) -> Any:
+        """
+        Gọi GET để lấy dữ liệu từ URL bất kỳ.
+        Tự động lọc bỏ các tham số None hoặc rỗng để tránh lỗi 422.
+        Giữ nguyên "all" vì có thể là giá trị hợp lệ của Server.
+        """
+        try:
+            # Làm sạch params
+            clean_params = {}
+            if params:
+                for k, v in params.items():
+                    # Chỉ lọc None và chuỗi thực sự rỗng
+                    if v is not None and str(v).strip() != "":
+                        clean_params[k] = v
+
+            client = await get_supabase_client()
+            res = await client.get(url, params=clean_params)
+            if res.status_code == 200:
+                return res.json()
+            raise Exception(f"HTTP {res.status_code}: {res.text}")
+        except Exception as e:
+            print(f"[AdminService] GET {url} error: {e}")
+            raise e
 
     # ─── CRUD Operations ──────────────────────────────────────────
 
@@ -188,3 +262,13 @@ class AdminService(BaseService):
             await self.load_system_config()
             return res.json()
         raise Exception(f"HTTP {res.status_code}: {res.text}")
+
+    # ── ATTENDANCE ADMIN ──────────────────────────────────────────
+
+    async def create_manual_attendance(self, payload: dict) -> dict:
+        """Admin điểm danh thủ công cho sinh viên."""
+        return await self.create("/api/admin/attendance/manual", payload)
+
+    async def delete_attendance(self, id: int) -> dict:
+        """Admin xóa bản ghi điểm danh."""
+        return await self.delete(f"/api/admin/attendance/{id}")

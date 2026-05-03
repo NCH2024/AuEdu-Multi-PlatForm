@@ -8,8 +8,9 @@ Cung cấp:
 """
 
 import time
+import flet as ft
 from typing import Any, Optional, Dict
-from core.config import get_supabase_client
+from core.config import get_supabase_client, reset_client
 
 
 class CacheEntry:
@@ -53,6 +54,18 @@ class BaseService:
                     item["key"]: item["value"] for item in raw
                 }
                 BaseService._config_loaded = True
+
+                # --- ĐỒNG BỘ URL API ---
+                new_url = BaseService._system_config.get("server_api_url")
+                if new_url:
+                    # Reset httpx client runtime
+                    reset_client(new_url)
+                    # Lưu vào SharedPreferences để persist qua lần khởi động sau
+                    try:
+                        prefs = ft.SharedPreferences()
+                        await prefs.set("server_api_url", new_url)
+                    except Exception as e_pref:
+                        print(f"[BaseService] SharedPreferences error: {e_pref}")
         except Exception as e:
             print(f"[BaseService] load_system_config error: {e}")
         return BaseService._system_config

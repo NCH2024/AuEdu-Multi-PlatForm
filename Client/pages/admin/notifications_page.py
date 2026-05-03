@@ -97,7 +97,7 @@ class NotificationsPage(ft.Container):
             if res.status_code == 200: self.all_data = res.json(); self.filter_data(None)
             else: show_top_notification(self.app_page, f"Lỗi: {res.text}", ft.Colors.RED)
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi tải dữ liệu: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"Không thể tải dữ liệu thông báo: {e}", ft.Colors.RED, sound="E")
         finally:
             self.progress_bar.visible = False
             self.update()
@@ -166,7 +166,7 @@ class NotificationsPage(ft.Container):
             res = await client.put(f"/api/admin/notifications/{self.form_id.value}", json=payload) if self.is_edit else await client.post("/api/admin/notifications/", json=payload)
             if res.status_code in [200, 201]:
                 self.close_dialog()
-                show_top_notification(self.app_page, "Đã gửi thông báo thành công!", ft.Colors.GREEN)
+                show_top_notification(self.app_page, "Thông báo", "Đã gửi thông báo thành công tới tất cả thiết bị!", ft.Colors.GREEN, sound="S")
                 await self.load_data()
             else: show_top_notification(self.app_page, f"Lỗi: {res.text}", ft.Colors.RED)
         except Exception as e:
@@ -181,7 +181,7 @@ class NotificationsPage(ft.Container):
             client = await get_supabase_client()
             res = await client.delete(f"/api/admin/notifications/{id}")
             if res.status_code == 200:
-                show_top_notification(self.app_page, "Đã xóa thông báo thành công!", ft.Colors.GREEN)
+                show_top_notification(self.app_page, "Thông báo", "Đã xóa thông báo thành công!", ft.Colors.GREEN, sound="S")
                 await self.load_data()
             else: show_top_notification(self.app_page, f"Lỗi: {res.text}", ft.Colors.RED)
         except Exception as e:

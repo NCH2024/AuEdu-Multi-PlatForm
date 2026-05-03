@@ -55,7 +55,7 @@ class AttendanceSessionPage(ft.Container):
             left=0, right=0, top=0, bottom=0,
             bgcolor=ft.Colors.BLACK_87, 
             visible=False,
-            alignment=ft.Alignment.CENTER, 
+            alignment=ft.Alignment(0, 0), 
             content=ft.Column(
                 controls=[
                     ft.Icon(ft.Icons.MOTION_PHOTOS_PAUSE, color=ft.Colors.WHITE, size=50),
@@ -350,7 +350,7 @@ class AttendanceSessionPage(ft.Container):
                 bg, border, txt = current_theme.surface_variant, ft.Border.all(1, current_theme.divider_color), current_theme.text_main
 
             grid_items.append(ft.Container(
-                width=35, height=35, border_radius=20, bgcolor=bg, border=border, alignment=ft.Alignment.CENTER,
+                width=35, height=35, border_radius=20, bgcolor=bg, border=border, alignment=ft.Alignment(0, 0),
                 content=ft.Text(str(idx), color=txt, weight=ft.FontWeight.BOLD, size=12)
             ))
         return ft.GridView(runs_count=5 if self.is_desktop else 6, max_extent=40, spacing=8, run_spacing=8, controls=grid_items)
@@ -361,7 +361,7 @@ class AttendanceSessionPage(ft.Container):
         if not self.scanned_session_students:
             scanned_list.controls.append(
                 ft.Container(
-                    padding=20, alignment=ft.Alignment.CENTER,
+                    padding=20, alignment=ft.Alignment(0, 0),
                     content=ft.Text("Chưa có sinh viên nào được quét trong phiên này.", size=12, color=current_theme.text_muted, italic=True)
                 )
             )

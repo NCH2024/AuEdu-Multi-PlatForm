@@ -5,6 +5,7 @@ from app.db.session import get_db
 from app.db.models import HocPhan
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 router = APIRouter()
 
@@ -22,11 +23,14 @@ class SubjectUpdate(BaseModel):
 
 @router.get("/")
 async def get_subjects(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(HocPhan))
+    """Lấy danh sách học phần — chỉ những bản ghi chưa bị xóa mềm."""
+    stmt = select(HocPhan).where(HocPhan.deleted_at.is_(None))
+    result = await db.execute(stmt)
     return result.scalars().all()
 
 @router.post("/")
 async def create_subject(subj: SubjectCreate, db: AsyncSession = Depends(get_db)):
+    """Tạo mới học phần."""
     db_subj = HocPhan(**subj.model_dump())
     db.add(db_subj)
     await db.commit()
@@ -35,6 +39,7 @@ async def create_subject(subj: SubjectCreate, db: AsyncSession = Depends(get_db)
 
 @router.put("/{id}")
 async def update_subject(id: int, subj: SubjectUpdate, db: AsyncSession = Depends(get_db)):
+    """Cập nhật thông tin học phần theo ID."""
     db_subj = await db.get(HocPhan, id)
     if not db_subj:
         raise HTTPException(status_code=404, detail="Subject not found")
@@ -45,9 +50,12 @@ async def update_subject(id: int, subj: SubjectUpdate, db: AsyncSession = Depend
 
 @router.delete("/{id}")
 async def delete_subject(id: int, db: AsyncSession = Depends(get_db)):
+    """Xóa mềm học phần theo ID."""
     db_subj = await db.get(HocPhan, id)
-    if not db_subj:
+    if not db_subj or db_subj.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Subject not found")
-    await db.delete(db_subj)
+
+    db_subj.deleted_at = datetime.now()
     await db.commit()
-    return {"message": "Deleted successfully"}
+    return {"message": "Deleted successfully (Soft Delete)"}
+

@@ -14,6 +14,7 @@ from pages.about_page import AboutPage
 from pages.user.profile_page import ProfilePage
 from pages.user.attendance_session_page import AttendanceSessionPage
 from pages.user.face_training_page import FaceTrainingPage
+from pages.admin.training_page import AdminTrainingPage
 from pages.user.attendance_history_page import AttendanceHistoryPage
 from pages.user.student_search_page import StudentSearchPage
 # ── ADMIN IMPORTS ──
@@ -27,7 +28,11 @@ from pages.admin.subjects_page import SubjectsPage
 from pages.admin.notifications_page import NotificationsPage
 from pages.admin.system_settings_page import SystemSettingsPage
 from pages.admin.weeks_page import WeeksPage
+from pages.admin.teachers_page import TeachersPage
+from pages.admin.faces_page import AdminFacesPage
+from pages.admin.attendance_report_page import AdminAttendanceReportPage
 import core.theme as theme_module
+from core.config import reset_client
 
 DEBUG_LOADING = False
 
@@ -59,6 +64,17 @@ async def main(page: ft.Page):
         )
     )
     
+    # --- KHỞI TẠO CẤU HÌNH API ---
+    try:
+        prefs = ft.SharedPreferences()
+        saved_url = await prefs.get("server_api_url")
+        if saved_url:
+            reset_client(saved_url)
+            print(f"[Main] Loaded API URL from prefs: {saved_url}")
+    except Exception as e_pref:
+        print(f"[Main] Prefs init error: {e_pref}")
+    # -----------------------------
+
     # --- KHỞI ĐỘNG HỆ THỐNG QUẢN LÝ THIẾT BỊ & XIN QUYỀN ---
     from core.device_manager import DeviceManager
     dev_manager = DeviceManager.get_instance()
@@ -123,6 +139,14 @@ async def main(page: ft.Page):
                 page.views.clear()
                 page.views.append(ft.View(route="/user/attendance/session", controls=[AttendanceSessionPage(page)], padding=0, bgcolor=theme_module.current_theme.bg_color))        
             
+            elif current_route == "/face-training":
+                page.views.clear()
+                page.views.append(ft.View(route="/face-training", controls=[FaceTrainingPage(page)], padding=0, bgcolor=theme_module.current_theme.bg_color))
+            
+            elif current_route == "/admin/face-training":
+                page.views.clear()
+                page.views.append(ft.View(route="/admin/face-training", controls=[AdminTrainingPage(page)], padding=0, bgcolor=theme_module.current_theme.bg_color))
+            
             # Xử lý cơ chế thay ruột SPA trong Dashboard
             else:
                 # ── ADMIN ROUTES: Dùng admin_dashboard layout ──
@@ -150,8 +174,14 @@ async def main(page: ft.Page):
                         admin_dashboard.set_content("QUẢN LÝ THÔNG BÁO", NotificationsPage(page), current_route)
                     elif current_route.startswith("/admin/weeks"):
                         admin_dashboard.set_content("QUẢN LÝ TUẦN HỌC", WeeksPage(page), current_route)
+                    elif current_route == "/admin/teachers":
+                        admin_dashboard.set_content("QUẢN LÝ GIẢNG VIÊN", TeachersPage(page), current_route)
                     elif current_route == "/admin/settings":
                         admin_dashboard.set_content("CÀI ĐẶT HỆ THỐNG", SystemSettingsPage(page), current_route)
+                    elif current_route == "/admin/faces":
+                        admin_dashboard.set_content("QUẢN LÝ KHUÔN MẶT", AdminFacesPage(page), current_route)
+                    elif current_route == "/admin/attendance-report":
+                        admin_dashboard.set_content("BÁO CÁO ĐIỂM DANH", AdminAttendanceReportPage(page), current_route)
 
                 # ── USER ROUTES: Dùng dashboard layout ──
                 else:
@@ -187,8 +217,8 @@ async def main(page: ft.Page):
                     elif current_route == "/user/profile":
                         dashboard.set_content("HỒ SƠ TÀI KHOẢN", ProfilePage(page), current_route)
                         
-                    elif current_route == "/user/attendance/training":
-                        dashboard.set_content("ĐÀO TẠO DỮ LIỆU", FaceTrainingPage(page), current_route)
+                    # Route cũ /user/attendance/training sẽ không dùng dashboard nữa
+                    pass
 
             page.update()
             

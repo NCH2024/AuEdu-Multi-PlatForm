@@ -256,6 +256,6 @@ class AdminHomePage(ft.Container):
 
         except Exception as e:
             print(f"ADMIN load_data ERROR: {e}")
-            show_top_notification(self.app_page, f"Lỗi kết nối máy chủ: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"Không thể kết nối tới máy chủ API: {e}", ft.Colors.RED, sound="E")
             self.is_loading = False
             self.apply_theme()

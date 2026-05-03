@@ -37,6 +37,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.models import SinhVien, DiemDanh, FaceEmbedding
 from app.ai.engine import face_engine
+from app.core.broadcaster import broadcaster
 
 
 # ==============================================================================
@@ -320,6 +321,15 @@ async def handle_attendance_frame(
     # BƯỚC 4: Phản hồi về Client nếu có sinh viên được nhận diện
     # ------------------------------------------------------------------
     if recognized:
+        # Gửi phản hồi cho Client (giảng viên) đang thực hiện điểm danh
+        response = {"status": "success", "students": recognized}
         await websocket.send_text(
-            json.dumps({"status": "success", "students": recognized}, ensure_ascii=False)
+            json.dumps(response, ensure_ascii=False)
         )
+        
+        # Broadcast cho Admin để giám sát thời gian thực
+        # Thêm thông tin bổ sung nếu cần (ví dụ: tên môn học, lớp - nhưng hiện tại ta chỉ gửi student info)
+        await broadcaster.broadcast({
+            "type": "attendance_update",
+            "data": recognized
+        })

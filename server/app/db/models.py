@@ -11,6 +11,8 @@ class Khoa(Base):
     email = Column(String, nullable=True) # Thêm email cho Khoa
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
 
 class LoaiHocPhan(Base):
     __tablename__ = 'loaihocphan'
@@ -20,13 +22,16 @@ class LoaiHocPhan(Base):
 
 class HocKy(Base):
     __tablename__ = 'hocky'
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, Identity(always=True), primary_key=True)
     tenhocky = Column(Text) # term
     namhoc = Column(Text) # year
     so_tuan_hoc = Column(Integer, default=15) # Số tuần học
+    loai_hocky = Column(Text, server_default='Chính') # Chính, Hè, Phụ
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
 
 class Tiet(Base):
     __tablename__ = 'tiet'
@@ -49,6 +54,7 @@ class GiangVien(Base):
     created_at = Column(DateTime, server_default=text('now()'))
     updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
     last_login = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
 
     __table_args__ = (
         CheckConstraint(vai_tro.in_(['giangvien', 'admin', 'super_admin']), name='chk_vai_tro'),
@@ -65,19 +71,35 @@ class Lop(Base):
     namkt = Column(Integer)
     khoahoc = Column(Integer)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
 
 class SinhVien(Base):
     __tablename__ = 'sinhvien'
-    id = Column(Integer, primary_key=True)
-    student_id = Column(String, unique=True, index=True, nullable=True)
+    id = Column(Integer, primary_key=True) # ID chính là MSSV
+    ma_ho_so = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
     email = Column(String, unique=True, index=True, nullable=True)
     hodem = Column(Text)
     ten = Column(Text)
     gioitinh = Column(Text)
-    diachi = Column(Text)
     ngaysinh = Column(Date)
+    noi_sinh = Column(Text)
+    dan_toc = Column(String)
+    ton_giao = Column(String)
+    nguyen_quan = Column(Text)
+    ho_khau = Column(Text)
+    ngay_vao_doan = Column(Date)
     class_id = Column(String, ForeignKey('lop.id'))
+    bac_dao_tao = Column(String)
+    ho_ten_cha = Column(String)
+    nghe_nghiep_cha = Column(String)
+    ho_ten_me = Column(String)
+    nghe_nghiep_me = Column(String)
+    dien_thoai = Column(String)
+    trang_thai = Column(String, default="Đang học")
+    ngay_ra_quyet_dinh = Column(Date)
+    diachi = Column(Text)
     ghichu = Column(Text)
     anhdaidien = Column(Text)
     sinhtrachoc = Column(Text) 
@@ -99,6 +121,8 @@ class HocPhan(Base):
     loaihp_id = Column(Integer, ForeignKey('loaihocphan.id'))
     sobuoi = Column(Integer)
     created_at = Column(DateTime, server_default=text('now()'))
+    updated_at = Column(DateTime, server_default=text('now()'), onupdate=text('now()'))
+    deleted_at = Column(DateTime, nullable=True)
 
 class ThoiKhoaBieu(Base):
     __tablename__ = 'thoikhoabieu'
@@ -107,6 +131,7 @@ class ThoiKhoaBieu(Base):
     hocky_id = Column(Integer, ForeignKey('hocky.id'))
     lop_id = Column(String, ForeignKey('lop.id'))
     giangvien_id = Column(Integer, ForeignKey('giangvien.id'))
+    tuan_hoc_id = Column(Integer, ForeignKey('tuan_hoc.id'), nullable=True) # None = Tất cả các tuần
     
     # AI Config Parameters (Chuyển từ bảng cũ sang đây)
     ai_threshold = Column(Float, default=0.6)

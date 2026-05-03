@@ -312,9 +312,9 @@ class SystemSettingsPage(ft.Container):
                 {"key": "session_timeout", "value": self.session_timeout.value},
             ]
             await self.svc.save_configs_batch(configs)
-            show_top_notification(self.app_page, "Đã cập nhật cấu hình hệ thống!", ft.Colors.GREEN)
+            show_top_notification(self.app_page, "Thông báo", "Đã cập nhật cấu hình hệ thống thành công!", ft.Colors.GREEN, sound="S")
         except Exception as ex:
-            show_top_notification(self.app_page, f"Lỗi kết nối: {ex}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"Không thể lưu cấu hình: {ex}", ft.Colors.RED, sound="E")
 
     def apply_theme(self):
         """Cập nhật giao diện khi đổi theme."""

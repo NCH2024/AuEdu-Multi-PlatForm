@@ -38,7 +38,10 @@ class BaseDashboard(ft.Container):
                 {"label": "Lớp học", "icon": ft.Icons.MEETING_ROOM_ROUNDED, "route": "/admin/classes"},
                 {"label": "Môn học", "icon": ft.Icons.BOOK_ROUNDED, "route": "/admin/subjects"},
                 {"label": "Sinh viên", "icon": ft.Icons.PEOPLE_ROUNDED, "route": "/admin/students"},
+                {"label": "Dữ liệu Khuôn mặt", "icon": ft.Icons.FACE_RETOUCHING_NATURAL_ROUNDED, "route": "/admin/faces"},
+                {"label": "Giảng viên", "icon": ft.Icons.SUPERVISED_USER_CIRCLE_ROUNDED, "route": "/admin/teachers"},
                 {"label": "Lịch điểm danh", "icon": ft.Icons.SCHEDULE_ROUNDED, "route": "/admin/schedules"},
+                {"label": "Báo cáo Điểm danh", "icon": ft.Icons.ASSESSMENT_ROUNDED, "route": "/admin/attendance-report"},
                 {"label": "Thông báo", "icon": ft.Icons.NOTIFICATIONS_ROUNDED, "route": "/admin/notifications"},
                 {"label": "Cài đặt AI", "icon": ft.Icons.SETTINGS_ROUNDED, "route": "/admin/settings"},
             ]
@@ -692,7 +695,7 @@ class BaseDashboard(ft.Container):
                         spacing=8, alignment=ft.MainAxisAlignment.START,
                         controls=[
                             ft.Container(
-                                padding=ft.Padding(0, 20, 0, 20), alignment=ft.Alignment.CENTER,
+                                padding=ft.Padding(0, 20, 0, 20), alignment=ft.Alignment(0, 0),
                                 # Admin: icon Shield, User: logo app
                                 content=ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS, size=35, color=ft.Colors.BLACK_87 if theme_module.current_theme.is_dark else ft.Colors.WHITE) if self.is_admin else ft.Image(src="icon-1.png", width=35, height=35, fit=ft.BoxFit.CONTAIN)
                             )

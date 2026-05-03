@@ -21,7 +21,7 @@ class DepartmentUpdate(BaseModel):
 
 @router.get("/")
 async def get_departments(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Khoa))
+    result = await db.execute(select(Khoa).where(Khoa.deleted_at.is_(None)))
     return [{"id": d.id, "tenkhoa": d.tenkhoa, "email": d.email, "description": d.description} for d in result.scalars().all()]
 
 @router.post("/")
@@ -45,8 +45,10 @@ async def update_department(id: str, dept: DepartmentUpdate, db: AsyncSession = 
 @router.delete("/{id}")
 async def delete_department(id: str, db: AsyncSession = Depends(get_db)):
     db_dept = await db.get(Khoa, id)
-    if not db_dept:
+    if not db_dept or db_dept.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Department not found")
-    await db.delete(db_dept)
+    
+    from datetime import datetime
+    db_dept.deleted_at = datetime.now()
     await db.commit()
-    return {"message": "Deleted successfully"}
+    return {"message": "Deleted successfully (Soft Delete)"}

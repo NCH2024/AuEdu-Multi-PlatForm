@@ -134,7 +134,7 @@ class AttendanceHistoryPage(ft.Container):
                     ft.Container(
                         content=ft.Text(str(index), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=14),
                         width=40, height=40, border_radius=20,
-                        bgcolor=status_color, alignment=ft.Alignment.CENTER
+                        bgcolor=status_color, alignment=ft.Alignment(0, 0)
                     ),
                     ft.Column([
                         ft.Text(ho_ten, weight=ft.FontWeight.BOLD, color=current_theme.text_main, size=14, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),

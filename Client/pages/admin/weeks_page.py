@@ -40,7 +40,7 @@ class WeeksPage(ft.Container):
 
         self.btn_generate = ft.Button(
             "TẠO TUẦN TỰ ĐỘNG",
-            icon=ft.Icons.AUTO_RENEW_ROUNDED,
+            icon=ft.Icons.REFRESH_ROUNDED,
             bgcolor=current_theme.primary, color=ft.Colors.WHITE,
             on_click=self.open_generate_dialog
         )
@@ -145,7 +145,7 @@ class WeeksPage(ft.Container):
             self.grid.set_data(self.all_weeks)
 
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"Không thể tải danh sách tuần học: {e}", ft.Colors.RED, sound="E")
         finally:
             self.progress_bar.visible = False
             self.update()
@@ -153,7 +153,7 @@ class WeeksPage(ft.Container):
     async def generate_weeks(self, e):
         """Gọi API tạo tuần học tự động cho học kỳ đã chọn."""
         if not self.form_start_date.value:
-            show_top_notification(self.app_page, "Vui lòng chọn ngày bắt đầu", ft.Colors.ORANGE)
+            show_top_notification(self.app_page, "Cảnh báo", "Vui lòng chọn ngày bắt đầu của học kỳ!", ft.Colors.ORANGE, sound="E")
             return
 
         self.close_gen_dialog()
@@ -165,10 +165,10 @@ class WeeksPage(ft.Container):
                 {"start_date": self.form_start_date.value}
             )
             self.svc.invalidate(f"weeks_{self.semester_id}")
-            show_top_notification(self.app_page, "Đã tạo tuần học và cập nhật học kỳ!", ft.Colors.GREEN)
+            show_top_notification(self.app_page, "Thông báo", "Đã tạo danh sách tuần học tự động thành công!", ft.Colors.GREEN, sound="S")
             await self.load_data()
         except Exception as ex:
-            show_top_notification(self.app_page, f"Lỗi hệ thống: {ex}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"Không thể tạo tuần học: {ex}", ft.Colors.RED, sound="E")
         finally:
             self.progress_bar.visible = False
             self.update()

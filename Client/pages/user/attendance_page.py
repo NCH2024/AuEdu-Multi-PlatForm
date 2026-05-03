@@ -218,6 +218,12 @@ class AttendancePage(ft.Container):
                         content=ft.Row([ft.Icon(ft.Icons.SEARCH, color=ft.Colors.WHITE, size=16), ft.Text("TÌM VÀ CHỌN LỊCH DẠY", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=12)]),
                         bgcolor=current_theme.accent, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), padding=15),
                         on_click=self.open_schedule_dialog, expand=True
+                    ),
+                    ft.IconButton(
+                        ft.Icons.REFRESH_ROUNDED, 
+                        icon_color=current_theme.secondary,
+                        tooltip="Làm mới lịch dạy",
+                        on_click=lambda _: self.app_page.run_task(self.load_all_schedules)
                     )
                 ])
             ])
@@ -395,7 +401,7 @@ class AttendancePage(ft.Container):
 
         self.student_detail_content.controls = [
             ft.Row([
-                ft.Container(content=ft.Text(str(index), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), width=40, height=40, border_radius=20, bgcolor=current_theme.accent, alignment=ft.Alignment.CENTER),
+                ft.Container(content=ft.Text(str(index), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), width=40, height=40, border_radius=20, bgcolor=current_theme.accent, alignment=ft.Alignment(0, 0)),
                 ft.Column([
                     ft.Text(ho_ten, weight=ft.FontWeight.BOLD, size=16, color=current_theme.secondary, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                     ft.Text(f"Mã SV: {sv['id']}", size=12, color=current_theme.text_muted),
@@ -509,7 +515,7 @@ class AttendancePage(ft.Container):
                     bgcolor=current_theme.surface_color, border_radius=12, padding=10, border=ft.Border.all(1, current_theme.divider_color),
                     ink=True, on_click=create_click_handler(sv, index),
                     content=ft.Row([
-                        ft.Container(content=ft.Text(str(index), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13), width=36, height=36, border_radius=18, bgcolor=current_theme.accent, alignment=ft.Alignment.CENTER),
+                        ft.Container(content=ft.Text(str(index), color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13), width=36, height=36, border_radius=18, bgcolor=current_theme.accent, alignment=ft.Alignment(0, 0)),
                         ft.Column([
                             ft.Text(ho_ten, weight=ft.FontWeight.BOLD, color=current_theme.text_main, size=13, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                             ft.Text(str(sv["id"]), size=11, color=current_theme.text_muted)
@@ -549,7 +555,7 @@ class AttendancePage(ft.Container):
         if not getattr(self, "page", None): return
         e.control.disabled = True
         e.control.update()
-        await self.app_page.push_route("/user/attendance/training")
+        await self.app_page.push_route("/face-training")
 
     async def handle_start_session_mobile(self, e):
         if not getattr(self, "page", None): return

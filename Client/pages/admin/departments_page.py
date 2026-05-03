@@ -70,7 +70,7 @@ class DepartmentsPage(ft.Container):
                 ft.Row([self.search_field], alignment=ft.MainAxisAlignment.START, spacing=8),
                 ft.Container(height=5),
                 self.grid
-            ], horizontal_alignment=ft.CrossAxisAlignment.START, expand=True, spacing=10),
+            ], horizontal_alignment=ft.CrossAxisAlignment.STRETCH, expand=True, spacing=10),
             border=ft.Border.all(1, current_theme.divider_color),
             border_radius=12, bgcolor=current_theme.surface_color,
             padding=ft.Padding.all(12), expand=True
@@ -117,7 +117,7 @@ class DepartmentsPage(ft.Container):
             self.all_data = await self.svc.get_departments(force=True)
             self.filter_data(None)
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi tải dữ liệu: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"Không thể tải danh sách Khoa: {e}", ft.Colors.RED, sound="E")
         finally:
             self.progress_bar.visible = False
             self.update()
@@ -220,7 +220,7 @@ class DepartmentsPage(ft.Container):
 
             self.svc.invalidate("departments")
             self.close_dialog()
-            show_top_notification(self.app_page, "Lưu dữ liệu thành công!", ft.Colors.GREEN)
+            show_top_notification(self.app_page, "Thông báo", "Lưu thông tin khoa thành công!", ft.Colors.GREEN, sound="S")
             await self.load_data()
         except Exception as e:
             show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
@@ -238,7 +238,7 @@ class DepartmentsPage(ft.Container):
         try:
             await self.svc.delete(f"/api/admin/departments/{id}")
             self.svc.invalidate("departments")
-            show_top_notification(self.app_page, "Đã xóa khoa thành công!", ft.Colors.GREEN)
+            show_top_notification(self.app_page, "Thông báo", "Đã xóa khoa thành công!", ft.Colors.GREEN, sound="S")
             await self.load_data()
         except Exception as e:
             show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)

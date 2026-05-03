@@ -14,10 +14,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "public")
 API_PREFIX = "/v1"
 
-SERVER_API_URL = "http://127.0.0.1:8000/" 
-
-# SERVER_API_URL = "http://192.168.1.20:8000/" 
-# SERVER_API_URL = "http://10.149.145.47:8000/" 
+SERVER_API_URL = "http://127.0.0.1:8000/"
 
 def get_headers():
     return {
@@ -28,6 +25,16 @@ def get_headers():
 
 _shared_client: httpx.AsyncClient | None = None
 
+def reset_client(new_url: str = None):
+    """Xóa client cũ để force tạo lại với URL mới."""
+    global _shared_client, SERVER_API_URL
+    if new_url:
+        SERVER_API_URL = new_url
+    if _shared_client:
+        # Chúng ta không thể await ở đây nếu reset_client là đồng bộ, 
+        # nhưng httpx sẽ tự đóng connection cũ khi bị thay thế hoặc garbage collected.
+        _shared_client = None
+
 async def get_supabase_client() -> httpx.AsyncClient:
     global _shared_client
     if _shared_client is None or _shared_client.is_closed:
@@ -35,7 +42,8 @@ async def get_supabase_client() -> httpx.AsyncClient:
             base_url=SERVER_API_URL,
             headers=get_headers(),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-            timeout=httpx.Timeout(10.0)
+            timeout=httpx.Timeout(10.0),
+            follow_redirects=True
         )
     return _shared_client
 
