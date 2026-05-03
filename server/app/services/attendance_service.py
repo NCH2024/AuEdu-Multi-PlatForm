@@ -39,6 +39,8 @@ from app.db.models import SinhVien, DiemDanh, FaceEmbedding
 from app.ai.engine import face_engine
 from app.core.broadcaster import broadcaster
 from app.core.audit import log_audit
+from app.services.attendance_cache import attendance_cache
+from sqlalchemy.dialects.postgresql import insert
 
 
 # ==============================================================================
@@ -73,137 +75,143 @@ async def _get_embeddings_from_frame(image_b64: str, mode: str) -> list:
 
 
 async def _find_best_match(
-    embedding: list, db: AsyncSession
-) -> tuple[Optional[FaceEmbedding], Optional[float]]:
+    tkb_tiet_id: int, embedding: list, db: AsyncSession
+) -> tuple[Optional[dict], Optional[float]]:
     """
-    Tìm sinh viên có khuôn mặt khớp nhất trong database dùng pgvector.
-
-    Chiến lược:
-        - Dùng cosine_distance() của pgvector để đo khoảng cách giữa embedding
-          từ frame thời gian thực và tất cả embedding đã lưu trong DB.
-        - ORDER BY distance ASC → lấy 1 bản ghi gần nhất.
-        - NGƯỠNG AN TOÀN: Nếu khoảng cách ≥ RECOGNITION_THRESHOLD thì
-          bắt buộc trả về (None, None) – từ chối nhận diện người lạ.
-
-    Args:
-        embedding: Vector 512-D cần tra cứu (đã L2-normalize).
-        db: AsyncSession của SQLAlchemy.
-
-    Returns:
-        tuple: (FaceEmbedding, cosine_distance) hoặc (None, None) nếu không khớp.
+    Tìm sinh viên khớp nhất. Thử tìm trong Cache trước, nếu không có hoặc lỗi thì fallback DB.
     """
-    # Tính biểu thức khoảng cách Cosine (sẽ được pgvector tính trên DB)
+    # 1. Thử In-Memory Cache (siêu tốc)
+    match, score = attendance_cache.find_best_match(tkb_tiet_id, embedding, RECOGNITION_THRESHOLD)
+    
+    # Nếu score != -1.0, tức là Cache đã được tải thành công
+    if score is not None and score != -1.0:
+        if match is None:
+            # Có trong cache nhưng vượt ngưỡng, từ chối nhận diện
+            print(
+                f"[Attendance Service][Threshold Guard] "
+                f"Từ chối nhận diện (Cache) – Cosine Distance: {score:.4f} ≥ {RECOGNITION_THRESHOLD}"
+            )
+        else:
+            print(
+                f"[Attendance Service] Nhận diện thành công (Cache) – SV_ID: {match['id']}, "
+                f"Cosine Distance: {score:.4f} (< {RECOGNITION_THRESHOLD})"
+            )
+        return match, score
+
+    # 2. Fallback Truy vấn DB (chậm hơn) - Chỉ chạy khi Cache hoàn toàn trống (score == -1.0)
     distance_expr = FaceEmbedding.embedding.cosine_distance(embedding)
-
     stmt = (
         select(FaceEmbedding, distance_expr.label("score"))
-        .order_by(distance_expr)  # Khoảng cách nhỏ nhất trước
-        .limit(1)                 # Chỉ lấy ứng viên gần nhất
+        .order_by(distance_expr)
+        .limit(1)
     )
 
     result = await db.execute(stmt)
     row = result.first()
 
     if row is None:
-        # Không có embedding nào trong database (chưa đào tạo sinh viên nào)
         return None, None
 
-    match: FaceEmbedding = row[0]
-    score: float = float(row[1])
+    db_match: FaceEmbedding = row[0]
+    db_score: float = float(row[1])
 
-    # =========================================================================
-    # NGƯỠNG AN TOÀN – THRESHOLD GUARD
-    # =========================================================================
-    # Đây là điều kiện phòng vệ quan trọng nhất: Nếu embedding tốt nhất tìm được
-    # vẫn quá xa (khoảng cách ≥ RECOGNITION_THRESHOLD), ta từ chối hoàn toàn.
-    # Điều này ngăn hệ thống nhận nhầm người lạ thành sinh viên đã đăng ký.
-    if score >= RECOGNITION_THRESHOLD:
+    if db_score >= RECOGNITION_THRESHOLD:
         print(
             f"[Attendance Service][Threshold Guard] "
-            f"Từ chối nhận diện – Cosine Distance: {score:.4f} ≥ {RECOGNITION_THRESHOLD} (ngưỡng)"
+            f"Từ chối nhận diện (Fallback) – Cosine Distance: {db_score:.4f} ≥ {RECOGNITION_THRESHOLD}"
         )
         return None, None
 
-    print(
-        f"[Attendance Service] Nhận diện thành công – SV_ID: {match.sv_id}, "
-        f"Cosine Distance: {score:.4f} (< {RECOGNITION_THRESHOLD})"
-    )
-    return match, score
+    # Lấy thông tin SinhVien
+    sv = await db.scalar(select(SinhVien).where(SinhVien.id == db_match.sv_id))
+    if sv:
+        print(
+            f"[Attendance Service] Nhận diện thành công (Fallback DB) – SV_ID: {sv.id}, "
+            f"Cosine Distance: {db_score:.4f}"
+        )
+        return {"id": sv.id, "hodem": sv.hodem, "ten": sv.ten}, db_score
+        
+    return None, None
 
 
-async def _save_attendance(
-    sv_id: int,
+async def bulk_upsert_attendance(
+    recognitions: list[dict],
     tkb_tiet_id: int,
     attend_date: datetime.date,
     db: AsyncSession,
-    vitri: Optional[str] = None,
-    device_id: Optional[str] = None,
-    client_version: Optional[str] = None,
-    confidence_score: Optional[float] = None,
     created_by: Optional[int] = None,
-) -> str:
+) -> dict[int, str]:
     """
-    Ghi nhận hoặc cập nhật bản ghi điểm danh trong database.
-
-    Logic:
-        - Nếu đã "Có mặt" → Trả về "ALREADY_PRESENT" (idempotent, không ghi đè)
-        - Nếu đang "Vắng"  → Cập nhật thành "Có mặt" và trả về "UPDATED"
-        - Nếu chưa có bản ghi → Tạo mới và trả về "INSERTED"
-        - Nếu lỗi DB       → Rollback và trả về "ERROR"
-
-    Returns:
-        str: Một trong "ALREADY_PRESENT", "UPDATED", "INSERTED", "ERROR"
+    Ghi nhận hoặc cập nhật hàng loạt bản ghi điểm danh trong database.
+    Sử dụng INSERT ... ON CONFLICT DO UPDATE để giảm thiểu truy vấn.
     """
+    if not recognitions:
+        return {}
+
+    sv_ids = [r["sv_id"] for r in recognitions]
+    scores = {r["sv_id"]: r["score"] for r in recognitions}
+    vitris = {r["sv_id"]: r["vitri"] for r in recognitions}
+    device_ids = {r["sv_id"]: r["device_id"] for r in recognitions}
+    client_versions = {r["sv_id"]: r["client_version"] for r in recognitions}
+
     try:
-        # Kiểm tra xem sinh viên này đã có bản ghi điểm danh trong ngày chưa
+        # 1. Fetch trạng thái hiện tại để phân loại (chỉ mất 1 query cho cả danh sách)
         existing_stmt = select(DiemDanh).where(
-            DiemDanh.sv_id == sv_id,
             DiemDanh.tkb_tiet_id == tkb_tiet_id,
             DiemDanh.ngay_diem_danh == attend_date,
+            DiemDanh.sv_id.in_(sv_ids)
         )
-        result = await db.execute(existing_stmt)
-        existing_record: Optional[DiemDanh] = result.scalar_one_or_none()
+        existing_records = (await db.scalars(existing_stmt)).all()
+        existing_map = {r.sv_id: r for r in existing_records}
 
-        if existing_record:
-            if existing_record.trang_thai == "Có mặt":
-                print(f"[Attendance Service] SV_ID={sv_id} đã có mặt (ID={existing_record.id}). Bỏ qua.")
-                return "ALREADY_PRESENT"
+        status_map = {}
+        to_upsert = []
 
-            # Trạng thái là "Vắng" → Cho phép cập nhật thành "Có mặt"
-            print(f"[Attendance Service] Cập nhật trạng thái 'Có mặt' cho SV_ID={sv_id} (ID={existing_record.id})")
-            existing_record.trang_thai = "Có mặt"
-            existing_record.vitri = vitri
-            existing_record.device_id = device_id
-            existing_record.client_version = client_version
-            existing_record.confidence_score = confidence_score
-            existing_record.created_by = created_by
-            existing_record.updated_at = text("now()")
-            await db.commit()
-            return "UPDATED"
+        for sv_id in sv_ids:
+            existing = existing_map.get(sv_id)
+            if existing and existing.trang_thai == "Có mặt":
+                status_map[sv_id] = "ALREADY_PRESENT"
+                continue
 
-        else:
-            # Chưa có bản ghi → Tạo mới
-            print(f"[Attendance Service] Ghi nhận mới 'Có mặt' cho SV_ID={sv_id} tại {attend_date}")
-            new_record = DiemDanh(
-                sv_id=sv_id,
-                tkb_tiet_id=tkb_tiet_id,
-                ngay_diem_danh=attend_date,
-                trang_thai="Có mặt",
-                vitri=vitri,
-                device_id=device_id,
-                client_version=client_version,
-                confidence_score=confidence_score,
-                created_by=created_by,
+            if existing:
+                status_map[sv_id] = "UPDATED"
+            else:
+                status_map[sv_id] = "INSERTED"
+
+            to_upsert.append({
+                "sv_id": sv_id,
+                "tkb_tiet_id": tkb_tiet_id,
+                "ngay_diem_danh": attend_date,
+                "trang_thai": "Có mặt",
+                "vitri": vitris.get(sv_id),
+                "device_id": device_ids.get(sv_id),
+                "client_version": client_versions.get(sv_id),
+                "confidence_score": scores.get(sv_id),
+                "created_by": created_by,
+            })
+
+        # 2. Bulk Upsert vào DB
+        if to_upsert:
+            stmt = insert(DiemDanh).values(to_upsert)
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_diemdanh_sv_tiet_ngay",
+                set_={
+                    "trang_thai": stmt.excluded.trang_thai,
+                    "vitri": stmt.excluded.vitri,
+                    "device_id": stmt.excluded.device_id,
+                    "client_version": stmt.excluded.client_version,
+                    "confidence_score": stmt.excluded.confidence_score,
+                    "updated_at": text("now()"),
+                }
             )
-            db.add(new_record)
-            await db.commit()
-            return "INSERTED"
+            await db.execute(stmt)
+            # Lưu ý: Không commit ở đây, sẽ commit 1 lần duy nhất ở hàm gọi (handle_attendance_frame)
+
+        return status_map
 
     except SQLAlchemyError as err:
-        # Rollback transaction khi gặp lỗi DB
-        await db.rollback()
-        print(f"[Attendance Service][CRITICAL] Lỗi ghi DB cho SV_ID={sv_id}: {err}")
-        return "ERROR"
+        print(f"[Attendance Service][CRITICAL] Lỗi Bulk Upsert: {err}")
+        return {sv_id: "ERROR" for sv_id in sv_ids}
 
 
 # ==============================================================================
@@ -267,46 +275,54 @@ async def handle_attendance_frame(
         return
 
     # ------------------------------------------------------------------
-    # BƯỚC 3: Xử lý từng embedding tìm được
+    # BƯỚC 3: Tra cứu đồng thời các embedding (Parallel Processing)
+    # ------------------------------------------------------------------
+    async def process_embedding(emb):
+        sv_dict, score = await _find_best_match(tkb_tiet_id, emb, db)
+        if sv_dict:
+            return {
+                "sv_id": sv_dict["id"],
+                "sv": sv_dict,
+                "score": score,
+                "vitri": vitri,
+                "device_id": device_id,
+                "client_version": client_version
+            }
+        return None
+
+    # Chạy song song tìm kiếm
+    match_results = await asyncio.gather(*(process_embedding(emb) for emb in embeddings))
+    valid_matches = [res for res in match_results if res is not None]
+
+    if not valid_matches:
+        return
+
+    # ------------------------------------------------------------------
+    # BƯỚC 4: Ghi dữ liệu hàng loạt (Bulk Upsert)
+    # ------------------------------------------------------------------
+    status_map = await bulk_upsert_attendance(
+        recognitions=valid_matches,
+        tkb_tiet_id=tkb_tiet_id,
+        attend_date=target_date,
+        db=db,
+        created_by=giangvien_id,
+    )
+
+    # ------------------------------------------------------------------
+    # BƯỚC 5: Xử lý Audit Log và Response
     # ------------------------------------------------------------------
     recognized: list[dict] = []
 
-    for emb in embeddings:
-        # 3a. Tra cứu DB với Threshold Guard
-        match, score = await _find_best_match(emb, db)
-
-        # 3b. _find_best_match đã áp dụng Threshold – None nghĩa là không nhận diện được
-        if match is None:
-            continue
-
-        sv_id: int = match.sv_id
-
-        # 3c. Lấy thông tin sinh viên
-        sv: Optional[SinhVien] = await db.scalar(
-            select(SinhVien).where(SinhVien.id == sv_id)
-        )
-        if sv is None:
-            print(f"[Attendance Service][WARN] FaceEmbedding tham chiếu đến SV_ID={sv_id} không tồn tại!")
-            continue
-
-        # 3d. Ghi nhận điểm danh
-        save_status = await _save_attendance(
-            sv_id=sv_id,
-            tkb_tiet_id=tkb_tiet_id,
-            attend_date=target_date,
-            db=db,
-            vitri=vitri,
-            device_id=device_id,
-            client_version=client_version,
-            confidence_score=round(float(score), 4),
-            created_by=giangvien_id,
-        )
+    for match in valid_matches:
+        sv = match["sv"]
+        sv_id = match["sv_id"]
+        score = match["score"]
+        save_status = status_map.get(sv_id, "ERROR")
 
         if save_status == "ERROR":
             continue
 
         # --- AUDIT LOG: RECOGNITION ---
-        # Chỉ log khi sinh viên thực sự được ghi nhận mới (INSERTED) hoặc đổi trạng thái (UPDATED)
         if save_status in ("INSERTED", "UPDATED"):
             await log_audit(
                 db=db,
@@ -321,25 +337,29 @@ async def handle_attendance_frame(
                     "vitri": vitri,
                     "save_status": save_status
                 },
-                request=None # WS không có Request object trực tiếp dễ dàng ở đây, log_audit sẽ lấy IP từ metadata nếu có
+                request=None
             )
-            # Commit log riêng lẻ để đảm bảo lưu trữ ngay cả khi các frame sau lỗi
-            await db.commit()
 
-        # 3e. Đánh dấu "is_new" để Client biết đây có phải lần quét đầu tiên không
-        #     (INSERTED/UPDATED = mới quét; ALREADY_PRESENT = đã quét trước đó)
         is_newly_scanned: bool = save_status in ("INSERTED", "UPDATED")
 
         recognized.append({
-            "id": sv.id,
-            "name": f"{sv.hodem} {sv.ten}".strip(),
+            "id": sv["id"],
+            "name": f"{sv['hodem']} {sv['ten']}".strip(),
             "time": datetime.datetime.now().strftime("%H:%M:%S"),
             "status": "Có mặt",
             "score": round(float(score), 4),
             "vitri": vitri or "Tại lớp",
             "is_new": is_newly_scanned,
-            "save_status": save_status,  # Để debug/logging phía Client nếu cần
+            "save_status": save_status,
         })
+
+    # Commit 1 lần duy nhất cho toàn bộ frame (kể cả audit_log và diemdanh)
+    try:
+        await db.commit()
+    except SQLAlchemyError as err:
+        await db.rollback()
+        print(f"[Attendance Service][CRITICAL] Lỗi commit DB cho frame: {err}")
+        return
 
     # ------------------------------------------------------------------
     # BƯỚC 4: Phản hồi về Client nếu có sinh viên được nhận diện

@@ -44,6 +44,7 @@ from app.services.attendance_service import handle_attendance_frame
 from app.core.security import verify_token
 from app.core.config import MAX_QUEUE_SIZE, DROP_OLDEST
 from app.core.audit import log_audit
+from app.services.attendance_cache import attendance_cache
 
 
 router = APIRouter()
@@ -135,12 +136,14 @@ async def attendance_websocket(
     )
     await db.commit()
 
+    # --- TẢI CACHE KHUÔN MẶT LÊN RAM ---
+    await attendance_cache.load_class_data(tkb_tiet_id, db)
+
     # ==========================================================================
     # BƯỚC 2: KHỞI TẠO HÀNG ĐỢI FRAME (ASYNC QUEUE)
     # ==========================================================================
-    # maxsize=3: Giới hạn tối đa 3 frame chờ xử lý trong queue.
-    # Con số nhỏ để tránh tích trữ frame cũ khi AI xử lý chậm.
-    frame_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)
+    # maxsize=1: Giữ queue nhỏ nhất có thể để luôn xử lý frame mới nhất (Real-time priority)
+    frame_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=1)
 
     # ==========================================================================
     # BƯỚC 3: ĐỊNH NGHĨA CONSUMER (AI Worker)
@@ -280,5 +283,8 @@ async def attendance_websocket(
             request=websocket
         )
         await db.commit()
+
+        # --- XOÁ CACHE KHUÔN MẶT TRÊN RAM ---
+        await attendance_cache.clear_class_data(tkb_tiet_id)
 
         print(f"[WS Attendance] ✓ Đã dọn dẹp hoàn tất | TKB_Tiet_ID={tkb_tiet_id}")
