@@ -1,20 +1,73 @@
-# Bỏ qua các file test
-*test*.py
+# ═══════════════════════════════════════════════════════
+# AuEdu – .gitignore
+# ═══════════════════════════════════════════════════════
 
-# Bỏ qua môi trường python
+# ── Python ──
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+*.whl
 
-# Bỏ qua môi trường venv
+# ── Virtual Environments ──
 venv/
 .venv/
 **/venv/
+**/venv-linux/
 
-# Bỏ qua thư mục build app 
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Environment & Secrets ──
+.env
+*.env.local
+
+# ── Build ──
 build/
+**/build/
+*.spec
 
-# Bỏ qua calibration data (machine-generated)
+# ── OS Generated ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Calibration (machine-generated) ──
 calib.npy
 
-# Bỏ qua file môi trường
-.env
+# ═══════════════════════════════════════════════════════
+# DATASET & HEAVY FILES (không tải lên GitHub)
+# ═══════════════════════════════════════════════════════
+
+# Ảnh dataset LFW (tự tải bằng prepare_dataset.py)
+tests/dataset/**
+!tests/dataset/
+!tests/dataset/.gitkeep
+
+# Kết quả test (JSON/CSV lớn, tự sinh khi chạy)
+tests/results/**
+!tests/results/
+!tests/results/.gitkeep
+
+# scikit-learn cache
+scikit_learn_data/
+
+# ── AI Models (tự tải khi chạy InsightFace) ──
+Server/app/ai/models/*.onnx
+Server/assets/anti_spoof_models/
+**/*.onnx
+
+# ── Logs ──
+*.log
+logs/
+
+# ── Misc ──
+*.tmp
+*.bak
