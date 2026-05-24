@@ -25,9 +25,13 @@ venv/
 *.swo
 *~
 
-# ── Environment & Secrets ──
+# ── Environment & Secrets (QUAN TRỌNG: KHÔNG push secrets lên GitHub) ──
 .env
+**/.env
 *.env.local
+*.env.production
+# Chỉ track .env.example (không chứa secrets)
+!**/.env.example
 
 # ── Build ──
 build/

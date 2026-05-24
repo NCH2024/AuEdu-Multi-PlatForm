@@ -219,21 +219,76 @@ flet run main.py
 flet build apk
 ```
 
-### 4. Cấu hình `.env`
+### 4. Cấu hình môi trường (`.env`) — ⚠️ BẮT BUỘC
+
+> **🔒 Bảo mật:** File `.env` chứa secrets (API keys, mật khẩu database) và **KHÔNG được tải lên GitHub**.
+> Dự án chỉ cung cấp file `.env.example` làm mẫu. Bạn cần tạo `.env` riêng.
+
+**Bước 1:** Copy file mẫu
+
+```bash
+# Server
+cd Server
+cp .env.example .env
+
+# Client
+cd ../Client
+cp .env.example .env
+```
+
+**Bước 2:** Tạo project Supabase (miễn phí)
+
+1. Truy cập [supabase.com](https://supabase.com) → **Start your project** (đăng nhập bằng GitHub)
+2. **New project** → Đặt tên + mật khẩu database → Chọn region `Southeast Asia`
+3. Lấy thông tin kết nối tại **Settings → API**:
+
+| Thông tin | Lấy ở đâu | Điền vào |
+|:---|:---|:---|
+| `SUPABASE_URL` | Settings → API → Project URL | `Server/.env` + `Client/.env` |
+| `SUPABASE_KEY` | Settings → API → `anon` `public` key | `Server/.env` + `Client/.env` |
+| `DATABASE_URL` | Settings → Database → Connection string → URI | `Server/.env` |
+
+**Bước 3:** Chỉnh sửa `.env`
 
 **Server (`Server/.env`):**
 ```env
-DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/dbname
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_KEY=your-key
-SECRET_KEY=your-secret-key
+# Thay bằng thông tin thật từ Supabase Dashboard
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_KEY=eyJhbGci...your-anon-key...
+SUPABASE_STORAGE_BUCKET=thongbao_images
+
+# Thay user, password, host từ Supabase → Database → Connection string
+DATABASE_URL=postgresql+asyncpg://postgres:your-password@db.your-project-id.supabase.co:5432/postgres
+
+# Giữ nguyên (không cần thay đổi)
+FIQA_THRESHOLD=0.05
+ANTI_SPOOF_MODEL=modelrgb.onnx
+MAX_QUEUE_SIZE=8
+DROP_OLDEST=true
+CALIBRATION_MODE=auto
+CALIBRATION_DATA=calib.npy
 ```
 
 **Client (`Client/.env`):**
 ```env
-API_BASE_URL=http://192.168.1.x:8000
-WS_URL=ws://192.168.1.x:8000/ws
+# Phải trùng với Server/.env
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_KEY=eyJhbGci...your-anon-key...
+SUPABASE_STORAGE_BUCKET=thongbao_images
 ```
+
+**Bước 4:** Kích hoạt extension pgvector trên Supabase
+
+```sql
+-- Chạy trong Supabase SQL Editor (Database → SQL Editor)
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+> ⚠️ **Lưu ý bảo mật:**
+> - **KHÔNG bao giờ** commit file `.env` lên GitHub
+> - File `.env` đã được thêm vào `.gitignore`
+> - Nếu vô tình push secrets, hãy đổi mật khẩu Supabase ngay lập tức
+> - Chỉ sử dụng key `anon/public` cho client, **KHÔNG dùng** `service_role` key
 
 ---
 

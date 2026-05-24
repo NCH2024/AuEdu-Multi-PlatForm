@@ -220,21 +220,76 @@ flet run main.py
 flet build apk
 ```
 
-### 4. Environment variables (`.env`)
+### 4. Environment Configuration (`.env`) — ⚠️ REQUIRED
+
+> **🔒 Security:** `.env` files contain secrets (API keys, database passwords) and are **NOT uploaded to GitHub**.
+> Only `.env.example` templates are provided. You must create your own `.env` files.
+
+**Step 1:** Copy template files
+
+```bash
+# Server
+cd Server
+cp .env.example .env
+
+# Client
+cd ../Client
+cp .env.example .env
+```
+
+**Step 2:** Create a Supabase project (free)
+
+1. Go to [supabase.com](https://supabase.com) → **Start your project** (sign in with GitHub)
+2. **New project** → Set name + database password → Choose region `Southeast Asia`
+3. Get connection details from **Settings → API**:
+
+| Info | Where to find | Fill in |
+|:---|:---|:---|
+| `SUPABASE_URL` | Settings → API → Project URL | `Server/.env` + `Client/.env` |
+| `SUPABASE_KEY` | Settings → API → `anon` `public` key | `Server/.env` + `Client/.env` |
+| `DATABASE_URL` | Settings → Database → Connection string → URI | `Server/.env` |
+
+**Step 3:** Edit `.env` files
 
 **Server (`Server/.env`):**
 ```env
-DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/dbname
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_KEY=your-key
-SECRET_KEY=your-secret-key
+# Replace with your actual Supabase credentials
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_KEY=eyJhbGci...your-anon-key...
+SUPABASE_STORAGE_BUCKET=thongbao_images
+
+# Replace user, password, host from Supabase → Database → Connection string
+DATABASE_URL=postgresql+asyncpg://postgres:your-password@db.your-project-id.supabase.co:5432/postgres
+
+# Keep defaults (no changes needed)
+FIQA_THRESHOLD=0.05
+ANTI_SPOOF_MODEL=modelrgb.onnx
+MAX_QUEUE_SIZE=8
+DROP_OLDEST=true
+CALIBRATION_MODE=auto
+CALIBRATION_DATA=calib.npy
 ```
 
 **Client (`Client/.env`):**
 ```env
-API_BASE_URL=http://192.168.1.x:8000
-WS_URL=ws://192.168.1.x:8000/ws
+# Must match Server/.env
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_KEY=eyJhbGci...your-anon-key...
+SUPABASE_STORAGE_BUCKET=thongbao_images
 ```
+
+**Step 4:** Enable pgvector extension on Supabase
+
+```sql
+-- Run in Supabase SQL Editor (Database → SQL Editor)
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+> ⚠️ **Security Notes:**
+> - **NEVER** commit `.env` files to GitHub
+> - `.env` is already added to `.gitignore`
+> - If you accidentally push secrets, change your Supabase password immediately
+> - Only use `anon/public` key for client, **NEVER use** `service_role` key
 
 ---
 
