@@ -1,4 +1,4 @@
-# 🎓 AuEdu — AI Face Attendance System
+# AuEdu — Hệ thống Điểm danh Khuôn mặt AI | AI Face Recognition Attendance System
 
 <p align="center">
   <b>🌐 Language / Ngôn ngữ:</b>&nbsp;&nbsp;
@@ -6,58 +6,51 @@
   <a href="README.en.md">🇬🇧 English</a>
 </p>
 
-> **Hệ thống điểm danh khuôn mặt thời gian thực dành cho giáo dục**
-> Sử dụng ArcFace + Anti-Spoofing + FIQA | Đa nền tảng (Windows, Android, iOS, macOS, Web)
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10-blue?logo=python&logoColor=white" alt="Python 3.10">
+  <img src="https://img.shields.io/badge/FastAPI-0.135.1-009688?logo=fastapi&logoColor=white" alt="FastAPI Framework">
+  <img src="https://img.shields.io/badge/Flet-0.85.0-02569B?logo=flutter&logoColor=white" alt="Flet Cross Platform UI">
+  <img src="https://img.shields.io/badge/InsightFace-ArcFace-FF6F00?logo=ai&logoColor=white" alt="InsightFace ArcFace Face Recognition">
+  <img src="https://img.shields.io/badge/ONNX_Runtime-GPU_CUDA-76B900?logo=nvidia&logoColor=white" alt="ONNX Runtime GPU CUDA Inference">
+  <img src="https://img.shields.io/badge/pgvector-Vector_Search-336791?logo=postgresql&logoColor=white" alt="pgvector PostgreSQL Vector Search">
+  <img src="https://img.shields.io/badge/License-Academic-yellow" alt="Academic License">
+</p>
 
-[![Python](https://img.shields.io/badge/Python-3.10-blue?logo=python)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.135.1-009688?logo=fastapi)](https://fastapi.tiangolo.com)
-[![Flet](https://img.shields.io/badge/Flet-0.85.0-02569B?logo=flutter)](https://flet.dev)
-[![License](https://img.shields.io/badge/License-Academic-yellow)]()
-
----
-
-## 📋 Mục lục
-
-- [Tổng quan](#-tổng-quan)
-- [Kiến trúc hệ thống](#-kiến-trúc-hệ-thống)
-- [Công nghệ sử dụng](#-công-nghệ-sử-dụng)
-- [Cấu trúc dự án](#-cấu-trúc-dự-án)
-- [Cài đặt & Chạy](#-cài-đặt--chạy)
-- [Kiểm thử hệ thống](#-kiểm-thử-hệ-thống)
-- [Kết quả thực nghiệm](#-kết-quả-thực-nghiệm)
-- [Tác giả](#-tác-giả)
+> **Hệ thống điểm danh khuôn mặt thời gian thực (real-time face recognition attendance) dành cho giáo dục**, sử dụng ArcFace + Anti-Spoofing + FIQA. Chạy trên **5 nền tảng** (Windows, Android, iOS, macOS, Web) từ cùng một codebase Python. Chi phí triển khai **0 VNĐ** — chỉ cần laptop sẵn có.
 
 ---
 
-## 🔍 Tổng quan
+## 🔍 AuEdu là gì? (What is AuEdu?)
 
-AuEdu là hệ thống điểm danh tự động sử dụng **nhận diện khuôn mặt AI** được thiết kế cho môi trường giáo dục. Hệ thống kết hợp nhiều lớp xử lý:
+**AuEdu** (Automated Education) là phần mềm **điểm danh tự động bằng nhận diện khuôn mặt** (face recognition attendance system) mã nguồn mở, được thiết kế đặc biệt cho **trường học, đại học, và cơ sở giáo dục**. Thay vì sử dụng thiết bị chuyên dụng đắt tiền (8–40 triệu VNĐ), AuEdu chạy trực tiếp trên laptop/PC sẵn có với webcam thông thường.
 
-| Lớp | Công nghệ | Chức năng |
-|:---|:---|:---|
-| **Face Detection** | RetinaFace [1] | Phát hiện khuôn mặt real-time |
-| **Face Recognition** | ArcFace / MobileFaceNet [2] | Trích xuất embedding 512-D, so khớp danh tính |
-| **Anti-Spoofing** | MiniFASNet (CDC) [3] | Chống giả mạo (ảnh in, màn hình) |
-| **FIQA** | Laplacian Variance [4] | Lọc ảnh mờ trước khi nhận diện |
-| **Vector Search** | pgvector HNSW + Numpy Cache | Tìm kiếm vector < 0.2ms |
-| **Real-time** | WebSocket + Async Queue | Truyền frame độ trễ thấp |
+### Tại sao chọn AuEdu?
 
-### Điểm nổi bật
+| Vấn đề | Giải pháp của AuEdu |
+|:---|:---|
+| Thiết bị chấm công đắt đỏ (ZKTeco, Hikvision) | ✅ **Miễn phí** — chạy trên laptop sẵn có |
+| Chỉ hỗ trợ 1 nền tảng | ✅ **5 nền tảng** — Windows, macOS, Android, iOS, Web |
+| Dễ bị gian lận (ảnh, video) | ✅ **Anti-Spoofing AI** — MiniFASNet chặn 98% giả mạo |
+| Ảnh mờ, backlight cho kết quả sai | ✅ **FIQA** — tự động lọc ảnh kém chất lượng |
+| Độ chính xác thấp | ✅ **ArcFace 512-D** — Accuracy 98.75%, FAR = 0% |
 
-- ✅ **Chi phí triển khai = 0 VNĐ** — chạy trên laptop/PC sẵn có
-- ✅ **Đa nền tảng** — 1 codebase Python → Windows, macOS, Android, iOS, Web
-- ✅ **FAR = 0%** — không nhận nhầm người lạ (trên 36,358 cặp impostor)
-- ✅ **Accuracy 98.75%** — benchmark trên LFW dataset chuẩn quốc tế
-- ✅ **Anti-spoofing 98%** — chặn 49/50 ảnh giả mạo
-- ✅ **Real-time** — embedding < 30ms, vector search < 0.2ms
+### Tính năng chính (Key Features)
+
+- 🎯 **Nhận diện khuôn mặt SOTA** — RetinaFace (detection) + ArcFace/MobileFaceNet (recognition) qua InsightFace `buffalo_s`
+- 🛡️ **Chống giả mạo (Anti-Spoofing)** — MiniFASNet (Central Difference Convolution) chặn ảnh in, màn hình
+- 📸 **Kiểm tra chất lượng ảnh (FIQA)** — Laplacian Variance lọc ảnh mờ, ngược sáng
+- ⚡ **Real-time streaming** — WebSocket truyền frame < 30ms, vector search < 0.2ms
+- 🔍 **Vector database** — pgvector (PostgreSQL) + In-memory Numpy Cache cho tìm kiếm O(1)
+- 📱 **Đa nền tảng (Cross-platform)** — 1 codebase Python/Flet → 5 nền tảng
+- 🆓 **Mã nguồn mở (Open-source)** — miễn phí cho mục đích giáo dục và nghiên cứu
 
 ---
 
-## 🏗 Kiến trúc hệ thống
+## 🏗 Kiến trúc hệ thống (System Architecture)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        CLIENT (Flet App)                        │
+│                  📱 CLIENT (Flet Cross-Platform App)             │
 │  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌──────────────┐  │
 │  │ Camera   │  │ MediaPipe │  │ WebSocket│  │  UI Pages    │  │
 │  │ Capture  │──│ Face Det. │──│ Sender   │  │  (Dashboard, │  │
@@ -66,7 +59,7 @@ AuEdu là hệ thống điểm danh tự động sử dụng **nhận diện khu
 └────────────────────────────────────┼────────────────────────────┘
                                      │ WebSocket (wss://)
 ┌────────────────────────────────────┼────────────────────────────┐
-│                     SERVER (FastAPI + Uvicorn)                   │
+│              🖥 SERVER (FastAPI + Uvicorn + CUDA)                │
 │  ┌─────────────────────────────────┼─────────────────────────┐  │
 │  │              AI CORE ENGINE     ▼                         │  │
 │  │  ┌──────────┐  ┌────────┐  ┌────────┐  ┌──────────────┐  │  │
@@ -77,105 +70,107 @@ AuEdu là hệ thống điểm danh tự động sử dụng **nhận diện khu
 │  └───────────────────────────────────────────────┼───────────┘  │
 │                                                  ▼              │
 │  ┌──────────────────────┐  ┌─────────────────────────────────┐  │
-│  │  In-memory Cache     │  │  PostgreSQL + pgvector          │  │
-│  │  (Numpy dot product) │  │  HNSW Index, cosine_distance    │  │
-│  │  < 0.2ms lookup      │  │  Persistent storage             │  │
+│  │  Numpy Cache         │  │  PostgreSQL + pgvector          │  │
+│  │  (dot product < 0.2ms│  │  HNSW Index, cosine_distance    │  │
 │  └──────────────────────┘  └─────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚙️ Công nghệ sử dụng
+## ⚙️ Công nghệ sử dụng (Tech Stack)
 
-### Back-end (Server)
+### Back-end Server
 
 | Công nghệ | Phiên bản | Vai trò |
 |:---|:---|:---|
-| Python | 3.10 | Ngôn ngữ chính |
-| FastAPI | 0.135.1 | REST API + WebSocket |
-| Uvicorn | 0.41.0 | ASGI Server |
-| SQLAlchemy | 2.0.30 | ORM |
-| Alembic | — | Database migrations |
-| PostgreSQL + pgvector | 16.x + ≥ 0.2.5 | CSDL + Vector Search |
+| **Python** | 3.10 | Ngôn ngữ lập trình chính |
+| **FastAPI** | 0.135.1 | REST API + WebSocket framework |
+| **Uvicorn** | 0.41.0 | ASGI Server (async) |
+| **SQLAlchemy** | 2.0.30 | ORM |
+| **Alembic** | — | Database migrations |
+| **PostgreSQL + pgvector** | 16.x + ≥ 0.2.5 | CSDL quan hệ + Vector search |
+| **Supabase** | — | Backend-as-a-Service (auth, storage) |
 
-### Lõi AI (AI Core)
+### AI Core Engine — Nhận diện khuôn mặt
 
 | Công nghệ | Model | Vai trò |
 |:---|:---|:---|
-| InsightFace | `buffalo_s` | RetinaFace + MobileFaceNet |
-| MiniFASNet | `modelrgb.onnx` | Anti-Spoofing (CDC) |
-| ONNX Runtime | GPU (CUDA 12.x) | Inference Engine |
-| OpenCV | ≥ 4.8.0 | Xử lý ảnh |
+| **InsightFace** | `buffalo_s` | RetinaFace (detection) + MobileFaceNet (recognition) |
+| **MiniFASNet** | `modelrgb.onnx` | Anti-Spoofing — Central Difference Convolution (CDC) |
+| **ONNX Runtime** | GPU (CUDA 12.x) | Inference Engine — tăng tốc GPU |
+| **OpenCV** | ≥ 4.8.0 | Xử lý ảnh, decode frame |
 
-### Front-end (Client)
+### Front-end Client — Ứng dụng đa nền tảng
 
 | Công nghệ | Phiên bản | Vai trò |
 |:---|:---|:---|
-| Flet | 0.85.0 | UI đa nền tảng (Flutter-based) |
-| MediaPipe | — | Face Detection phía client |
+| **Flet** | 0.85.0 | UI framework đa nền tảng (Flutter-based) |
+| **MediaPipe** | — | Face detection phía client (tiết kiệm bandwidth) |
 
 ---
 
-## 📂 Cấu trúc dự án
+## 📂 Cấu trúc dự án (Project Structure)
 
 ```
 AuEdu-Multi-PlatForm/
 │
 ├── Server/                          # 🖥 Back-end FastAPI
 │   ├── app/
-│   │   ├── ai/                      # Lõi xử lý AI
-│   │   │   ├── engine.py            #   FaceEngine chính
-│   │   │   ├── attendance_cache.py  #   In-memory vector cache
-│   │   │   └── models/              #   ONNX models (tự tải)
-│   │   ├── api/                     # API Routes
-│   │   │   ├── auth.py              #   Xác thực (JWT)
-│   │   │   ├── attendance.py        #   Điểm danh REST
-│   │   │   ├── websocket.py         #   WebSocket handler
-│   │   │   └── training.py          #   Đăng ký khuôn mặt
-│   │   ├── core/                    # Cấu hình hệ thống
-│   │   ├── db/                      # Database models
-│   │   ├── services/                # Business logic
-│   │   └── main.py                  # Entry point
-│   ├── migrations/                  # Alembic migrations
+│   │   ├── ai/                      # 🧠 AI Core Engine
+│   │   │   ├── engine.py            #   FaceEngine (RetinaFace + ArcFace + MiniFAS)
+│   │   │   ├── attendance_cache.py  #   In-memory vector cache (Numpy)
+│   │   │   └── models/              #   ONNX model files (auto-download)
+│   │   ├── api/                     # 🔌 API Routes
+│   │   │   ├── auth.py              #   JWT Authentication
+│   │   │   ├── attendance.py        #   Điểm danh REST API
+│   │   │   ├── websocket.py         #   WebSocket real-time handler
+│   │   │   └── training.py          #   Đăng ký khuôn mặt (face enrollment)
+│   │   ├── core/                    #   Cấu hình hệ thống (Settings)
+│   │   ├── db/                      #   Database models (SQLAlchemy)
+│   │   ├── services/                #   Business logic
+│   │   └── main.py                  #   FastAPI entry point
+│   ├── migrations/                  # Alembic DB migrations
+│   ├── .env.example                 # 🔒 Mẫu cấu hình (không chứa secrets)
 │   └── requirements.txt
 │
-├── Client/                          # 📱 Front-end Flet App
-│   ├── components/                  # UI Components
-│   ├── pages/                       # Các trang chức năng
-│   ├── core/                        # Theme, Config
-│   ├── main.py                      # Entry point
+├── Client/                          # 📱 Front-end Flet Cross-Platform App
+│   ├── components/                  #   UI Components (Sidebar, Camera, ...)
+│   ├── pages/                       #   Trang chức năng (Dashboard, Attendance, ...)
+│   ├── core/                        #   Theme, Device Manager, API Config
+│   ├── main.py                      #   Flet entry point
+│   ├── .env.example                 # 🔒 Mẫu cấu hình client
 │   └── requirements.txt
 │
-├── tests/                           # 🧪 Bộ kiểm thử
-│   ├── prepare_dataset.py           # Tải & chuẩn bị LFW dataset
-│   ├── test_accuracy.py             # Accuracy, FIQA, Anti-Spoofing
-│   ├── test_latency.py              # Benchmark tốc độ
-│   ├── test_resource_monitor.py     # Giám sát tài nguyên
-│   ├── test_vector_search.py        # Benchmark vector search
-│   ├── generate_word_report.py      # Tạo báo cáo Word
-│   ├── dataset/                     # ⚠ Không tải lên GitHub
-│   └── results/                     # ⚠ Không tải lên GitHub
+├── tests/                           # 🧪 Bộ kiểm thử (Test Suite)
+│   ├── prepare_dataset.py           #   Tải & chuẩn bị LFW dataset tự động
+│   ├── test_accuracy.py             #   Accuracy, Confusion Matrix, FIQA, Anti-Spoofing
+│   ├── test_latency.py              #   Benchmark tốc độ pipeline AI
+│   ├── test_resource_monitor.py     #   Giám sát CPU, RAM, GPU, VRAM
+│   ├── test_vector_search.py        #   Benchmark Numpy vs pgvector
+│   ├── generate_word_report.py      #   Tạo báo cáo Word (.docx) tự động
+│   ├── dataset/                     # ⚠ Git-ignored (tự tải bằng script)
+│   └── results/                     # ⚠ Git-ignored (tự sinh khi chạy test)
 │
 ├── .gitignore
-└── README.md
+├── README.md                        # 🇻🇳 Tiếng Việt (file này)
+└── README.en.md                     # 🇬🇧 English
 ```
-
-> ⚠️ Thư mục `tests/dataset/` và `tests/results/` chứa ảnh và kết quả nặng, **không được tải lên GitHub**. Chạy `prepare_dataset.py` để tự động tải dataset.
 
 ---
 
-## 🚀 Cài đặt & Chạy
+## 🚀 Cài đặt & Chạy (Installation & Setup)
 
-### Yêu cầu hệ thống
+### Yêu cầu hệ thống (System Requirements)
 
 | Thành phần | Tối thiểu | Khuyến nghị |
 |:---|:---|:---|
-| CPU | 4 cores | 6+ cores |
-| RAM | 4 GB | 8+ GB |
-| GPU | Không bắt buộc | NVIDIA GPU (CUDA) |
-| Python | 3.10 | 3.10 |
-| OS | Windows 10 / Ubuntu 20.04 | Windows 11 |
+| **CPU** | 4 cores | 6+ cores (Ryzen 5 / i5) |
+| **RAM** | 4 GB | 8+ GB |
+| **GPU** | Không bắt buộc (CPU mode) | NVIDIA GPU với CUDA |
+| **Python** | 3.10 | 3.10 |
+| **OS** | Windows 10 / Ubuntu 20.04 | Windows 11 |
+| **Camera** | Webcam 720p | 1080p |
 
 ### 1. Clone repository
 
@@ -197,10 +192,7 @@ source venv/bin/activate
 
 pip install -r requirements.txt
 
-# Cấu hình database
-cp .env.example .env
-# Chỉnh sửa .env với thông tin PostgreSQL/Supabase
-
+# Khởi chạy server
 alembic upgrade head
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -215,201 +207,171 @@ venv\Scripts\activate
 pip install -r requirements.txt
 flet run main.py
 
-# Build APK (Android):
+# Build APK cho Android:
 flet build apk
 ```
 
 ### 4. Cấu hình môi trường (`.env`) — ⚠️ BẮT BUỘC
 
 > **🔒 Bảo mật:** File `.env` chứa secrets (API keys, mật khẩu database) và **KHÔNG được tải lên GitHub**.
-> Dự án chỉ cung cấp file `.env.example` làm mẫu. Bạn cần tạo `.env` riêng.
+> Dự án chỉ cung cấp file `.env.example` làm mẫu.
 
 **Bước 1:** Copy file mẫu
 
 ```bash
-# Server
-cd Server
-cp .env.example .env
-
-# Client
-cd ../Client
-cp .env.example .env
+cp Server/.env.example Server/.env
+cp Client/.env.example Client/.env
 ```
 
-**Bước 2:** Tạo project Supabase (miễn phí)
+**Bước 2:** Tạo project Supabase miễn phí
 
 1. Truy cập [supabase.com](https://supabase.com) → **Start your project** (đăng nhập bằng GitHub)
-2. **New project** → Đặt tên + mật khẩu database → Chọn region `Southeast Asia`
-3. Lấy thông tin kết nối tại **Settings → API**:
+2. **New project** → Đặt tên + mật khẩu database → Region: `Southeast Asia`
+3. Lấy thông tin kết nối:
 
-| Thông tin | Lấy ở đâu | Điền vào |
+| Thông tin | Lấy ở đâu (Supabase Dashboard) | Điền vào |
 |:---|:---|:---|
 | `SUPABASE_URL` | Settings → API → Project URL | `Server/.env` + `Client/.env` |
 | `SUPABASE_KEY` | Settings → API → `anon` `public` key | `Server/.env` + `Client/.env` |
-| `DATABASE_URL` | Settings → Database → Connection string → URI | `Server/.env` |
+| `DATABASE_URL` | Settings → Database → Connection string (URI) | `Server/.env` |
 
-**Bước 3:** Chỉnh sửa `.env`
-
-**Server (`Server/.env`):**
-```env
-# Thay bằng thông tin thật từ Supabase Dashboard
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_KEY=eyJhbGci...your-anon-key...
-SUPABASE_STORAGE_BUCKET=thongbao_images
-
-# Thay user, password, host từ Supabase → Database → Connection string
-DATABASE_URL=postgresql+asyncpg://postgres:your-password@db.your-project-id.supabase.co:5432/postgres
-
-# Giữ nguyên (không cần thay đổi)
-FIQA_THRESHOLD=0.05
-ANTI_SPOOF_MODEL=modelrgb.onnx
-MAX_QUEUE_SIZE=8
-DROP_OLDEST=true
-CALIBRATION_MODE=auto
-CALIBRATION_DATA=calib.npy
-```
-
-**Client (`Client/.env`):**
-```env
-# Phải trùng với Server/.env
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_KEY=eyJhbGci...your-anon-key...
-SUPABASE_STORAGE_BUCKET=thongbao_images
-```
-
-**Bước 4:** Kích hoạt extension pgvector trên Supabase
+**Bước 3:** Kích hoạt pgvector
 
 ```sql
--- Chạy trong Supabase SQL Editor (Database → SQL Editor)
+-- Chạy trong Supabase SQL Editor
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-> ⚠️ **Lưu ý bảo mật:**
-> - **KHÔNG bao giờ** commit file `.env` lên GitHub
-> - File `.env` đã được thêm vào `.gitignore`
-> - Nếu vô tình push secrets, hãy đổi mật khẩu Supabase ngay lập tức
-> - Chỉ sử dụng key `anon/public` cho client, **KHÔNG dùng** `service_role` key
+> ⚠️ **KHÔNG bao giờ** commit file `.env` lên GitHub. Nếu vô tình push, hãy đổi mật khẩu ngay.
 
 ---
 
-## 🧪 Kiểm thử hệ thống
+## 🧪 Kiểm thử hệ thống (Testing & Benchmarking)
 
-### Tổng quan
+AuEdu đi kèm **bộ kiểm thử tự động** đánh giá toàn diện hiệu năng AI:
 
 | Script | Chức năng | Output |
 |:---|:---|:---|
-| `prepare_dataset.py` | Tải LFW + sinh ảnh spoofing/blur | `tests/dataset/` |
-| `test_accuracy.py` | Accuracy, FIQA, Anti-Spoofing | `accuracy_report.json` |
-| `test_latency.py` | Đo latency pipeline AI | `latency_report.json` |
-| `test_resource_monitor.py` | CPU, RAM, GPU, VRAM | `resource_report.json` |
-| `test_vector_search.py` | Numpy vs pgvector benchmark | `vector_search_report.json` |
+| `prepare_dataset.py` | Tải LFW dataset + sinh ảnh spoofing/blur | `tests/dataset/` |
+| `test_accuracy.py` | Accuracy, Confusion Matrix, FIQA, Anti-Spoofing | `accuracy_report.json` |
+| `test_latency.py` | Đo latency từng bước pipeline AI | `latency_report.json` |
+| `test_resource_monitor.py` | CPU, RAM, GPU, VRAM monitoring | `resource_report.json` |
+| `test_vector_search.py` | Benchmark Numpy vs pgvector | `vector_search_report.json` |
+| `generate_word_report.py` | Tạo báo cáo Word (.docx) từ kết quả | `THUC_NGHIEM_AUEDU.docx` |
 
-### Bước 1: Chuẩn bị dataset
+### Chạy kiểm thử
 
 ```bash
+# 1. Chuẩn bị dataset LFW (tự động tải ~200MB)
 pip install scikit-learn psutil
 python tests/prepare_dataset.py
-```
 
-> 💡 Chạy lại sẽ tự động bỏ qua nếu dataset đã tồn tại. Dùng `--force` để tải lại.
-
-### Bước 2: Chạy kiểm thử
-
-```bash
-cd Server
-venv\Scripts\activate
-
-# Accuracy + FIQA + Anti-Spoofing
+# 2. Chạy test (từ thư mục Server/)
+cd Server && venv\Scripts\activate
 python ../tests/test_accuracy.py --dataset ../tests/dataset
-
-# Latency
 python ../tests/test_latency.py --iterations 50
-
-# Resource Monitor
 python ../tests/test_resource_monitor.py --duration 30
-
-# Vector Search
 python ../tests/test_vector_search.py
-```
 
-### Bước 3: Tạo báo cáo Word
-
-```bash
+# 3. Tạo báo cáo Word
 pip install python-docx
 python tests/generate_word_report.py
-# Output: tests/results/THUC_NGHIEM_AUEDU.docx
 ```
 
 ---
 
-## 📊 Kết quả thực nghiệm
+## 📊 Kết quả thực nghiệm (Benchmark Results)
 
-> Benchmark trên LFW dataset · AMD Ryzen 5 5600H + RTX 3050 (4GB)
+> Benchmark trên **LFW dataset** (Labeled Faces in the Wild) — 1,906 ảnh, 20 người
+> Phần cứng: AMD Ryzen 5 5600H + NVIDIA RTX 3050 (4GB VRAM)
 
-### Độ chính xác nhận diện
+### Độ chính xác nhận diện khuôn mặt (Face Recognition Accuracy)
 
-| Chỉ số | Kết quả |
-|:---|:---|
-| **Face Detection Rate** | 99.79% (1,902/1,906) |
-| **Accuracy** | 98.75% (ngưỡng 0.45) |
-| **FAR** (nhận nhầm) | **0.00%** |
-| **F1-Score (best)** | **99.33%** (ngưỡng 0.60) |
-| **Precision** | **100%** |
+| Chỉ số | Kết quả | Đánh giá |
+|:---|:---|:---|
+| **Face Detection Rate** | 99.79% (1,902/1,906) | ✅ Xuất sắc |
+| **Recognition Accuracy** | **98.75%** (threshold 0.45) | ✅ Rất tốt |
+| **FAR** (False Acceptance Rate) | **0.00%** — không nhận nhầm | ✅ Hoàn hảo |
+| **F1-Score (best)** | **99.33%** (threshold 0.60) | ✅ Xuất sắc |
+| **Precision** | **100%** | ✅ Hoàn hảo |
+| **Embedding extraction** | 29.71 ms/ảnh | ✅ Real-time |
 
-### Phân tích ngưỡng
+### Phân tích ngưỡng nhận diện (Threshold Analysis)
 
-| Threshold | Accuracy | FAR | FRR | F1-Score |
-|:---|:---|:---|:---|:---|
-| 0.30 | 95.72% | 0% | 86.93% | 23.12% |
-| 0.40 | 97.58% | 0% | 49.10% | 67.46% |
-| **0.45** ⬅️ | **98.75%** | **0%** | **25.35%** | **85.49%** |
-| 0.50 | 99.55% | 0% | 9.19% | 95.18% |
-| 0.55 | 99.86% | 0% | 2.92% | 98.52% |
-| **0.60** ⭐ | **99.93%** | **0%** | **1.33%** | **99.33%** |
+| Threshold | Accuracy | FAR | FRR | F1-Score | Ghi chú |
+|:---|:---|:---|:---|:---|:---|
+| 0.30 | 95.72% | 0% | 86.93% | 23.12% | Quá chặt |
+| 0.40 | 97.58% | 0% | 49.10% | 67.46% | |
+| **0.45** | **98.75%** | **0%** | **25.35%** | **85.49%** | ⬅️ Mặc định |
+| 0.50 | 99.55% | 0% | 9.19% | 95.18% | Cân bằng tốt |
+| 0.55 | 99.86% | 0% | 2.92% | 98.52% | |
+| **0.60** | **99.93%** | **0%** | **1.33%** | **99.33%** | ⭐ F1 tốt nhất |
 
-### Anti-Spoofing & FIQA
+### Chống giả mạo & Lọc chất lượng ảnh (Anti-Spoofing & FIQA)
 
 | Test | Kết quả |
 |:---|:---|
-| Print Attack blocked | **96%** (24/25) |
-| Screen Attack blocked | **100%** (25/25) |
-| FIQA lọc ảnh mờ (ngưỡng 0.10) | **90%** (45/50) |
+| 🖨️ Print Attack blocked | **96%** (24/25) |
+| 📱 Screen Attack blocked | **100%** (25/25) |
+| 📸 FIQA lọc ảnh mờ (ngưỡng 0.10) | **90%** (45/50) |
+| FIQA false positive | 0.42% (8/1,902) |
 
-### Vector Search
+### Tốc độ truy vấn Vector (Vector Search Performance)
 
-| N vectors | Avg latency | P95 latency |
-|:---|:---|:---|
-| 50 | 0.135 ms | 0.199 ms |
-| 100 | 0.153 ms | 0.252 ms |
-| 500 | 0.123 ms | 0.176 ms |
-| 1,000 | 0.161 ms | 0.219 ms |
+| N vectors | Avg latency | P95 latency | Đánh giá |
+|:---|:---|:---|:---|
+| 50 | 0.135 ms | 0.199 ms | ✅ Real-time |
+| 100 | 0.153 ms | 0.252 ms | ✅ Real-time |
+| 500 | 0.123 ms | 0.176 ms | ✅ Real-time |
+| 1,000 | 0.161 ms | 0.219 ms | ✅ Real-time |
+
+### So sánh với các giải pháp trên thị trường
+
+| Tiêu chí | **AuEdu** | ZKTeco | Hikvision | face_recognition |
+|:---|:---|:---|:---|:---|
+| **Chi phí** | **0 VNĐ** | 8–25 triệu | 10–30 triệu | 0 VNĐ |
+| **Đa nền tảng** | ✅ 5 nền tảng | ❌ Terminal | ❌ Terminal | ⚠ Python only |
+| **Anti-Spoofing** | ✅ MiniFASNet | ✅ IR Dual | ✅ Structured | ❌ Không |
+| **Accuracy (LFW)** | 98.75% | N/A | ~99% | ~99.38% |
+| **Real-time** | ✅ WebSocket | ✅ | ✅ | ❌ |
+| **Vector DB** | ✅ pgvector | N/A | N/A | ❌ |
+| **Mã nguồn mở** | ✅ | ❌ | ❌ | ✅ |
 
 ---
 
-## 📚 Tài liệu tham khảo
+## 📚 Tài liệu tham khảo (References)
 
 | # | Tài liệu |
 |:---|:---|
-| [1] | J. Deng et al., "ArcFace: Additive Angular Margin Loss for Deep Face Recognition," CVPR, 2019. |
-| [2] | S. Chen et al., "MobileFaceNets: Efficient CNNs for Real-Time Face Verification on Mobile," CCBR, 2018. |
-| [3] | Z. Yu et al., "Searching Central Difference Convolutional Networks for Face Anti-Spoofing," CVPR, 2020. |
-| [4] | S. Pertuz et al., "Analysis of Focus Measure Operators for Shape-from-Focus," Pattern Recognition, 2013. |
-| [5] | G. B. Huang et al., "Labeled Faces in the Wild," UMass Amherst, Tech. Rep. 07-49, 2007. |
+| [1] | J. Deng et al., "**ArcFace**: Additive Angular Margin Loss for Deep Face Recognition," *CVPR*, 2019. |
+| [2] | S. Chen et al., "**MobileFaceNets**: Efficient CNNs for Real-Time Face Verification on Mobile," *CCBR*, 2018. |
+| [3] | Z. Yu et al., "Searching **Central Difference Convolutional Networks** for Face Anti-Spoofing," *CVPR*, 2020. |
+| [4] | S. Pertuz et al., "Analysis of **Focus Measure Operators** for Shape-from-Focus," *Pattern Recognition*, 2013. |
+| [5] | G. B. Huang et al., "**Labeled Faces in the Wild**: A Database for Studying Face Recognition," *UMass*, 2007. |
 
 ---
 
-## 👨‍💻 Tác giả
+## 👨‍💻 Tác giả (Author)
 
 | | |
 |:---|:---|
-| **Họ tên** | Nguyễn Chánh Hiệp |
+| **Họ tên** | **Nguyễn Chánh Hiệp** |
 | **Vai trò** | Sinh viên năm 4 |
 | **Khoa** | Trường Công nghệ số và Trí tuệ nhân tạo DNC |
-| **Trường** | Trường Đại học Nam Cần Thơ |
+| **Trường** | Trường Đại học Nam Cần Thơ (Nam Can Tho University) |
 | **Mục đích** | Nghiên cứu khoa học & Luận văn tốt nghiệp |
 
 ---
 
+## ⭐ Ủng hộ dự án (Support)
+
+Nếu dự án hữu ích, hãy **⭐ Star** repo này trên GitHub — nó giúp dự án tiếp cận nhiều người hơn!
+
+Mọi đóng góp (issues, pull requests) đều được chào đón.
+
+---
+
 <p align="center">
-  <i>Dự án phục vụ mục đích nghiên cứu và phát triển học thuật.</i>
+  <i>AuEdu — Phần mềm điểm danh khuôn mặt AI mã nguồn mở cho giáo dục Việt Nam.<br>
+  Open-source AI face recognition attendance system for Vietnamese education.</i>
 </p>

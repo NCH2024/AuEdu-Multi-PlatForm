@@ -264,13 +264,14 @@ class UserHomePage(ft.Container):
             ], spacing=15)
         ], spacing=0))
 
-    # Đã gỡ bỏ shadow để giữ đúng nguyên tắc thiết kế phẳng (Flat Design)
+    # Áp dụng đổ bóng (Shadow) cho PC để tăng chiều sâu, Mobile giữ thiết kế phẳng
     def make_pro_card(self, content, padding=20, ink=False, on_click=None):
         return ft.Container(
             content=content, padding=padding, border_radius=12,
             bgcolor=current_theme.surface_color,
             border=ft.Border.all(1, current_theme.divider_color),
-            ink=ink, on_click=on_click
+            ink=ink, on_click=on_click,
+            shadow=current_theme.shadow_main if self.is_desktop else None
         )
         
     def _build_desktop_class_table(self):

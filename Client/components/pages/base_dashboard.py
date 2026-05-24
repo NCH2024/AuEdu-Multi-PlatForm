@@ -122,6 +122,18 @@ class BaseDashboard(ft.Container):
                 visible=False
             )
 
+        # ─── KHỐI ĐẾM NGƯỢC PHIÊN (Session Timer) ───
+        self.session_timer_label = ft.Text("Thời hạn phiên Đăng nhập:", size=12, color=theme_module.current_theme.text_muted)
+        self.session_timer_text = ft.Text("--:--", size=13, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.text_muted)
+        self.session_timer_container = ft.Container(
+            content=ft.Row([self.session_timer_label, self.session_timer_text], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=theme_module.current_theme.surface_variant,
+            border=ft.Border.all(1, theme_module.current_theme.divider_color),
+            padding=ft.Padding(12, 6, 12, 6),
+            border_radius=20,
+            visible=False
+        )
+
         self.content_area = ft.Container(expand=True, padding=5, alignment=ft.Alignment.TOP_CENTER)
 
         self.sidebar_controls = []
@@ -302,6 +314,11 @@ class BaseDashboard(ft.Container):
         self.time_location_container.bgcolor = theme_module.current_theme.surface_variant
         self.time_location_container.border = ft.Border.all(1, theme_module.current_theme.divider_color)
 
+        self.session_timer_text.color = theme_module.current_theme.primary
+        self.session_timer_label.color = theme_module.current_theme.primary
+        self.session_timer_container.bgcolor = ft.Colors.with_opacity(0.1, theme_module.current_theme.primary)
+        self.session_timer_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.2, theme_module.current_theme.primary))
+
         saved_content = self.content_area.content
         self.content = self.build_layout()
         if saved_content is not None:
@@ -357,7 +374,7 @@ class BaseDashboard(ft.Container):
             self.app_page.update()
         
     async def _monitor_session(self):
-        """Vòng lặp chạy ngầm kiểm tra token mỗi 10 giây"""
+        """Vòng lặp chạy ngầm kiểm tra và hiển thị thời gian còn lại của phiên"""
         while True: 
             try:
                 if not self.page:
@@ -385,14 +402,41 @@ class BaseDashboard(ft.Container):
 
                     current_time = time.time()
                     
-                    if expires_at > 0 and current_time >= expires_at:
-                        await self.show_session_expired_dialog()
-                        break 
+                    if expires_at > 0:
+                        remaining = int(expires_at - current_time)
                         
+                        if remaining <= 0:
+                            await self.show_session_expired_dialog()
+                            break
+                        
+                        # Cập nhật UI đếm ngược
+                        mins, secs = divmod(remaining, 60)
+                        self.session_timer_text.value = f"{mins:02d}:{secs:02d}"
+                        self.session_timer_container.visible = True
+                        
+                        # Cảnh báo màu đỏ nếu dưới 5 phút
+                        if remaining < 300:
+                            self.session_timer_text.color = ft.Colors.RED_500
+                            self.session_timer_label.color = ft.Colors.RED_500
+                            self.session_timer_container.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.RED_500)
+                            self.session_timer_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.RED_500))
+                        else:
+                            self.session_timer_text.color = theme_module.current_theme.primary
+                            self.session_timer_label.color = theme_module.current_theme.primary
+                            self.session_timer_container.bgcolor = ft.Colors.with_opacity(0.1, theme_module.current_theme.primary)
+                            self.session_timer_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.2, theme_module.current_theme.primary))
+                            
+                        if getattr(self.session_timer_container, "page", None):
+                            self.session_timer_container.update()
+                            
                 except Exception as e:
                     print(f"Lỗi theo dõi phiên: {e}")
+            else:
+                self.session_timer_container.visible = False
+                if getattr(self.session_timer_container, "page", None):
+                    self.session_timer_container.update()
                     
-            await asyncio.sleep(10)
+            await asyncio.sleep(1) # Cập nhật mỗi giây để đếm ngược mượt mà
 
     async def _apply_theme_to_current_page(self):
         current_page = self.content_area.content
@@ -466,9 +510,9 @@ class BaseDashboard(ft.Container):
         self.active_route = route
         self.build_navigation()
 
-        if hasattr(self, "sidebar") and getattr(self.sidebar, "content", None):
-            self.sidebar.content.controls[0].controls = self.sidebar.content.controls[0].controls[:1] + self.sidebar_controls
-
+        if hasattr(self, "sidebar_column") and self.sidebar_column:
+            self.sidebar_column.controls[0].controls = self.sidebar_column.controls[0].controls[:1] + self.sidebar_controls
+        
         if hasattr(self, "bottom_nav") and getattr(self.bottom_nav, "content", None):
             self.bottom_nav.content.controls = self.bottom_nav_controls
 
@@ -480,7 +524,8 @@ class BaseDashboard(ft.Container):
         self.btn_menu_toggle.icon = ft.Icons.MENU_OPEN_ROUNDED if self.is_sidebar_expanded else ft.Icons.MENU_ROUNDED
         self.sidebar.width = 210 if self.is_sidebar_expanded else 70
         self.build_navigation()
-        self.sidebar.content.controls[0].controls = self.sidebar.content.controls[0].controls[:1] + self.sidebar_controls
+        if hasattr(self, "sidebar_column") and self.sidebar_column:
+            self.sidebar_column.controls[0].controls = self.sidebar_column.controls[0].controls[:1] + self.sidebar_controls
         
         if getattr(self, "page", None):
             self.update()
@@ -628,6 +673,7 @@ class BaseDashboard(ft.Container):
             margin=ft.Margin(5, 5, 5, 5) if not is_mobile else ft.Margin(0, 0, 0, 0),
             border_radius=14 if not is_mobile else 0,
             bgcolor=theme_module.current_theme.surface_color,
+            shadow=theme_module.current_theme.shadow_main if not is_mobile else None,
             border=None if not is_mobile else ft.Border(bottom=ft.BorderSide(1, theme_module.current_theme.divider_color)),
             alignment=ft.Alignment.TOP_CENTER,
             content=ft.Row(
@@ -640,7 +686,9 @@ class BaseDashboard(ft.Container):
                     ], expand=1),
                     
                     ft.Row([
-                        self.time_location_container 
+                        self.time_location_container,
+                        ft.Container(width=10, visible=not is_mobile),
+                        self.session_timer_container
                     ], alignment=ft.MainAxisAlignment.CENTER, expand=1),
                     
                     ft.Row(spacing=5, alignment=ft.MainAxisAlignment.END, controls=[
@@ -689,50 +737,62 @@ class BaseDashboard(ft.Container):
         on_secondary_color = ft.Colors.BLACK_87 if theme_module.current_theme.is_dark else ft.Colors.WHITE
         on_secondary_bg_overlay = ft.Colors.with_opacity(0.1, ft.Colors.BLACK) if theme_module.current_theme.is_dark else ft.Colors.with_opacity(0.1, ft.Colors.WHITE)
 
-        # Sidebar Desktop Nổi
-        self.sidebar = ft.Container(
-            width=210 if self.is_sidebar_expanded else 70,
-            margin=ft.Margin(5, 5, 0, 5) if not is_mobile else ft.Margin(0, 0, 0, 0),
-            border_radius=14 if not is_mobile else 0,
-            bgcolor=theme_module.current_theme.secondary,
-            animate=ft.Animation(250, ft.AnimationCurve.EASE_OUT),
-            content=ft.Column(
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                controls=[
-                    ft.Column(
-                        spacing=8, alignment=ft.MainAxisAlignment.START,
-                        controls=[
-                            ft.Container(
-                                padding=ft.Padding(0, 20, 0, 20), alignment=ft.Alignment(0, 0),
-                                # Admin: icon Shield, User: logo app
-                                content=ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS, size=35, color=ft.Colors.BLACK_87 if theme_module.current_theme.is_dark else ft.Colors.WHITE) if self.is_admin else ft.Image(src="icon-1.png", width=35, height=35, fit=ft.BoxFit.CONTAIN)
-                            )
-                        ] + self.sidebar_controls
-                    ),
-                    ft.Container(
-                        padding=ft.Padding(16, 12, 16, 12) if self.is_sidebar_expanded else ft.Padding(0, 12, 0, 12),
-                        margin=ft.Margin(10, 0, 10, 15), border_radius=12,
-                        ink=True, on_click=self.toggle_dark_mode,
-                        bgcolor=on_secondary_bg_overlay,
-                        visible=not is_mobile,
-                        content=ft.Row(
-                            alignment=ft.MainAxisAlignment.START if self.is_sidebar_expanded else ft.MainAxisAlignment.CENTER,
-                            controls=[
-                                ft.Icon(
-                                    ft.Icons.LIGHT_MODE_ROUNDED if theme_module.current_theme.is_dark else ft.Icons.DARK_MODE_ROUNDED,
-                                    color=on_secondary_color, size=22
-                                ),
-                                ft.Text(
-                                    "Chế độ: " + ("Sáng" if theme_module.current_theme.is_dark else "Tối"),
-                                    size=14, color=on_secondary_color, weight=ft.FontWeight.W_600,
-                                    visible=self.is_sidebar_expanded
-                                )
-                            ]
+        # Sidebar Desktop Nổi với hiệu ứng Glassmorphism (Kính mờ)
+        self.sidebar_column = ft.Column(
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            controls=[
+                ft.Column(
+                    spacing=8, alignment=ft.MainAxisAlignment.START,
+                    controls=[
+                        ft.Container(
+                            padding=ft.Padding(0, 20, 0, 20), alignment=ft.Alignment(0, 0),
+                            content=ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS, size=35, color=on_secondary_color) if self.is_admin else ft.Image(src="icon-1.png", width=35, height=35, fit=ft.BoxFit.CONTAIN)
                         )
+                    ] + self.sidebar_controls
+                ),
+                ft.Container(
+                    padding=ft.Padding(16, 12, 16, 12) if self.is_sidebar_expanded else ft.Padding(0, 12, 0, 12),
+                    margin=ft.Margin(10, 0, 10, 15), border_radius=12,
+                    ink=True, on_click=self.toggle_dark_mode,
+                    bgcolor=on_secondary_bg_overlay,
+                    visible=not is_mobile,
+                    content=ft.Row(
+                        alignment=ft.MainAxisAlignment.START if self.is_sidebar_expanded else ft.MainAxisAlignment.CENTER,
+                        controls=[
+                            ft.Icon(
+                                ft.Icons.LIGHT_MODE_ROUNDED if theme_module.current_theme.is_dark else ft.Icons.DARK_MODE_ROUNDED,
+                                color=on_secondary_color, size=22
+                            ),
+                            ft.Text(
+                                "Chế độ: " + ("Sáng" if theme_module.current_theme.is_dark else "Tối"),
+                                size=14, color=on_secondary_color, weight=ft.FontWeight.W_600,
+                                visible=self.is_sidebar_expanded
+                            )
+                        ]
                     )
-                ]
-            )
+                )
+            ]
         )
+
+        if not is_mobile:
+            # Sidebar PC: Phẳng, có Shadow để tạo chiều sâu (Không Blur, không nền ảnh)
+            self.sidebar = ft.Container(
+                width=210 if self.is_sidebar_expanded else 70,
+                margin=ft.Margin(5, 5, 0, 5),
+                border_radius=14,
+                bgcolor=theme_module.current_theme.secondary,
+                shadow=theme_module.current_theme.shadow_main,
+                animate=ft.Animation(250, ft.AnimationCurve.EASE_OUT),
+                content=self.sidebar_column
+            )
+        else:
+            # Layout Sidebar truyền thống cho Mobile
+            self.sidebar = ft.Container(
+                width=210 if self.is_sidebar_expanded else 70,
+                bgcolor=theme_module.current_theme.secondary,
+                animate=ft.Animation(250, ft.AnimationCurve.EASE_OUT),
+                content=self.sidebar_column
+            )
 
         self.bottom_nav = ft.Container(
             bgcolor=theme_module.current_theme.secondary,

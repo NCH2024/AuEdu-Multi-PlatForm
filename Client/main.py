@@ -48,7 +48,7 @@ async def main(page: ft.Page):
     # --- CẤU HÌNH WINDOWS / MAC / MOBILE CHO FLET 0.82.2 ---
     if page.platform == ft.PagePlatform.MACOS:
         # Trên Mac: Ẩn thanh tiêu đề nhưng giữ lại 3 nút đèn giao thông (Apple chuẩn mực)
-        page.window.title_bar_style = ft.WindowTitleBarStyle.HIDDEN
+        page.window.title_bar_style = "hidden"
     elif page.platform == ft.PagePlatform.WINDOWS:
         # Trên Windows: Ẩn hoàn toàn viền để lát nữa mình tự vẽ thanh Header tuỳ chỉnh
         page.window.title_bar_hidden = True
@@ -271,4 +271,4 @@ async def main(page: ft.Page):
             await page.push_route("/login")
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.run(main, assets_dir="assets")

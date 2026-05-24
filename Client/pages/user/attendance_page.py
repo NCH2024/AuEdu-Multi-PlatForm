@@ -142,8 +142,15 @@ class AttendancePage(ft.Container):
         self.info_mon_text.color = current_theme.text_muted
         self.info_ngay_text.color = current_theme.accent
 
+        is_mobile = self.app_page.width and self.app_page.width < 768
         def make_card(content):
-            return ft.Container(content=content, padding=15, bgcolor=current_theme.surface_color, border_radius=16, border=ft.Border.all(1, current_theme.divider_color))
+            return ft.Container(
+                content=content, padding=15, 
+                bgcolor=current_theme.surface_color, 
+                border_radius=16, 
+                border=ft.Border.all(1, current_theme.divider_color),
+                shadow=current_theme.shadow_main if not is_mobile else None
+            )
 
         nang_cao_content = ft.Column([
             ft.Button(content=ft.Text("Lịch sử điểm danh", color=ft.Colors.WHITE, size=12), 
@@ -395,7 +402,8 @@ class AttendancePage(ft.Container):
             )
             self.schedule_list_ui.controls.append(card)
 
-        if getattr(self, "page", None): self.schedule_dialog.update()
+        if getattr(self.schedule_dialog, "page", None): 
+            self.schedule_dialog.update()
 
     def open_schedule_dialog(self, e=None):
         self.schedule_dialog.open = True

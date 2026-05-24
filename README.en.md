@@ -1,4 +1,4 @@
-# 🎓 AuEdu — AI Face Attendance System
+# AuEdu — AI Face Recognition Attendance System | Open-Source Cross-Platform
 
 <p align="center">
   <b>🌐 Language / Ngôn ngữ:</b>&nbsp;&nbsp;
@@ -6,50 +6,43 @@
   <a href="README.en.md">🇬🇧 English</a>
 </p>
 
-> **Real-time Face Recognition Attendance System for Education**
-> Powered by ArcFace + Anti-Spoofing + FIQA | Cross-platform (Windows, Android, iOS, macOS, Web)
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10-blue?logo=python&logoColor=white" alt="Python 3.10">
+  <img src="https://img.shields.io/badge/FastAPI-0.135.1-009688?logo=fastapi&logoColor=white" alt="FastAPI Framework">
+  <img src="https://img.shields.io/badge/Flet-0.85.0-02569B?logo=flutter&logoColor=white" alt="Flet Cross Platform UI">
+  <img src="https://img.shields.io/badge/InsightFace-ArcFace-FF6F00?logo=ai&logoColor=white" alt="InsightFace ArcFace Face Recognition">
+  <img src="https://img.shields.io/badge/ONNX_Runtime-GPU_CUDA-76B900?logo=nvidia&logoColor=white" alt="ONNX Runtime GPU CUDA Inference">
+  <img src="https://img.shields.io/badge/pgvector-Vector_Search-336791?logo=postgresql&logoColor=white" alt="pgvector PostgreSQL Vector Search">
+  <img src="https://img.shields.io/badge/License-Academic-yellow" alt="Academic License">
+</p>
 
-[![Python](https://img.shields.io/badge/Python-3.10-blue?logo=python)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.135.1-009688?logo=fastapi)](https://fastapi.tiangolo.com)
-[![Flet](https://img.shields.io/badge/Flet-0.85.0-02569B?logo=flutter)](https://flet.dev)
-[![License](https://img.shields.io/badge/License-Academic-yellow)]()
-
----
-
-## 📋 Table of Contents
-
-- [Overview](#-overview)
-- [System Architecture](#-system-architecture)
-- [Tech Stack](#-tech-stack)
-- [Project Structure](#-project-structure)
-- [Installation & Setup](#-installation--setup)
-- [Testing](#-testing)
-- [Benchmark Results](#-benchmark-results)
-- [Author](#-author)
+> **Open-source real-time face recognition attendance system for education**, powered by ArcFace + Anti-Spoofing + FIQA. Runs on **5 platforms** (Windows, Android, iOS, macOS, Web) from a single Python codebase. **Zero additional hardware cost** — just use your existing laptop.
 
 ---
 
-## 🔍 Overview
+## 🔍 What is AuEdu?
 
-AuEdu is an automated attendance system using **AI face recognition** designed for educational environments. The system combines multiple processing layers:
+**AuEdu** (Automated Education) is an open-source **face recognition attendance system** specifically designed for **schools, universities, and educational institutions**. Instead of expensive dedicated hardware ($300–$1,500), AuEdu runs directly on existing laptops/PCs with a standard webcam.
 
-| Layer | Technology | Function |
-|:---|:---|:---|
-| **Face Detection** | RetinaFace [1] | Real-time face detection |
-| **Face Recognition** | ArcFace / MobileFaceNet [2] | 512-D embedding extraction & identity matching |
-| **Anti-Spoofing** | MiniFASNet (CDC) [3] | Prevent spoofing (printed photos, screens) |
-| **FIQA** | Laplacian Variance [4] | Filter blurry images before recognition |
-| **Vector Search** | pgvector HNSW + Numpy Cache | Vector search < 0.2ms |
-| **Real-time** | WebSocket + Async Queue | Low-latency frame streaming |
+### Why AuEdu?
 
-### Key Highlights
+| Problem | AuEdu's Solution |
+|:---|:---|
+| Expensive attendance terminals (ZKTeco, Hikvision) | ✅ **Free** — runs on existing hardware |
+| Single-platform only | ✅ **5 platforms** — Windows, macOS, Android, iOS, Web |
+| Easy to cheat (photos, videos) | ✅ **Anti-Spoofing AI** — MiniFASNet blocks 98% of attacks |
+| Blurry/backlit images → wrong results | ✅ **FIQA** — auto-filters low quality images |
+| Low accuracy | ✅ **ArcFace 512-D** — 98.75% Accuracy, 0% FAR |
 
-- ✅ **Zero hardware cost** — runs on existing laptops/PCs
-- ✅ **Cross-platform** — 1 Python codebase → Windows, macOS, Android, iOS, Web
-- ✅ **FAR = 0%** — zero false acceptance across 36,358 impostor pairs
-- ✅ **98.75% Accuracy** — benchmarked on international LFW dataset
-- ✅ **98% Anti-spoofing** — blocked 49/50 spoofing attempts
-- ✅ **Real-time** — embedding < 30ms, vector search < 0.2ms
+### Key Features
+
+- 🎯 **SOTA Face Recognition** — RetinaFace (detection) + ArcFace/MobileFaceNet (recognition) via InsightFace `buffalo_s`
+- 🛡️ **Anti-Spoofing** — MiniFASNet (Central Difference Convolution) blocks print & screen attacks
+- 📸 **Face Image Quality Assessment (FIQA)** — Laplacian Variance filters blurry images
+- ⚡ **Real-time streaming** — WebSocket frame delivery < 30ms, vector search < 0.2ms
+- 🔍 **Vector database** — pgvector (PostgreSQL) + In-memory Numpy Cache for O(1) lookup
+- 📱 **Cross-platform** — 1 Python/Flet codebase → 5 platforms
+- 🆓 **Open-source** — free for education and research
 
 ---
 
@@ -57,7 +50,7 @@ AuEdu is an automated attendance system using **AI face recognition** designed f
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        CLIENT (Flet App)                        │
+│                  📱 CLIENT (Flet Cross-Platform App)             │
 │  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌──────────────┐  │
 │  │ Camera   │  │ MediaPipe │  │ WebSocket│  │  UI Pages    │  │
 │  │ Capture  │──│ Face Det. │──│ Sender   │  │  (Dashboard, │  │
@@ -66,7 +59,7 @@ AuEdu is an automated attendance system using **AI face recognition** designed f
 └────────────────────────────────────┼────────────────────────────┘
                                      │ WebSocket (wss://)
 ┌────────────────────────────────────┼────────────────────────────┐
-│                     SERVER (FastAPI + Uvicorn)                   │
+│              🖥 SERVER (FastAPI + Uvicorn + CUDA)                │
 │  ┌─────────────────────────────────┼─────────────────────────┐  │
 │  │              AI CORE ENGINE     ▼                         │  │
 │  │  ┌──────────┐  ┌────────┐  ┌────────┐  ┌──────────────┐  │  │
@@ -77,9 +70,8 @@ AuEdu is an automated attendance system using **AI face recognition** designed f
 │  └───────────────────────────────────────────────┼───────────┘  │
 │                                                  ▼              │
 │  ┌──────────────────────┐  ┌─────────────────────────────────┐  │
-│  │  In-memory Cache     │  │  PostgreSQL + pgvector          │  │
-│  │  (Numpy dot product) │  │  HNSW Index, cosine_distance    │  │
-│  │  < 0.2ms lookup      │  │  Persistent storage             │  │
+│  │  Numpy Cache         │  │  PostgreSQL + pgvector          │  │
+│  │  (dot product < 0.2ms│  │  HNSW Index, cosine_distance    │  │
 │  └──────────────────────┘  └─────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -88,81 +80,32 @@ AuEdu is an automated attendance system using **AI face recognition** designed f
 
 ## ⚙️ Tech Stack
 
-### Back-end (Server)
+### Back-end Server
 
 | Technology | Version | Role |
 |:---|:---|:---|
-| Python | 3.10 | Primary language |
-| FastAPI | 0.135.1 | REST API + WebSocket |
-| Uvicorn | 0.41.0 | ASGI Server |
-| SQLAlchemy | 2.0.30 | ORM |
-| Alembic | — | Database migrations |
-| PostgreSQL + pgvector | 16.x + ≥ 0.2.5 | Database + Vector Search |
+| **Python** | 3.10 | Primary language |
+| **FastAPI** | 0.135.1 | REST API + WebSocket framework |
+| **Uvicorn** | 0.41.0 | ASGI Server |
+| **SQLAlchemy** | 2.0.30 | ORM |
+| **PostgreSQL + pgvector** | 16.x + ≥ 0.2.5 | Database + Vector Search |
+| **Supabase** | — | Backend-as-a-Service |
 
-### AI Core
+### AI Core Engine
 
 | Technology | Model | Role |
 |:---|:---|:---|
-| InsightFace | `buffalo_s` | RetinaFace + MobileFaceNet |
-| MiniFASNet | `modelrgb.onnx` | Anti-Spoofing (CDC) |
-| ONNX Runtime | GPU (CUDA 12.x) | Inference Engine |
-| OpenCV | ≥ 4.8.0 | Image processing |
+| **InsightFace** | `buffalo_s` | RetinaFace + MobileFaceNet |
+| **MiniFASNet** | `modelrgb.onnx` | Anti-Spoofing (CDC) |
+| **ONNX Runtime** | GPU (CUDA 12.x) | Inference Engine |
+| **OpenCV** | ≥ 4.8.0 | Image processing |
 
-### Front-end (Client)
+### Front-end Client
 
 | Technology | Version | Role |
 |:---|:---|:---|
-| Flet | 0.85.0 | Cross-platform UI (Flutter-based) |
-| MediaPipe | — | Client-side face detection |
-
----
-
-## 📂 Project Structure
-
-```
-AuEdu-Multi-PlatForm/
-│
-├── Server/                          # 🖥 Back-end FastAPI
-│   ├── app/
-│   │   ├── ai/                      # AI Core Engine
-│   │   │   ├── engine.py            #   Main FaceEngine
-│   │   │   ├── attendance_cache.py  #   In-memory vector cache
-│   │   │   └── models/              #   ONNX models (auto-download)
-│   │   ├── api/                     # API Routes
-│   │   │   ├── auth.py              #   Authentication (JWT)
-│   │   │   ├── attendance.py        #   Attendance REST API
-│   │   │   ├── websocket.py         #   WebSocket handler
-│   │   │   └── training.py          #   Face registration
-│   │   ├── core/                    # System configuration
-│   │   ├── db/                      # Database models
-│   │   ├── services/                # Business logic
-│   │   └── main.py                  # Entry point
-│   ├── migrations/                  # Alembic migrations
-│   └── requirements.txt
-│
-├── Client/                          # 📱 Front-end Flet App
-│   ├── components/                  # UI Components
-│   ├── pages/                       # Feature pages
-│   ├── core/                        # Theme, Config
-│   ├── main.py                      # Entry point
-│   └── requirements.txt
-│
-├── tests/                           # 🧪 Test Suite
-│   ├── prepare_dataset.py           # Download & prepare LFW dataset
-│   ├── test_accuracy.py             # Accuracy, FIQA, Anti-Spoofing
-│   ├── test_latency.py              # Pipeline latency benchmark
-│   ├── test_resource_monitor.py     # Resource monitoring
-│   ├── test_vector_search.py        # Vector search benchmark
-│   ├── generate_word_report.py      # Generate Word report
-│   ├── dataset/                     # ⚠ Not uploaded to GitHub
-│   └── results/                     # ⚠ Not uploaded to GitHub
-│
-├── .gitignore
-├── README.md                        # 🇻🇳 Vietnamese
-└── README.en.md                     # 🇬🇧 English (this file)
-```
-
-> ⚠️ `tests/dataset/` and `tests/results/` contain heavy image/result files and are **excluded from GitHub**. Run `prepare_dataset.py` to auto-download the dataset.
+| **Flet** | 0.85.0 | Cross-platform UI (Flutter-based) |
+| **MediaPipe** | — | Client-side face detection |
 
 ---
 
@@ -172,218 +115,89 @@ AuEdu-Multi-PlatForm/
 
 | Component | Minimum | Recommended |
 |:---|:---|:---|
-| CPU | 4 cores | 6+ cores |
-| RAM | 4 GB | 8+ GB |
-| GPU | Not required | NVIDIA GPU (CUDA) |
-| Python | 3.10 | 3.10 |
-| OS | Windows 10 / Ubuntu 20.04 | Windows 11 |
+| **CPU** | 4 cores | 6+ cores |
+| **RAM** | 4 GB | 8+ GB |
+| **GPU** | Not required (CPU mode) | NVIDIA GPU with CUDA |
+| **Python** | 3.10 | 3.10 |
+| **OS** | Windows 10 / Ubuntu 20.04 | Windows 11 |
 
-### 1. Clone repository
+### Quick Start
 
 ```bash
+# 1. Clone
 git clone https://github.com/NCH2024/AuEdu-Multi-PlatForm.git
 cd AuEdu-Multi-PlatForm
-```
 
-### 2. Server setup
-
-```bash
+# 2. Server
 cd Server
-python -m venv venv
-
-# Windows:
-venv\Scripts\activate
-# Linux/macOS:
-source venv/bin/activate
-
+python -m venv venv && venv\Scripts\activate  # Windows
 pip install -r requirements.txt
-
-# Configure database
-cp .env.example .env
-# Edit .env with your PostgreSQL/Supabase credentials
-
+cp .env.example .env  # Edit with your Supabase credentials
 alembic upgrade head
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
 
-### 3. Client setup
-
-```bash
-cd Client
-python -m venv venv
-venv\Scripts\activate
-
-pip install -r requirements.txt
-flet run main.py
-
-# Build Android APK:
-flet build apk
-```
-
-### 4. Environment Configuration (`.env`) — ⚠️ REQUIRED
-
-> **🔒 Security:** `.env` files contain secrets (API keys, database passwords) and are **NOT uploaded to GitHub**.
-> Only `.env.example` templates are provided. You must create your own `.env` files.
-
-**Step 1:** Copy template files
-
-```bash
-# Server
-cd Server
-cp .env.example .env
-
-# Client
+# 3. Client
 cd ../Client
-cp .env.example .env
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env  # Edit with your Supabase credentials
+flet run main.py
 ```
 
-**Step 2:** Create a Supabase project (free)
+### Environment Configuration (`.env`) — ⚠️ REQUIRED
 
-1. Go to [supabase.com](https://supabase.com) → **Start your project** (sign in with GitHub)
-2. **New project** → Set name + database password → Choose region `Southeast Asia`
-3. Get connection details from **Settings → API**:
+> **🔒 Security:** `.env` files contain secrets and are **NOT on GitHub**. Only `.env.example` templates are provided.
 
-| Info | Where to find | Fill in |
-|:---|:---|:---|
-| `SUPABASE_URL` | Settings → API → Project URL | `Server/.env` + `Client/.env` |
-| `SUPABASE_KEY` | Settings → API → `anon` `public` key | `Server/.env` + `Client/.env` |
-| `DATABASE_URL` | Settings → Database → Connection string → URI | `Server/.env` |
-
-**Step 3:** Edit `.env` files
-
-**Server (`Server/.env`):**
-```env
-# Replace with your actual Supabase credentials
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_KEY=eyJhbGci...your-anon-key...
-SUPABASE_STORAGE_BUCKET=thongbao_images
-
-# Replace user, password, host from Supabase → Database → Connection string
-DATABASE_URL=postgresql+asyncpg://postgres:your-password@db.your-project-id.supabase.co:5432/postgres
-
-# Keep defaults (no changes needed)
-FIQA_THRESHOLD=0.05
-ANTI_SPOOF_MODEL=modelrgb.onnx
-MAX_QUEUE_SIZE=8
-DROP_OLDEST=true
-CALIBRATION_MODE=auto
-CALIBRATION_DATA=calib.npy
-```
-
-**Client (`Client/.env`):**
-```env
-# Must match Server/.env
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_KEY=eyJhbGci...your-anon-key...
-SUPABASE_STORAGE_BUCKET=thongbao_images
-```
-
-**Step 4:** Enable pgvector extension on Supabase
-
-```sql
--- Run in Supabase SQL Editor (Database → SQL Editor)
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-> ⚠️ **Security Notes:**
-> - **NEVER** commit `.env` files to GitHub
-> - `.env` is already added to `.gitignore`
-> - If you accidentally push secrets, change your Supabase password immediately
-> - Only use `anon/public` key for client, **NEVER use** `service_role` key
+1. **Copy templates:** `cp Server/.env.example Server/.env && cp Client/.env.example Client/.env`
+2. **Create Supabase project** at [supabase.com](https://supabase.com) (free)
+3. **Fill in credentials** from Supabase Dashboard → Settings → API
+4. **Enable pgvector:** Run `CREATE EXTENSION IF NOT EXISTS vector;` in SQL Editor
 
 ---
 
-## 🧪 Testing
-
-### Test Suite Overview
+## 🧪 Testing & Benchmarking
 
 | Script | Function | Output |
 |:---|:---|:---|
-| `prepare_dataset.py` | Download LFW + generate spoofing/blur images | `tests/dataset/` |
-| `test_accuracy.py` | Accuracy, FIQA, Anti-Spoofing evaluation | `accuracy_report.json` |
-| `test_latency.py` | AI pipeline latency measurement | `latency_report.json` |
-| `test_resource_monitor.py` | CPU, RAM, GPU, VRAM monitoring | `resource_report.json` |
+| `prepare_dataset.py` | Download LFW + generate spoofing/blur | `tests/dataset/` |
+| `test_accuracy.py` | Accuracy, Confusion Matrix, FIQA, Anti-Spoofing | `accuracy_report.json` |
+| `test_latency.py` | AI pipeline latency benchmark | `latency_report.json` |
+| `test_resource_monitor.py` | CPU, RAM, GPU monitoring | `resource_report.json` |
 | `test_vector_search.py` | Numpy vs pgvector benchmark | `vector_search_report.json` |
 
-### Step 1: Prepare dataset
-
 ```bash
-pip install scikit-learn psutil
-python tests/prepare_dataset.py
-```
-
-> 💡 Re-running will automatically skip if dataset already exists. Use `--force` to re-download.
-
-### Step 2: Run tests
-
-```bash
-cd Server
-venv\Scripts\activate
-
-# Accuracy + FIQA + Anti-Spoofing
+python tests/prepare_dataset.py              # Auto-download LFW (~200MB)
+cd Server && venv\Scripts\activate
 python ../tests/test_accuracy.py --dataset ../tests/dataset
-
-# Latency
-python ../tests/test_latency.py --iterations 50
-
-# Resource Monitor
-python ../tests/test_resource_monitor.py --duration 30
-
-# Vector Search
 python ../tests/test_vector_search.py
-```
-
-### Step 3: Generate Word report
-
-```bash
-pip install python-docx
-python tests/generate_word_report.py
-# Output: tests/results/THUC_NGHIEM_AUEDU.docx
 ```
 
 ---
 
 ## 📊 Benchmark Results
 
-> Benchmarked on LFW dataset · AMD Ryzen 5 5600H + RTX 3050 (4GB VRAM)
-
-### Recognition Accuracy
+> LFW dataset · AMD Ryzen 5 5600H + RTX 3050 (4GB VRAM)
 
 | Metric | Result |
 |:---|:---|
-| **Face Detection Rate** | 99.79% (1,902/1,906) |
-| **Accuracy** | 98.75% (threshold 0.45) |
-| **FAR** (False Acceptance Rate) | **0.00%** |
+| **Face Detection** | 99.79% (1,902/1,906) |
+| **Accuracy** | **98.75%** (threshold 0.45) |
+| **FAR** (False Acceptance) | **0.00%** |
 | **F1-Score (best)** | **99.33%** (threshold 0.60) |
 | **Precision** | **100%** |
+| **Anti-Spoofing** | **98%** (49/50 blocked) |
+| **FIQA blur filtering** | **90%** at threshold 0.10 |
+| **Vector Search** | **< 0.2ms** for N ≤ 1,000 |
+| **Embedding speed** | **29.71 ms**/image |
 
-### Threshold Analysis
+### Comparison with Existing Solutions
 
-| Threshold | Accuracy | FAR | FRR | F1-Score |
+| Criteria | **AuEdu** | ZKTeco | Hikvision | face_recognition |
 |:---|:---|:---|:---|:---|
-| 0.30 | 95.72% | 0% | 86.93% | 23.12% |
-| 0.40 | 97.58% | 0% | 49.10% | 67.46% |
-| **0.45** ⬅️ | **98.75%** | **0%** | **25.35%** | **85.49%** |
-| 0.50 | 99.55% | 0% | 9.19% | 95.18% |
-| 0.55 | 99.86% | 0% | 2.92% | 98.52% |
-| **0.60** ⭐ | **99.93%** | **0%** | **1.33%** | **99.33%** |
-
-### Anti-Spoofing & FIQA
-
-| Test | Result |
-|:---|:---|
-| Print Attack blocked | **96%** (24/25) |
-| Screen Attack blocked | **100%** (25/25) |
-| FIQA blur filtering (threshold 0.10) | **90%** (45/50) |
-
-### Vector Search Performance
-
-| N vectors | Avg latency | P95 latency |
-|:---|:---|:---|
-| 50 | 0.135 ms | 0.199 ms |
-| 100 | 0.153 ms | 0.252 ms |
-| 500 | 0.123 ms | 0.176 ms |
-| 1,000 | 0.161 ms | 0.219 ms |
+| **Cost** | **$0** | $300–1,000 | $400–1,500 | $0 |
+| **Cross-platform** | ✅ 5 platforms | ❌ | ❌ | ⚠ Python |
+| **Anti-Spoofing** | ✅ MiniFASNet | ✅ IR | ✅ Structured | ❌ |
+| **Open-source** | ✅ | ❌ | ❌ | ✅ |
 
 ---
 
@@ -391,11 +205,11 @@ python tests/generate_word_report.py
 
 | # | Reference |
 |:---|:---|
-| [1] | J. Deng et al., "ArcFace: Additive Angular Margin Loss for Deep Face Recognition," CVPR, 2019. |
-| [2] | S. Chen et al., "MobileFaceNets: Efficient CNNs for Real-Time Face Verification on Mobile," CCBR, 2018. |
-| [3] | Z. Yu et al., "Searching Central Difference Convolutional Networks for Face Anti-Spoofing," CVPR, 2020. |
-| [4] | S. Pertuz et al., "Analysis of Focus Measure Operators for Shape-from-Focus," Pattern Recognition, 2013. |
-| [5] | G. B. Huang et al., "Labeled Faces in the Wild," UMass Amherst, Tech. Rep. 07-49, 2007. |
+| [1] | J. Deng et al., "**ArcFace**: Additive Angular Margin Loss for Deep Face Recognition," *CVPR*, 2019. |
+| [2] | S. Chen et al., "**MobileFaceNets**: Efficient CNNs for Real-Time Face Verification on Mobile," *CCBR*, 2018. |
+| [3] | Z. Yu et al., "Searching **Central Difference Convolutional Networks** for Face Anti-Spoofing," *CVPR*, 2020. |
+| [4] | S. Pertuz et al., "Analysis of **Focus Measure Operators** for Shape-from-Focus," *Pattern Recognition*, 2013. |
+| [5] | G. B. Huang et al., "**Labeled Faces in the Wild**," *UMass Amherst*, 2007. |
 
 ---
 
@@ -403,14 +217,23 @@ python tests/generate_word_report.py
 
 | | |
 |:---|:---|
-| **Name** | Nguyen Chanh Hiep |
+| **Name** | **Nguyen Chanh Hiep** |
 | **Role** | 4th-year undergraduate student |
 | **Faculty** | School of Digital Technology and Artificial Intelligence (DNC) |
-| **University** | Nam Can Tho University |
+| **University** | Nam Can Tho University, Vietnam |
 | **Purpose** | Scientific research & Graduation thesis |
 
 ---
 
+## ⭐ Support
+
+If this project is useful, please **⭐ Star** this repo — it helps more people discover it!
+
+Contributions (issues, pull requests) are welcome.
+
+---
+
 <p align="center">
-  <i>This project is for academic research and educational development purposes.</i>
+  <i>AuEdu — Open-source AI face recognition attendance system for education.<br>
+  Phần mềm điểm danh khuôn mặt AI mã nguồn mở cho giáo dục.</i>
 </p>

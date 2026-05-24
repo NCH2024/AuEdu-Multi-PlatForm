@@ -17,6 +17,18 @@ class AppTheme:
         self.text_muted = "#9CA3AF" if self.is_dark else "#6B7280"
         self.divider_color = ft.Colors.with_opacity(0.1, ft.Colors.WHITE if self.is_dark else ft.Colors.BLACK)
 
+        # Đổ bóng (Shadow) - Chuẩn Flet mới nhất
+        self.shadow_main = ft.BoxShadow(
+            spread_radius=1,
+            blur_radius=15,
+            color=ft.Colors.with_opacity(0.08 if self.is_dark else 0.1, ft.Colors.BLACK),
+            offset=ft.Offset(0, 4),
+            blur_style=ft.BlurStyle.NORMAL,
+        )
+        
+        # Hiệu ứng mờ (Blur) - Chuẩn Flet mới nhất
+        self.glass_blur = ft.Blur(2,2)
+
         # ==========================================
         # 2. 4 BỘ MÀU (PALETTES) ĐÃ TỐI ƯU TƯƠNG PHẢN CHO DARK MODE
         # ==========================================
@@ -51,11 +63,12 @@ class AppTheme:
 # CHỈ KHỞI TẠO 1 LẦN DUY NHẤT
 current_theme = AppTheme(is_dark=False, palette_type="BLUE")
 
-def get_flat_container(content: ft.Control, padding=15, expand=False, use_variant_bg=False) -> ft.Container:
+def get_flat_container(content: ft.Control, padding=15, expand=False, use_variant_bg=False, show_shadow=False) -> ft.Container:
     bg = current_theme.surface_variant if use_variant_bg else current_theme.surface_color
     return ft.Container(
         content=content, padding=padding, expand=expand, bgcolor=bg,
-        border_radius=12, border=ft.Border.all(1, current_theme.divider_color)
+        border_radius=12, border=ft.Border.all(1, current_theme.divider_color),
+        shadow=current_theme.shadow_main if show_shadow else None
     )
 
 def adaptive_container(page, content, padding=15, expand=False, **kwargs):

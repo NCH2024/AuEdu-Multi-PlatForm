@@ -344,8 +344,13 @@ class SchedulePage(ft.Container):
 
             weeks_controls.append(ft.Row(controls=week_row_controls, spacing=0))
 
+        is_mobile = self.app_page.width and self.app_page.width < 768
         self.calendar_area_container.content = ft.Container(
-            bgcolor=current_theme.surface_color, padding=ft.Padding(5, 10, 5, 10), border_radius=12, border=ft.Border.all(1, current_theme.divider_color),
+            bgcolor=current_theme.surface_color, 
+            padding=ft.Padding(5, 10, 5, 10), 
+            border_radius=12, 
+            border=ft.Border.all(1, current_theme.divider_color),
+            shadow=current_theme.shadow_main if not is_mobile else None,
             content=ft.Column(spacing=5, controls=[header_row, ft.Divider(height=1, color=current_theme.divider_color), ft.Container(height=180, content=ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, controls=weeks_controls))])
         )
 

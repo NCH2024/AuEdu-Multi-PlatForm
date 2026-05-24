@@ -70,8 +70,16 @@ class ScheduleDetailList(ft.Container):
             offset += HEADER_HEIGHT
 
             for s in grouped[d]:
+                # Chỉ hiện đổ bóng trên PC để tối ưu hiệu năng mobile
+                is_pc = False
+                try:
+                    if self.page:
+                        is_pc = self.page.platform in [ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX]
+                except: pass
+
                 card = ft.Container(
                     bgcolor=current_theme.surface_color, border_radius=16,
+                    shadow=current_theme.shadow_main if is_pc else None,
                     border=ft.Border(
                         left=ft.BorderSide(8, s["type_color"]),
                         top=ft.BorderSide(1, current_theme.divider_color),
