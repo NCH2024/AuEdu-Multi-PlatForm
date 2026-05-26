@@ -202,7 +202,7 @@ doc.add_paragraph("Bảng 5.5: Các chỉ số đánh giá nhận diện").itali
 doc.add_paragraph("Phân tích ngưỡng nhận diện (Threshold Analysis):", style='Heading 4')
 thr_rows = []
 for t in thr:
-    best = " ★" if t["threshold"] == acc["threshold_analysis"]["best_threshold"] else ""
+    best = " (Tối ưu)" if t["threshold"] == acc["threshold_analysis"]["best_threshold"] else ""
     default = " (mặc định)" if t["threshold"] == 0.45 else ""
     label = f'{t["threshold"]}{default}{best}'
     assessment = ""
@@ -298,40 +298,40 @@ doc.add_paragraph(
 headers_510 = ["Tiêu chí", "AuEdu (Đề xuất)", "ZKTeco [10]", "Hikvision [11]", "Suprema [12]", "FPT.AI [13]", "VNPT vnFace", "face_rec [14]", "DeepFace [15]"]
 rows_510 = [
     # Nhóm A: Tính ứng dụng
-    ["Loại giải pháp", "Phần mềm mở", "Phần cứng", "Phần cứng", "Phần cứng", "Cloud API", "Cloud App", "Thư viện mở", "Thư viện mở"],
+    ["Loại giải pháp", "Phần mềm mở", "Phần cứng nhúng", "Phần cứng nhúng", "Phần cứng nhúng", "Cloud API", "Cloud App", "Thư viện mở", "Thư viện mở"],
     ["Chi phí ban đầu", "Miễn phí (0đ)", "Rất cao (8-25tr)", "Rất cao (10-30tr)", "Rất cao (15-40tr)", "Cloud (0đ)", "Thấp (Thuê bao)", "Miễn phí (0đ)", "Miễn phí (0đ)"],
-    ["Hỗ trợ đa nền tảng", "✅ 5 nền tảng (Flet)", "❌ Thiết bị riêng", "❌ Thiết bị riêng", "❌ Thiết bị riêng", "✅ API đa nền tảng", "⚠ Mobile/Tablet", "⚠ Python duy nhất", "⚠ Python duy nhất"],
-    ["Lọc chất lượng FIQA", "✅ Laplacian Var", "⚠ Tích hợp sẵn", "⚠ Tích hợp sẵn", "⚠ Tích hợp sẵn", "✅ Tích hợp sẵn", "✅ Tích hợp sẵn", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Chống giả mạo AI", "✅ MiniFAS RGB", "✅ IR Dual Cam", "✅ Structured Light", "✅ Visual + IR", "✅ Liveness API", "✅ Liveness API", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Hiệu chỉnh ống kính", "✅ OpenCV Calibration", "✅ Cân chỉnh nhúng", "✅ Cân chỉnh nhúng", "✅ Cân chỉnh nhúng", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Hoạt động ngoại tuyến", "✅ Server LAN cục bộ", "✅ Độc lập", "✅ Độc lập", "✅ Độc lập", "❌ Yêu cầu Internet", "❌ Yêu cầu Internet", "✅ Chạy cục bộ", "✅ Chạy cục bộ"],
-    ["Real-time WebSocket", "✅ WebSocket Stream", "✅ Tích hợp sẵn", "✅ Tích hợp sẵn", "✅ Tích hợp sẵn", "❌ API đồng bộ", "❌ API đồng bộ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Vector Database", "✅ pgvector HNSW", "N/A (Nhúng)", "N/A (Nhúng)", "N/A (Nhúng)", "N/A (Cloud)", "N/A (Cloud)", "❌ Brute-force", "❌ Brute-force"],
-    ["Bộ nhớ đệm thông minh", "✅ Numpy Cache O(1)", "✅ Trên RAM chip", "✅ Trên RAM chip", "✅ Trên RAM chip", "N/A (Cloud)", "N/A (Cloud)", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Định vị & Vị trí GPS", "✅ OSM Nominatim (15m Cache)", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "⚠ Tọa độ thô", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Giám sát thời gian phiên", "✅ Background Thread exp", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Đăng nhập thô", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Định danh thiết bị", "✅ X-Device-ID Header", "✅ Serial / MAC", "✅ Serial / MAC", "✅ Serial / MAC", "❌ Không hỗ trợ", "✅ Có hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Bộ nhớ đệm Client 2 tầng", "✅ Memory + Prefs Cache", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Đồng bộ URL tự động", "✅ Public Config Sync", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "N/A (Cloud)", "N/A (Cloud)", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Phân quyền RBAC", "✅ Admin/GV/SV UI", "✅ Quyền thiết bị", "✅ Quyền thiết bị", "✅ Quyền thiết bị", "❌ Không hỗ trợ", "✅ Có hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Tùy biến bảng màu", "✅ Dark Mode + 4 Palettes", "❌ UI cố định", "❌ UI cố định", "❌ UI cố định", "❌ Không có UI", "❌ UI thương hiệu", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Quản trị học đường", "✅ CRUD đầy đủ", "⚠ Chỉ Phòng ban", "⚠ Chỉ Phòng ban", "⚠ Chỉ Phòng ban", "❌ Không hỗ trợ", "⚠ Chỉ lớp/SV thô", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Thống kê đồ thị", "✅ Flet Charts trực quan", "❌ Không hỗ trợ", "⚠ HikCentral phụ", "⚠ BioStar 2 phụ", "❌ Không hỗ trợ", "⚠ Đồ thị cơ bản", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-    ["Xuất báo cáo", "✅ Excel / CSV", "✅ Excel/CSV/TXT", "✅ Excel / CSV", "✅ Excel/CSV/PDF", "❌ Không hỗ trợ", "✅ Excel / CSV", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Hỗ trợ đa nền tảng", "Có (5 nền tảng)", "Không (Thiết bị riêng)", "Không (Thiết bị riêng)", "Không (Thiết bị riêng)", "Có (API đa nền tảng)", "Hạn chế (Mobile/Tablet)", "Hạn chế (Chỉ Python)", "Hạn chế (Chỉ Python)"],
+    ["Lọc chất lượng FIQA", "Có (Laplacian Var)", "Hạn chế (Tích hợp sẵn)", "Hạn chế (Tích hợp sẵn)", "Hạn chế (Tích hợp sẵn)", "Có hỗ trợ", "Có hỗ trợ", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Chống giả mạo AI", "Có (MiniFAS RGB)", "Có (IR Dual Cam)", "Có (Structured Light)", "Có (Visual + IR)", "Có (Liveness API)", "Có (Liveness API)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Hiệu chỉnh ống kính", "Có (OpenCV Calibration)", "Có (Cân chỉnh nhúng)", "Có (Cân chỉnh nhúng)", "Có (Cân chỉnh nhúng)", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Hoạt động ngoại tuyến", "Có (Server LAN cục bộ)", "Có (Độc lập)", "Có (Độc lập)", "Có (Độc lập)", "Không (Yêu cầu Internet)", "Không (Yêu cầu Internet)", "Có (Chạy cục bộ)", "Có (Chạy cục bộ)"],
+    ["Real-time WebSocket", "Có (WebSocket Stream)", "Có (Tích hợp sẵn)", "Có (Tích hợp sẵn)", "Có (Tích hợp sẵn)", "Không (API đồng bộ)", "Không (API đồng bộ)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Vector Database", "Có (pgvector HNSW)", "N/A (Nhúng)", "N/A (Nhúng)", "N/A (Nhúng)", "N/A (Cloud)", "N/A (Cloud)", "Không (Brute-force)", "Không (Brute-force)"],
+    ["Bộ nhớ đệm thông minh", "Có (Numpy Cache O(1))", "Có (Trên RAM chip)", "Có (Trên RAM chip)", "Có (Trên RAM chip)", "N/A (Cloud)", "N/A (Cloud)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Định vị & Vị trí GPS", "Có (OSM Nominatim)", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Hạn chế (Tọa độ thô)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Giám sát thời gian phiên", "Có (Background Thread)", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Không (Đăng nhập thô)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Định danh thiết bị", "Có (X-Device-ID Header)", "Có (Serial / MAC)", "Có (Serial / MAC)", "Có (Serial / MAC)", "Không hỗ trợ", "Có hỗ trợ", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Bộ nhớ đệm Client 2 tầng", "Có (Memory + Prefs Cache)", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Đồng bộ URL tự động", "Có (Public Config Sync)", "Không hỗ trợ", "Không hỗ trợ", "Không hỗ trợ", "N/A (Cloud)", "N/A (Cloud)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Phân quyền RBAC", "Có (Admin/GV/SV UI)", "Có (Quyền thiết bị)", "Có (Quyền thiết bị)", "Có (Quyền thiết bị)", "Không hỗ trợ", "Có hỗ trợ", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Tùy biến bảng màu", "Có (Dark + 4 Palettes)", "Không (UI cố định)", "Không (UI cố định)", "Không (UI cố định)", "Không (Chỉ cung cấp API)", "Không (UI cố định)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Quản trị học đường", "Có hỗ trợ đầy đủ", "Hạn chế (Chỉ Phòng ban)", "Hạn chế (Chỉ Phòng ban)", "Hạn chế (Chỉ Phòng ban)", "Không hỗ trợ", "Hạn chế (Chỉ lớp/SV thô)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Thống kê đồ thị", "Có (Flet Charts)", "Không hỗ trợ", "Hỗ trợ (HikCentral)", "Hỗ trợ (BioStar 2)", "Không hỗ trợ", "Hạn chế (Đồ thị cơ bản)", "Không hỗ trợ", "Không hỗ trợ"],
+    ["Xuất báo cáo", "Có hỗ trợ (Excel/CSV)", "Có hỗ trợ (Excel/CSV)", "Có hỗ trợ (Excel/CSV)", "Có hỗ trợ (Excel/CSV)", "Không hỗ trợ", "Có hỗ trợ (Excel/CSV)", "Không hỗ trợ", "Không hỗ trợ"],
     # Nhóm B: Tốc độ
     ["Độ trễ giao diện (UI)", "< 50ms (Flet UI)", "< 100ms (Màn cảm ứng)", "< 100ms (Màn cảm ứng)", "< 80ms (Màn cảm ứng)", "< 150ms (Web)", "< 120ms (App)", "N/A (Không UI)", "N/A (Không UI)"],
-    ["Độ trễ mạng truyền tải", "Thấp (WebSocket)", "Thấp (TCP Socket)", "Thấp (TCP Socket)", "Thấp (TCP Socket)", "Cao (HTTP POST)", "Cao (HTTP POST)", "Không có (Offline)", "Không có (Offline)"],
+    ["Độ trễ mạng truyền tải", "Thấp (WebSocket)", "Thấp (TCP Socket)", "Thấp (TCP Socket)", "Thấp (TCP Socket)", "Cao (HTTP POST)", "Cao (HTTP POST)", "Không có (Cục bộ)", "Không có (Cục bộ)"],
     ["Độ trễ trích xuất (Infer)", f"~{step_lat['embedding_extract']['avg']:.1f} ms", "~100-200 ms", "~80-150 ms", "~50-100 ms", "~200-400 ms", "~150-300 ms", "~150-300 ms", "~200-500 ms"],
     ["Độ trễ so khớp Vector", f"< 0.2 ms ({np_res[0]['avg_us']:.0f} µs)", "< 5 ms", "< 5 ms", "< 3 ms", "< 50 ms", "< 30 ms", "> 10 ms", "> 20 ms"],
     ["Độ trễ toàn luồng E2E", f"< 100 ms (~{step_lat['full_pipeline']['avg']:.1f} ms)", "< 300 ms", "< 300 ms", "< 200 ms", "> 500 ms", "> 400 ms", "> 200 ms", "> 300 ms"],
     ["Thông lượng (FPS)", f"~{fps:.1f} FPS", "~5-10 FPS", "~5-10 FPS", "~10-15 FPS", "< 2 FPS", "< 3 FPS", "< 5 FPS", "< 3 FPS"],
     # Nhóm C: Dung lượng
-    ["Dung lượng mã nguồn", f"~{install_size['total_mb']:.2f} MB", "N/A (BioTime ~500MB)", "N/A (HikCentral ~2GB)", "N/A (BioStar ~1.5GB)", "N/A (Cloud)", "N/A (Cloud)", "N/A (pip library)", "N/A (pip library)"],
-    ["Độ cồng kềnh MT chạy", "Nhẹ (Không dlib ONNX)", "Cực lớn (Win Server)", "Cực lớn (Win Server)", "Cực lớn (Win Server)", "Không có (Cloud)", "Không có (Cloud)", "Rất lớn (CMake/dlib)", "Rất lớn (TF/Keras)"],
+    ["Dung lượng mã nguồn", f"~{install_size['total_mb']:.2f} MB", "N/A (BioTime ~500MB)", "N/A (HikCentral ~2GB)", "N/A (BioStar ~1.5GB)", "N/A (Cloud)", "N/A (Cloud)", "N/A (Thư viện pip)", "N/A (Thư viện pip)"],
+    ["Độ cồng kềnh MT chạy", "Nhẹ (ONNX Runtime)", "Cực lớn (Win Server)", "Cực lớn (Win Server)", "Cực lớn (Win Server)", "Không có (Cloud)", "Không có (Cloud)", "Rất lớn (CMake/dlib)", "Rất lớn (TF/Keras)"],
     ["Dung lượng file APK", "~45 MB", "N/A", "N/A", "N/A", "N/A", "~60 MB", "N/A", "N/A"],
     ["Dung lượng file Windows", "~80 MB", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"],
     ["Tiêu thụ RAM tiến trình", f"< 1.3 GB (~{proc_res['ram_avg_mb']:.0f} MB)", "> 2 GB (BioTime Server)", "> 4 GB (HikCentral Server)", "> 3 GB (BioStar 2 Server)", "Không tốn ở Client", "Thấp ở Client", "> 1.5 GB", "> 2 GB"],
-    ["Chi phí đầu tư phần cứng", "0 VNĐ (Tận dụng PC)", "8-25 triệu VNĐ", "10-30 triệu VNĐ", "15-40 triệu VNĐ", "0 VNĐ (Tốn phí API)", "0 VNĐ (Thuê bao)", "0 VNĐ", "0 VNĐ"]
+    ["Chi phí đầu tư phần cứng", "Không tốn (Tận dụng PC)", "8-25 triệu VNĐ", "10-30 triệu VNĐ", "15-40 triệu VNĐ", "Không tốn (Tốn phí API)", "Không tốn (Thuê bao)", "Không tốn", "Không tốn"]
 ]
 
 col_widths_510 = [1.8, 0.65, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55]
@@ -452,8 +452,8 @@ doc.add_heading("5.4.1. Bảng tổng hợp kết quả thực nghiệm", level=
 
 # Determine pass/fail
 def check(val, op, target):
-    if op == ">=": return "✅ Đạt" if val >= target else "❌ Chưa đạt"
-    if op == "<=": return "✅ Đạt" if val <= target else "❌ Chưa đạt"
+    if op == ">=": return "Đạt" if val >= target else "Chưa đạt"
+    if op == "<=": return "Đạt" if val <= target else "Chưa đạt"
 
 add_table(doc, ["STT", "Tiêu chí đánh giá", "Kết quả thực tế", "Mục tiêu đề ra", "Trạng thái"], [
     ["1", "Face Detection Rate", f"{det['detection_rate']}%", "≥ 95%", check(det['detection_rate'], '>=', 95)],
@@ -467,8 +467,8 @@ add_table(doc, ["STT", "Tiêu chí đánh giá", "Kết quả thực tế", "M�
     ["9", "Thời gian trích xuất đặc trưng", f"{emb['avg_extraction_time_ms']:.1f} ms", "≤ 100 ms", check(emb['avg_extraction_time_ms'], '<=', 100)],
     ["10", "Tốc độ so khớp Vector", f"{np_res[0]['avg_us']:.0f} µs", "≤ 1,000 µs", check(np_res[0]['avg_us'], '<=', 1000)],
     ["11", "Độ trễ đáp ứng luồng AI E2E", f"{step_lat['full_pipeline']['avg']:.1f} ms", "≤ 150 ms", check(step_lat['full_pipeline']['avg'], '<=', 150)],
-    ["12", "Dung lượng mã nguồn", f"{install_size['total_mb']:.2f} MB", "Tối thiểu", "✅ Đạt"],
-    ["13", "Chi phí phần cứng bổ sung", "0 VNĐ", "Tối thiểu", "✅ Đạt"],
+    ["12", "Dung lượng mã nguồn", f"{install_size['total_mb']:.2f} MB", "Tối thiểu", "Đạt"],
+    ["13", "Chi phí phần cứng bổ sung", "0 VNĐ", "Tối thiểu", "Đạt"],
 ], header_color="1B5E20")
 doc.add_paragraph("Bảng 5.14: Tổng hợp kết quả thực nghiệm thực tế của hệ thống AuEdu").italic = True
 
