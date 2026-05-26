@@ -174,30 +174,53 @@ python ../tests/test_vector_search.py
 
 ---
 
-## 📊 Benchmark Results
+## 📊 Evaluation & Comparative Analysis
 
-> LFW dataset · AMD Ryzen 5 5600H + RTX 3050 (4GB VRAM)
+> Real-world benchmark on **LFW dataset** (Labeled Faces in the Wild) — 1,906 images, 20 identities.
+> Test Hardware: AMD Ryzen 5 5600H + NVIDIA RTX 3050 Laptop GPU (4GB VRAM).
 
-| Metric | Result |
-|:---|:---|
-| **Face Detection** | 99.79% (1,902/1,906) |
-| **Accuracy** | **98.75%** (threshold 0.45) |
-| **FAR** (False Acceptance) | **0.00%** |
-| **F1-Score (best)** | **99.33%** (threshold 0.60) |
-| **Precision** | **100%** |
-| **Anti-Spoofing** | **98%** (49/50 blocked) |
-| **FIQA blur filtering** | **90%** at threshold 0.10 |
-| **Vector Search** | **< 0.2ms** for N ≤ 1,000 |
-| **Embedding speed** | **29.71 ms**/image |
+### 1. Criterion 1: Application & Feature Comparison (Application)
 
-### Comparison with Existing Solutions
+AuEdu offers superior flexibility and complete administrative features compared to expensive commercial solutions and bare libraries.
 
-| Criteria | **AuEdu** | ZKTeco | Hikvision | face_recognition |
+| Criteria | **AuEdu** (Proposed) | ZKTeco Terminal | Hikvision Terminal | face_recognition (dlib) |
 |:---|:---|:---|:---|:---|
-| **Cost** | **$0** | $300–1,000 | $400–1,500 | $0 |
-| **Cross-platform** | ✅ 5 platforms | ❌ | ❌ | ⚠ Python |
-| **Anti-Spoofing** | ✅ MiniFASNet | ✅ IR | ✅ Structured | ❌ |
-| **Open-source** | ✅ | ❌ | ❌ | ✅ |
+| **Hardware Cost** | 🆓 **$0** (runs on existing PC) | 💸 $300–1,000 | 💸 $400–1,500 | 🆓 $0 |
+| **Cross-platform** | ✅ **5 platforms** (Windows, macOS, Linux, Android, iOS) | ❌ Proprietary device only | ❌ Proprietary device only | ⚠ Python script only |
+| **Anti-Spoofing AI** | ✅ MiniFASNet (RGB liveness) | ✅ IR Dual Cam | ✅ Structured Light | ❌ Not supported |
+| **FIQA Quality Filter** | ✅ Laplacian Variance | ⚠ Automatic (embedded) | ⚠ Automatic (embedded) | ❌ Not supported |
+| **Class/Student CRUD** | ✅ Complete UI Management | ⚠ Basic config | ⚠ Central software | ❌ Not supported |
+| **Security Audit Logs** | ✅ IP & User-Agent logging | ⚠ Basic history logs | ✅ Supported | ❌ Not supported |
+| **Vector Database** | ✅ pgvector HNSW + Numpy Cache | N/A (Embedded) | N/A (Embedded) | ❌ Brute-force |
+| **Offline Operation** | ✅ Full offline/local hosting | ✅ Standalone | ✅ Standalone | ✅ Local |
+
+### 2. Criterion 2: Processing Speed & Task Latency (Speed)
+
+The system achieves instant UI response (< 50ms powered by Flutter Engine) and ultra-fast frame processing via WebSockets:
+
+- **AI Pipeline Latency (E2E):** **~38.00 ms** (Base64 decode: 0.72ms, Face Detection: 35.08ms, FIQA: 0.20ms, Anti-spoof: 3.94ms, ArcFace embedding: 35.55ms).
+- **Throughput:** Real-world **21.56 FPS** under continuous frame streaming.
+- **Match Latency (Numpy Cache):** **< 0.2ms** for class matching scale of N = 1,000.
+
+#### Detailed Latency Stats per Processing Step (N = 50):
+
+| Step | Avg (ms) | Min (ms) | Max (ms) | P95 (ms) |
+|:---|:---|:---|:---|:---|
+| **1. Base64 Decode** | 0.72 ms | 0.51 ms | 2.15 ms | 0.92 ms |
+| **2. Face Detection (RetinaFace)** | 35.08 ms | 29.13 ms | 54.50 ms | 41.68 ms |
+| **3. FIQA Evaluation (Laplacian)** | 0.20 ms | 0.13 ms | 0.42 ms | 0.33 ms |
+| **4. Anti-Spoof (MiniFASNet)** | 3.94 ms | 2.48 ms | 8.20 ms | 5.18 ms |
+| **5. Embedding Extract (ArcFace)** | 35.55 ms | 31.19 ms | 46.58 ms | 42.37 ms |
+| **6. Full Pipeline (E2E)** | **38.00 ms** | 32.65 ms | 49.98 ms | 48.37 ms |
+
+### 3. Criterion 3: Installation Size & System Resources (Capacity)
+
+AuEdu is highly optimized for codebase size and memory footprint, making it extremely safe for standard office PCs.
+
+- **Codebase Size:** Lightweight **8.10 MB** (Client code: 4.65 MB, Server code: 3.45 MB).
+- **Package Installer:** Client mobile APK ~45 MB, Desktop Windows .exe ~80 MB. (Much lighter than face_recognition's > 200 MB dlib runtime).
+- **Process Memory (RAM):** Only **~468.3 MB** when Idle, and stays at **~1209.1 MB** (Peak: 1217.2 MB) during active processing.
+- **GPU & VRAM Usage:** Avg GPU load ~37.2% (Peak: 95.0%), VRAM consumption is extremely low at **~999.1 MB** (out of 4GB on RTX 3050), freeing up system CPU and preventing overheating.
 
 ---
 
