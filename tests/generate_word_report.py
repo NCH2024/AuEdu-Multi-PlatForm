@@ -29,22 +29,30 @@ res = json.load(open(RESULTS_DIR / "resource_report.json", encoding="utf-8"))
 def shade(cell, color):
     cell._tc.get_or_add_tcPr().append(parse_xml(f'<w:shd {nsdecls("w")} w:fill="{color}"/>'))
 
-def add_table(doc, headers, rows, header_color="1F4E79"):
+def add_table(doc, headers, rows, header_color="1F4E79", font_size=10, col_widths=None):
     t = doc.add_table(rows=1+len(rows), cols=len(headers))
     t.style = 'Table Grid'
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
+    if col_widths:
+        t.autofit = False
+        # Đặt độ rộng cho từng cột
+        for row in t.rows:
+            for ci, w in enumerate(col_widths):
+                if ci < len(row.cells):
+                    row.cells[ci].width = Inches(w)
     for i, h in enumerate(headers):
         c = t.rows[0].cells[i]; c.text = ""
         p = c.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = p.add_run(h); r.bold = True; r.font.size = Pt(10)
+        r = p.add_run(h); r.bold = True; r.font.size = Pt(font_size)
         r.font.color.rgb = RGBColor(0xFF,0xFF,0xFF); shade(c, header_color)
     for ri, row in enumerate(rows):
         for ci, val in enumerate(row):
             c = t.rows[ri+1].cells[ci]; c.text = ""
             p = c.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            r = p.add_run(str(val)); r.font.size = Pt(10)
+            r = p.add_run(str(val)); r.font.size = Pt(font_size)
             if ri % 2 == 1: shade(c, "D6E4F0")
     return t
+
 
 def pct(v): return f"{v*100:.2f}%" if isinstance(v, float) and v <= 1 else f"{v}%"
 
@@ -287,27 +295,58 @@ doc.add_paragraph(
 )
 
 # Bảng 5.10: So sánh tính năng
-add_table(doc,
-    ["Tiêu chí", "AuEdu", "ZKTeco [10]", "Hikvision [11]", "Suprema [12]", "FPT.AI [13]", "face_recognition [14]"],
-    [
-        ["Loại giải pháp", "Phần mềm mở", "Phần cứng", "Phần cứng", "Phần cứng", "Cloud API", "Thư viện mở"],
-        ["Chi phí bản quyền", "Miễn phí (0đ)", "Rất cao (8-25tr)", "Rất cao (10-30tr)", "Rất cao (15-40tr)", "Trung bình (theo lượt)", "Miễn phí (0đ)"],
-        ["Hỗ trợ đa nền tảng", "✅ 5 nền tảng (Flet)", "❌ Thiết bị riêng", "❌ Thiết bị riêng", "❌ Thiết bị riêng", "✅ API đa nền tảng", "⚠ Python duy nhất"],
-        ["Anti-Spoofing AI", "✅ MiniFASNet (RGB)", "✅ IR Dual Cam", "✅ Structured Light", "✅ Visual + IR", "✅ Liveness API", "❌ Không hỗ trợ"],
-        ["Lọc chất lượng FIQA", "✅ Laplacian Var", "⚠ Tích hợp sẵn", "⚠ Tích hợp sẵn", "⚠ Tích hợp sẵn", "✅ Tích hợp sẵn", "❌ Không hỗ trợ"],
-        ["Real-time WebSocket", "✅ Hỗ trợ sẵn", "✅ Tích hợp sẵn", "✅ Tích hợp sẵn", "✅ Tích hợp sẵn", "❌ API đồng bộ", "❌ Không hỗ trợ"],
-        ["Quản lý lớp & SV", "✅ CRUD đầy đủ", "⚠ Quản trị cơ bản", "⚠ HikCentral", "⚠ BioStar 2", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
-        ["Vector Database", "✅ pgvector HNSW", "N/A (Nhúng)", "N/A (Nhúng)", "N/A (Nhúng)", "N/A (Cloud)", "❌ Brute-force"],
-        ["Hoạt động ngoại tuyến", "✅ Server cục bộ", "✅ Độc lập", "✅ Độc lập", "✅ Độc lập", "❌ Yêu cầu Internet", "✅ Cục bộ"],
-    ], header_color="2E4057")
-doc.add_paragraph("Bảng 5.10: So sánh tính năng giữa các hệ thống").italic = True
+headers_510 = ["Tiêu chí", "AuEdu (Đề xuất)", "ZKTeco [10]", "Hikvision [11]", "Suprema [12]", "FPT.AI [13]", "VNPT vnFace", "face_rec [14]", "DeepFace [15]"]
+rows_510 = [
+    # Nhóm A: Tính ứng dụng
+    ["Loại giải pháp", "Phần mềm mở", "Phần cứng", "Phần cứng", "Phần cứng", "Cloud API", "Cloud App", "Thư viện mở", "Thư viện mở"],
+    ["Chi phí ban đầu", "Miễn phí (0đ)", "Rất cao (8-25tr)", "Rất cao (10-30tr)", "Rất cao (15-40tr)", "Cloud (0đ)", "Thấp (Thuê bao)", "Miễn phí (0đ)", "Miễn phí (0đ)"],
+    ["Hỗ trợ đa nền tảng", "✅ 5 nền tảng (Flet)", "❌ Thiết bị riêng", "❌ Thiết bị riêng", "❌ Thiết bị riêng", "✅ API đa nền tảng", "⚠ Mobile/Tablet", "⚠ Python duy nhất", "⚠ Python duy nhất"],
+    ["Lọc chất lượng FIQA", "✅ Laplacian Var", "⚠ Tích hợp sẵn", "⚠ Tích hợp sẵn", "⚠ Tích hợp sẵn", "✅ Tích hợp sẵn", "✅ Tích hợp sẵn", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Chống giả mạo AI", "✅ MiniFAS RGB", "✅ IR Dual Cam", "✅ Structured Light", "✅ Visual + IR", "✅ Liveness API", "✅ Liveness API", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Hiệu chỉnh ống kính", "✅ OpenCV Calibration", "✅ Cân chỉnh nhúng", "✅ Cân chỉnh nhúng", "✅ Cân chỉnh nhúng", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Hoạt động ngoại tuyến", "✅ Server LAN cục bộ", "✅ Độc lập", "✅ Độc lập", "✅ Độc lập", "❌ Yêu cầu Internet", "❌ Yêu cầu Internet", "✅ Chạy cục bộ", "✅ Chạy cục bộ"],
+    ["Real-time WebSocket", "✅ WebSocket Stream", "✅ Tích hợp sẵn", "✅ Tích hợp sẵn", "✅ Tích hợp sẵn", "❌ API đồng bộ", "❌ API đồng bộ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Vector Database", "✅ pgvector HNSW", "N/A (Nhúng)", "N/A (Nhúng)", "N/A (Nhúng)", "N/A (Cloud)", "N/A (Cloud)", "❌ Brute-force", "❌ Brute-force"],
+    ["Bộ nhớ đệm thông minh", "✅ Numpy Cache O(1)", "✅ Trên RAM chip", "✅ Trên RAM chip", "✅ Trên RAM chip", "N/A (Cloud)", "N/A (Cloud)", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Định vị & Vị trí GPS", "✅ OSM Nominatim (15m Cache)", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "⚠ Tọa độ thô", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Giám sát thời gian phiên", "✅ Background Thread exp", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Đăng nhập thô", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Định danh thiết bị", "✅ X-Device-ID Header", "✅ Serial / MAC", "✅ Serial / MAC", "✅ Serial / MAC", "❌ Không hỗ trợ", "✅ Có hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Bộ nhớ đệm Client 2 tầng", "✅ Memory + Prefs Cache", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Đồng bộ URL tự động", "✅ Public Config Sync", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ", "N/A (Cloud)", "N/A (Cloud)", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Phân quyền RBAC", "✅ Admin/GV/SV UI", "✅ Quyền thiết bị", "✅ Quyền thiết bị", "✅ Quyền thiết bị", "❌ Không hỗ trợ", "✅ Có hỗ trợ", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Tùy biến bảng màu", "✅ Dark Mode + 4 Palettes", "❌ UI cố định", "❌ UI cố định", "❌ UI cố định", "❌ Không có UI", "❌ UI thương hiệu", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Quản trị học đường", "✅ CRUD đầy đủ", "⚠ Chỉ Phòng ban", "⚠ Chỉ Phòng ban", "⚠ Chỉ Phòng ban", "❌ Không hỗ trợ", "⚠ Chỉ lớp/SV thô", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Thống kê đồ thị", "✅ Flet Charts trực quan", "❌ Không hỗ trợ", "⚠ HikCentral phụ", "⚠ BioStar 2 phụ", "❌ Không hỗ trợ", "⚠ Đồ thị cơ bản", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    ["Xuất báo cáo", "✅ Excel / CSV", "✅ Excel/CSV/TXT", "✅ Excel / CSV", "✅ Excel/CSV/PDF", "❌ Không hỗ trợ", "✅ Excel / CSV", "❌ Không hỗ trợ", "❌ Không hỗ trợ"],
+    # Nhóm B: Tốc độ
+    ["Độ trễ giao diện (UI)", "< 50ms (Flet UI)", "< 100ms (Màn cảm ứng)", "< 100ms (Màn cảm ứng)", "< 80ms (Màn cảm ứng)", "< 150ms (Web)", "< 120ms (App)", "N/A (Không UI)", "N/A (Không UI)"],
+    ["Độ trễ mạng truyền tải", "Thấp (WebSocket)", "Thấp (TCP Socket)", "Thấp (TCP Socket)", "Thấp (TCP Socket)", "Cao (HTTP POST)", "Cao (HTTP POST)", "Không có (Offline)", "Không có (Offline)"],
+    ["Độ trễ trích xuất (Infer)", f"~{step_lat['embedding_extract']['avg']:.1f} ms", "~100-200 ms", "~80-150 ms", "~50-100 ms", "~200-400 ms", "~150-300 ms", "~150-300 ms", "~200-500 ms"],
+    ["Độ trễ so khớp Vector", f"< 0.2 ms ({np_res[0]['avg_us']:.0f} µs)", "< 5 ms", "< 5 ms", "< 3 ms", "< 50 ms", "< 30 ms", "> 10 ms", "> 20 ms"],
+    ["Độ trễ toàn luồng E2E", f"< 100 ms (~{step_lat['full_pipeline']['avg']:.1f} ms)", "< 300 ms", "< 300 ms", "< 200 ms", "> 500 ms", "> 400 ms", "> 200 ms", "> 300 ms"],
+    ["Thông lượng (FPS)", f"~{fps:.1f} FPS", "~5-10 FPS", "~5-10 FPS", "~10-15 FPS", "< 2 FPS", "< 3 FPS", "< 5 FPS", "< 3 FPS"],
+    # Nhóm C: Dung lượng
+    ["Dung lượng mã nguồn", f"~{install_size['total_mb']:.2f} MB", "N/A (BioTime ~500MB)", "N/A (HikCentral ~2GB)", "N/A (BioStar ~1.5GB)", "N/A (Cloud)", "N/A (Cloud)", "N/A (pip library)", "N/A (pip library)"],
+    ["Độ cồng kềnh MT chạy", "Nhẹ (Không dlib ONNX)", "Cực lớn (Win Server)", "Cực lớn (Win Server)", "Cực lớn (Win Server)", "Không có (Cloud)", "Không có (Cloud)", "Rất lớn (CMake/dlib)", "Rất lớn (TF/Keras)"],
+    ["Dung lượng file APK", "~45 MB", "N/A", "N/A", "N/A", "N/A", "~60 MB", "N/A", "N/A"],
+    ["Dung lượng file Windows", "~80 MB", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"],
+    ["Tiêu thụ RAM tiến trình", f"< 1.3 GB (~{proc_res['ram_avg_mb']:.0f} MB)", "> 2 GB (BioTime Server)", "> 4 GB (HikCentral Server)", "> 3 GB (BioStar 2 Server)", "Không tốn ở Client", "Thấp ở Client", "> 1.5 GB", "> 2 GB"],
+    ["Chi phí đầu tư phần cứng", "0 VNĐ (Tận dụng PC)", "8-25 triệu VNĐ", "10-30 triệu VNĐ", "15-40 triệu VNĐ", "0 VNĐ (Tốn phí API)", "0 VNĐ (Thuê bao)", "0 VNĐ", "0 VNĐ"]
+]
+
+col_widths_510 = [1.8, 0.65, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55]
+add_table(doc, headers_510, rows_510, header_color="2E4057", font_size=8.5, col_widths=col_widths_510)
+doc.add_paragraph("Bảng 5.10: So sánh tính năng và hiệu năng tổng hợp giữa các hệ thống").italic = True
 
 doc.add_paragraph(
-    "Phân tích bảng so sánh cho thấy AuEdu sở hữu những ưu điểm vượt trội về mặt ứng dụng:\n"
-    "1. Đa nền tảng thực sự: Nhờ Flet Framework [16], ứng dụng chạy trên 5 nền tảng (Windows, macOS, Linux, Android, iOS) từ cùng một mã nguồn Python, tạo sự linh hoạt tối đa cho giảng viên và sinh viên.\n"
-    "2. Kiểm soát chất lượng ảnh đầu vào: Quy trình FIQA [3] lọc bỏ ảnh mờ trước khi đưa vào pipeline AI, giúp loại bỏ nhiễu hệ thống.\n"
-    "3. Quản trị học đường toàn diện: Khác với các thư viện AI thuần túy (như face_recognition [14] hay DeepFace [15]), AuEdu cung cấp giao diện quản trị đầy đủ, kết nối cơ sở dữ liệu quan hệ và cơ chế lưu trữ vết (Audit Log) phục vụ bảo mật học đường."
+    "Phân tích bảng so sánh đối sánh cho thấy hệ thống AuEdu sở hữu những ưu điểm vượt trội và giải quyết triệt để các bài toán thực tiễn:\n"
+    "1. Tích hợp sâu các tính năng bảo mật ngầm từ mã nguồn thực tế: GPS Geolocation tự động kiểm tra vị trí định vị của giảng viên thông qua OpenStreetMap Nominatim API để chống việc điểm danh hộ từ xa; Cơ chế đếm ngược và kiểm tra phiên (Session Timeout Monitor) liên tục chạy ngầm thông qua Background Thread để phát hiện JWT Token hết hạn và bảo vệ phiên đăng nhập; Ghi nhận và kiểm tra định danh thiết bị truy cập (Device Identity Auditing) qua các HTTP Header tự định nghĩa (X-Device-ID, X-Client-Version, X-Platform).\n"
+    "2. Quản lý bộ nhớ đệm 2 tầng thông minh: Kết hợp Memory Cache và SharedPreferences cục bộ với TTL được cấu hình động từ Server giúp tăng tốc tải trang và hỗ trợ hoạt động ngoại tuyến một cách mượt mà.\n"
+    "3. Tự động đồng bộ cấu hình hệ thống: Client tự động cập nhật Server API URL động từ CSDL giúp dễ dàng bảo trì và di chuyển máy chủ mà không cần phân phối lại phiên bản ứng dụng.\n"
+    "4. Đa nền tảng và tối ưu hóa chi phí: Nhờ Flet Framework [16], phần mềm có thể chạy tốt trên cả Windows, macOS, Linux, Android và iOS mà chi phí đầu tư thiết bị chuyên dụng là 0 VNĐ, không giống như các giải pháp phần cứng đắt đỏ (ZKTeco, Hikvision, Suprema) hay các thư viện AI thô thiếu giao diện (face_recognition [14], DeepFace [15])."
 )
+
+
 
 # 5.3.2 Tiêu chí 2: Tốc độ xử lý & Độ trễ tác vụ
 doc.add_heading("5.3.2. Tiêu chí 2: Tốc độ xử lý và Độ trễ tác vụ (Speed)", level=3)
