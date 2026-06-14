@@ -97,6 +97,7 @@ async def main(page: ft.Page):
             session = json.loads(session_str) if session_str else None
             
             current_route = route_str if route_str else "/"
+            needs_page_update = True
 
             if current_route == "/login":
                 page.window.width = 1060
@@ -152,6 +153,7 @@ async def main(page: ft.Page):
             else:
                 # ── ADMIN ROUTES: Dùng admin_dashboard layout ──
                 if current_route.startswith("/admin/"):
+                    needs_page_update = False
                     if not page.views or page.views[-1].route != "/admin_dashboard_layout":
                         page.views.clear()
                         page.views.append(ft.View(route="/admin_dashboard_layout", controls=[admin_dashboard], padding=0, bgcolor=theme_module.current_theme.bg_color))
@@ -188,6 +190,7 @@ async def main(page: ft.Page):
 
                 # ── USER ROUTES: Dùng dashboard layout ──
                 else:
+                    needs_page_update = False
                     if not page.views or page.views[-1].route != "/dashboard_layout":
                         page.views.clear()
                         page.views.append(ft.View(route="/dashboard_layout", controls=[dashboard], padding=0, bgcolor=theme_module.current_theme.bg_color))
@@ -223,7 +226,8 @@ async def main(page: ft.Page):
                     # Route cũ /user/attendance/training sẽ không dùng dashboard nữa
                     pass
 
-            page.update()
+            if needs_page_update:
+                page.update()
             
         except Exception as ex:
             print(f"Lỗi routing: {ex}")
@@ -235,8 +239,19 @@ async def main(page: ft.Page):
         if page.views:
             await page.push_route(page.views[-1].route)
 
+    async def page_resize(e):
+        try:
+            active_view = page.views[-1].route if page.views else ""
+            if active_view == "/dashboard_layout":
+                await dashboard.handle_resize(e)
+            elif active_view == "/admin_dashboard_layout":
+                await admin_dashboard.handle_resize(e)
+        except Exception as ex:
+            print(f"Lỗi resize: {ex}")
+
     page.on_route_change = route_change
     page.on_view_pop = view_pop
+    page.on_resize = page_resize
 
     page.views.append(ft.View(
         route="/loading",

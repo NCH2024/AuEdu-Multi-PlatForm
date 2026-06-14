@@ -63,8 +63,8 @@ def build(version_name, version_code):
         "--build-version", version_name,
         "--build-number", version_code,
 
-        "--permissions", "camera",
-        "--permissions", "location",
+        # Quyền (camera, location, internet) đã được khai báo
+        # trong pyproject.toml theo chuẩn Flet 0.84+
 
         "--splash-color", "#ffffff",
         "--clear-cache"

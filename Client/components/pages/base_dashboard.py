@@ -22,6 +22,9 @@ class BaseDashboard(ft.Container):
         self.expand = True
         self.active_route = ""
         self.is_sidebar_expanded = False
+        self._is_mounted = False
+        self._last_is_mobile_layout = None
+        self._session_warning_state = None
 
         # ── PHÂN QUYỀN ──
         self.role = role
@@ -79,7 +82,7 @@ class BaseDashboard(ft.Container):
         )
 
         # ─── KHỐI THỜI GIAN & VỊ TRÍ / ADMIN PILLS ───
-        self.clock_text = ft.Text("00:00:00", size=13, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.primary)
+        self.clock_text = ft.Text("00:00", size=13, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.primary)
         self.clock_icon = ft.Icon(ft.Icons.ACCESS_TIME_ROUNDED, size=16, color=theme_module.current_theme.primary)
 
         if self.is_admin:
@@ -106,7 +109,7 @@ class BaseDashboard(ft.Container):
             )
         else:
             # User: Clock + Divider + Định vị GPS
-            self.location_text = ft.Text("Đang định vị...", size=12, color=theme_module.current_theme.text_muted)
+            self.location_text = ft.Text("Đang định vị...", size=12, color=theme_module.current_theme.text_muted, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, width=120)
             self.loc_icon = ft.Icon(ft.Icons.LOCATION_ON_ROUNDED, size=15, color=theme_module.current_theme.text_muted)
             self.time_loc_divider = ft.Container(width=1, height=14, bgcolor=theme_module.current_theme.divider_color, margin=ft.Margin(6, 0, 6, 0))
             self.time_location_container = ft.Container(
@@ -119,18 +122,23 @@ class BaseDashboard(ft.Container):
                 border=ft.Border.all(1, theme_module.current_theme.divider_color),
                 padding=ft.Padding(12, 6, 12, 6),
                 border_radius=20,
+                ink=True,
+                on_click=self.show_location_details,
                 visible=False
             )
 
         # ─── KHỐI ĐẾM NGƯỢC PHIÊN (Session Timer) ───
-        self.session_timer_label = ft.Text("Thời hạn phiên Đăng nhập:", size=12, color=theme_module.current_theme.text_muted)
+        self.session_timer_icon = ft.Icon(ft.Icons.TIMER_OUTLINED, size=15, color=theme_module.current_theme.text_muted)
+        self.session_timer_label = ft.Text("Phiên:", size=12, color=theme_module.current_theme.text_muted)
         self.session_timer_text = ft.Text("--:--", size=13, weight=ft.FontWeight.BOLD, color=theme_module.current_theme.text_muted)
         self.session_timer_container = ft.Container(
-            content=ft.Row([self.session_timer_label, self.session_timer_text], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
+            content=ft.Row([self.session_timer_icon, self.session_timer_label, self.session_timer_text], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
             bgcolor=theme_module.current_theme.surface_variant,
             border=ft.Border.all(1, theme_module.current_theme.divider_color),
             padding=ft.Padding(12, 6, 12, 6),
             border_radius=20,
+            ink=True,
+            on_click=self.show_session_details,
             visible=False
         )
 
@@ -142,15 +150,20 @@ class BaseDashboard(ft.Container):
         self.content = ft.Container()
 
     def did_mount(self):
+        self._is_mounted = True
         self.app_page.run_task(self.init_app_settings)
         self.app_page.run_task(self._update_clock)
         
         # --- BẬT TÍNH NĂNG GIÁM SÁT BẢO MẬT ---
         self.app_page.run_task(self._monitor_session)
 
-        # Geolocator chỉ chạy cho Giảng viên trên Desktop
-        if self._is_desktop_platform() and not self.is_admin:
+        # Geolocator chạy cho Giảng viên trên MỌI nền tảng (Desktop + Mobile)
+        # để đảm bảo DeviceManager.location luôn chính xác khi gửi WebSocket điểm danh
+        if not self.is_admin:
             self.app_page.run_task(self._update_location)
+
+    def will_unmount(self):
+        self._is_mounted = False
             
     def _is_desktop_platform(self):
         return self.app_page.platform in [
@@ -160,7 +173,7 @@ class BaseDashboard(ft.Container):
         ]
 
     async def _update_clock(self):
-        while True:
+        while self._is_mounted:
             try:
                 # Kiểm tra an toàn xem control đã bị unmount chưa
                 try:
@@ -171,13 +184,15 @@ class BaseDashboard(ft.Container):
                     
                 if self.time_location_container.visible:
                     now = datetime.datetime.now()
-                    self.clock_text.value = now.strftime("%H:%M:%S")
-                    if getattr(self.clock_text, "page", None):
+                    new_value = now.strftime("%H:%M")
+                    if self.clock_text.value != new_value and getattr(self.clock_text, "page", None):
+                        self.clock_text.value = new_value
                         self.clock_text.update()
             except Exception as e:
                 break 
-                
-            await asyncio.sleep(1)
+
+            now = datetime.datetime.now()
+            await asyncio.sleep(max(1, 60 - now.second))
 
     async def _update_location(self):
         """Lấy vị trí chính xác với cơ chế Cache 15 phút (900s)"""
@@ -267,6 +282,8 @@ class BaseDashboard(ft.Container):
                         self.location_text.update()
                     
                     await prefs.set("app_location", location_str)
+                    await prefs.set("app_lat", str(pos.latitude))
+                    await prefs.set("app_lon", str(pos.longitude))
                     await prefs.set("last_sync_app_location", str(current_time))
                     
                     if self.geo in self.app_page.services:
@@ -284,6 +301,67 @@ class BaseDashboard(ft.Container):
             if getattr(self.location_text, "page", None):
                 self.location_text.update()
     
+    async def show_location_details(self, e):
+        prefs = ft.SharedPreferences()
+        loc = await prefs.get("app_location") or "Chưa xác định"
+        lat = await prefs.get("app_lat") or "0.0"
+        lon = await prefs.get("app_lon") or "0.0"
+        
+        dialog = ft.AlertDialog(
+            title=ft.Row([ft.Icon(ft.Icons.LOCATION_ON, color=theme_module.current_theme.primary), ft.Text("Chi tiết Vị trí", weight=ft.FontWeight.BOLD)]),
+            content=ft.Column([
+                ft.Text(f"Địa chỉ: {loc}", weight=ft.FontWeight.W_500),
+                ft.Text(f"Tọa độ: {lat}, {lon}", size=12, color=theme_module.current_theme.text_muted),
+                ft.Container(height=10),
+                ft.FilledButton(
+                    "Mở trên Google Maps", 
+                    icon=ft.Icons.MAP_ROUNDED,
+                    on_click=lambda _: self.app_page.launch_url(f"https://www.google.com/maps/search/?api=1&query={lat},{lon}") if lat != "0.0" else None
+                )
+            ], tight=True),
+            actions=[ft.TextButton("Đóng", on_click=lambda _: self._close_dialog(dialog))],
+            shape=ft.RoundedRectangleBorder(radius=12)
+        )
+        self.app_page.overlay.append(dialog)
+        dialog.open = True
+        if getattr(self.app_page, "page", None):
+            self.app_page.update()
+
+    async def show_session_details(self, e):
+        prefs = ft.SharedPreferences()
+        session_str = await prefs.get("user_session")
+        if not session_str: return
+        try:
+            session = json.loads(session_str)
+            expires_at = session.get("expires_at")
+            if not expires_at:
+                token = session.get("access_token", "")
+                if token:
+                    payload_b64 = token.split('.')[1]
+                    payload_b64 += '=' * (-len(payload_b64) % 4) 
+                    payload_data = json.loads(base64.b64decode(payload_b64).decode('utf-8'))
+                    expires_at = payload_data.get("exp", 0)
+                else: expires_at = 0
+            
+            exp_time_str = datetime.datetime.fromtimestamp(expires_at).strftime("%H:%M:%S %d/%m/%Y") if expires_at else "Không rõ"
+            
+            dialog = ft.AlertDialog(
+                title=ft.Row([ft.Icon(ft.Icons.TIMER, color=theme_module.current_theme.primary), ft.Text("Chi tiết Phiên", weight=ft.FontWeight.BOLD)]),
+                content=ft.Column([
+                    ft.Text(f"Tài khoản: {session.get('name', 'N/A')}", weight=ft.FontWeight.W_500),
+                    ft.Text(f"Hết hạn lúc: {exp_time_str}"),
+                    ft.Text("Trạng thái: Đang hoạt động", color=ft.Colors.GREEN_600, weight=ft.FontWeight.BOLD)
+                ], tight=True),
+                actions=[ft.TextButton("Đóng", on_click=lambda _: self._close_dialog(dialog))],
+                shape=ft.RoundedRectangleBorder(radius=12)
+            )
+            self.app_page.overlay.append(dialog)
+            dialog.open = True
+            if getattr(self.app_page, "page", None):
+                self.app_page.update()
+        except Exception:
+            pass
+
     async def init_app_settings(self):
         prefs = ft.SharedPreferences()
         is_dark = await prefs.get("app_is_dark") == "True"
@@ -316,6 +394,8 @@ class BaseDashboard(ft.Container):
 
         self.session_timer_text.color = theme_module.current_theme.primary
         self.session_timer_label.color = theme_module.current_theme.primary
+        if hasattr(self, "session_timer_icon"):
+            self.session_timer_icon.color = theme_module.current_theme.primary
         self.session_timer_container.bgcolor = ft.Colors.with_opacity(0.1, theme_module.current_theme.primary)
         self.session_timer_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.2, theme_module.current_theme.primary))
 
@@ -373,70 +453,108 @@ class BaseDashboard(ft.Container):
         if getattr(self.app_page, "page", None):
             self.app_page.update()
         
+    def _extract_session_expires_at(self, session_str: str | None) -> int:
+        if not session_str:
+            return 0
+        try:
+            session = json.loads(session_str)
+            expires_at = session.get("expires_at")
+            if expires_at:
+                return int(expires_at)
+
+            token = session.get("access_token", "")
+            if not token:
+                return 0
+
+            payload_b64 = token.split(".")[1]
+            payload_b64 += "=" * (-len(payload_b64) % 4)
+            payload_data = json.loads(base64.b64decode(payload_b64).decode("utf-8"))
+            return int(payload_data.get("exp", 0))
+        except Exception:
+            return 0
+
     async def _monitor_session(self):
-        """Vòng lặp chạy ngầm kiểm tra và hiển thị thời gian còn lại của phiên"""
-        while True: 
+        """Vòng lặp chạy ngầm kiểm tra và hiển thị thời gian còn lại của phiên."""
+        prefs = ft.SharedPreferences()
+        session_str = None
+        expires_at = 0
+        next_session_read = 0.0
+
+        while self._is_mounted:
             try:
                 if not self.page:
                     break
             except RuntimeError:
                 break
-                
-            prefs = ft.SharedPreferences()
-            session_str = await prefs.get("user_session")
-            
+
+            current_time = time.time()
+            if current_time >= next_session_read:
+                session_str = await prefs.get("user_session")
+                expires_at = self._extract_session_expires_at(session_str)
+                next_session_read = current_time + 30
+
             if session_str:
                 try:
-                    session = json.loads(session_str)
-                    expires_at = session.get("expires_at")
-                    
-                    if not expires_at:
-                        token = session.get("access_token", "")
-                        if token:
-                            payload_b64 = token.split('.')[1]
-                            payload_b64 += '=' * (-len(payload_b64) % 4) 
-                            payload_data = json.loads(base64.b64decode(payload_b64).decode('utf-8'))
-                            expires_at = payload_data.get("exp", 0)
-                        else:
-                            expires_at = 0
-
-                    current_time = time.time()
-                    
                     if expires_at > 0:
                         remaining = int(expires_at - current_time)
                         
                         if remaining <= 0:
                             await self.show_session_expired_dialog()
                             break
-                        
-                        # Cập nhật UI đếm ngược
-                        mins, secs = divmod(remaining, 60)
-                        self.session_timer_text.value = f"{mins:02d}:{secs:02d}"
-                        self.session_timer_container.visible = True
-                        
-                        # Cảnh báo màu đỏ nếu dưới 5 phút
-                        if remaining < 300:
+
+                        is_warning = remaining < 300
+                        if is_warning:
+                            mins, secs = divmod(remaining, 60)
+                            timer_value = f"{mins:02d}:{secs:02d}"
+                        else:
+                            timer_value = f"{max(1, remaining // 60)} phút"
+
+                        ui_changed = False
+                        if self.session_timer_text.value != timer_value:
+                            self.session_timer_text.value = timer_value
+                            ui_changed = True
+                        if not self.session_timer_container.visible:
+                            self.session_timer_container.visible = True
+                            ui_changed = True
+
+                        if self._session_warning_state != is_warning:
+                            self._session_warning_state = is_warning
+                            ui_changed = True
+
+                        if is_warning:
                             self.session_timer_text.color = ft.Colors.RED_500
                             self.session_timer_label.color = ft.Colors.RED_500
+                            if hasattr(self, "session_timer_icon"): self.session_timer_icon.color = ft.Colors.RED_500
                             self.session_timer_container.bgcolor = ft.Colors.with_opacity(0.1, ft.Colors.RED_500)
                             self.session_timer_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.RED_500))
                         else:
                             self.session_timer_text.color = theme_module.current_theme.primary
                             self.session_timer_label.color = theme_module.current_theme.primary
+                            if hasattr(self, "session_timer_icon"): self.session_timer_icon.color = theme_module.current_theme.primary
                             self.session_timer_container.bgcolor = ft.Colors.with_opacity(0.1, theme_module.current_theme.primary)
                             self.session_timer_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.2, theme_module.current_theme.primary))
                             
+                        if ui_changed and getattr(self.session_timer_container, "page", None):
+                            self.session_timer_container.update()
+
+                        await asyncio.sleep(1 if is_warning else 30)
+                        continue
+
+                    self._session_warning_state = None
+                    if self.session_timer_container.visible:
+                        self.session_timer_container.visible = False
                         if getattr(self.session_timer_container, "page", None):
                             self.session_timer_container.update()
                             
                 except Exception as e:
                     print(f"Lỗi theo dõi phiên: {e}")
             else:
+                self._session_warning_state = None
                 self.session_timer_container.visible = False
                 if getattr(self.session_timer_container, "page", None):
                     self.session_timer_container.update()
                     
-            await asyncio.sleep(1) # Cập nhật mỗi giây để đếm ngược mượt mà
+            await asyncio.sleep(5)
 
     async def _apply_theme_to_current_page(self):
         current_page = self.content_area.content
@@ -537,6 +655,14 @@ class BaseDashboard(ft.Container):
             await AdminService.instance().logout()
         except Exception:
             pass
+
+        # --- CLEANUP GEOLOCATOR SERVICE ---
+        if not self.is_admin and hasattr(self, "geo"):
+            try:
+                if self.geo in self.app_page.services:
+                    self.app_page.services.remove(self.geo)
+            except Exception:
+                pass
             
         prefs = ft.SharedPreferences()
         await prefs.remove("user_session")
@@ -630,6 +756,7 @@ class BaseDashboard(ft.Container):
             (self.app_page.width and self.app_page.width < 768) or
             self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
         )
+        self._last_is_mobile_layout = is_mobile
 
         self.btn_menu_toggle = ft.IconButton(
             icon=ft.Icons.MENU_ROUNDED,
@@ -637,7 +764,7 @@ class BaseDashboard(ft.Container):
             on_click=self.toggle_sidebar, visible=not is_mobile
         )
         self.user_name_text.visible = not is_mobile
-        self.time_location_container.visible = not is_mobile
+        self.time_location_container.visible = True
 
         popup_items = [
             ft.PopupMenuItem(
@@ -667,6 +794,61 @@ class BaseDashboard(ft.Container):
             ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.LOGOUT, color=ft.Colors.RED_500), ft.Text("Đăng xuất", color=ft.Colors.RED_500)]), on_click=handle_normal_logout)
         )
 
+        if is_mobile:
+            pills_row = ft.Row([
+                self.time_location_container,
+                self.session_timer_container
+            ], alignment=ft.MainAxisAlignment.CENTER, scroll=ft.ScrollMode.HIDDEN, spacing=10)
+            
+            mobile_pills = ft.Container(content=pills_row, padding=ft.Padding(0, 5, 0, 5))
+            desktop_pills = ft.Container(expand=1)
+        else:
+            pills_row = ft.Row([
+                self.time_location_container,
+                ft.Container(width=10),
+                self.session_timer_container
+            ], alignment=ft.MainAxisAlignment.CENTER, expand=1, scroll=ft.ScrollMode.HIDDEN)
+            
+            desktop_pills = pills_row
+            mobile_pills = ft.Container(visible=False, height=0)
+
+        top_header_row = ft.Row(
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            controls=[
+                ft.Row(spacing=5, controls=[
+                    self.btn_menu_toggle,
+                    ft.Container(width=5),
+                    self.page_title_container
+                ], expand=1),
+                
+                desktop_pills,
+                
+                ft.Row(spacing=5, alignment=ft.MainAxisAlignment.END, controls=[
+                    ft.Container(
+                        ink=True, on_click=go_to_profile, border_radius=50,
+                        padding=ft.Padding(3, 3, 3, 3),
+                        bgcolor=ft.Colors.with_opacity(0.08, theme_module.current_theme.text_main),
+                        content=ft.Row(spacing=8, controls=[
+                            # Admin dùng icon Shield, User dùng icon Person
+                            ft.CircleAvatar(
+                                content=ft.Icon(
+                                    ft.Icons.ADMIN_PANEL_SETTINGS if self.is_admin else ft.Icons.PERSON,
+                                    color=theme_module.current_theme.bg_color, size=16
+                                ),
+                                bgcolor=theme_module.current_theme.secondary, radius=16
+                            ),
+                            self.user_name_text,
+                            ft.Container(width=3, visible=not is_mobile),
+                        ])
+                    ),
+                    ft.PopupMenuButton(
+                        icon=ft.Icons.MORE_VERT, icon_color=theme_module.current_theme.text_main, icon_size=25,
+                        items=popup_items
+                    )
+                ], expand=1)
+            ]
+        )
+
         # Header Desktop Nổi - Header Mobile Phẳng
         header_content = ft.Container(
             padding=ft.Padding(5, 2, 5, 2),
@@ -676,46 +858,10 @@ class BaseDashboard(ft.Container):
             shadow=theme_module.current_theme.shadow_main if not is_mobile else None,
             border=None if not is_mobile else ft.Border(bottom=ft.BorderSide(1, theme_module.current_theme.divider_color)),
             alignment=ft.Alignment.TOP_CENTER,
-            content=ft.Row(
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                controls=[
-                    ft.Row(spacing=5, controls=[
-                        self.btn_menu_toggle,
-                        ft.Container(width=5),
-                        self.page_title_container
-                    ], expand=1),
-                    
-                    ft.Row([
-                        self.time_location_container,
-                        ft.Container(width=10, visible=not is_mobile),
-                        self.session_timer_container
-                    ], alignment=ft.MainAxisAlignment.CENTER, expand=1),
-                    
-                    ft.Row(spacing=5, alignment=ft.MainAxisAlignment.END, controls=[
-                        ft.Container(
-                            ink=True, on_click=go_to_profile, border_radius=50,
-                            padding=ft.Padding(3, 3, 3, 3),
-                            bgcolor=ft.Colors.with_opacity(0.08, theme_module.current_theme.text_main),
-                            content=ft.Row(spacing=8, controls=[
-                                # Admin dùng icon Shield, User dùng icon Person
-                                ft.CircleAvatar(
-                                    content=ft.Icon(
-                                        ft.Icons.ADMIN_PANEL_SETTINGS if self.is_admin else ft.Icons.PERSON,
-                                        color=theme_module.current_theme.bg_color, size=16
-                                    ),
-                                    bgcolor=theme_module.current_theme.secondary, radius=16
-                                ),
-                                self.user_name_text,
-                                ft.Container(width=3, visible=not is_mobile),
-                            ])
-                        ),
-                        ft.PopupMenuButton(
-                            icon=ft.Icons.MORE_VERT, icon_color=theme_module.current_theme.text_main, icon_size=25,
-                            items=popup_items
-                        )
-                    ], expand=1)
-                ]
-            )
+            content=ft.Column([
+                top_header_row,
+                mobile_pills
+            ], spacing=0) if is_mobile else top_header_row
         )
 
         windows_title_bar = self.build_windows_title_bar()
@@ -873,18 +1019,17 @@ class BaseDashboard(ft.Container):
             return
         if not getattr(self, "page", None): return
         
-        is_mobile = self.app_page.width and self.app_page.width < 768
+        is_mobile = bool(
+            (self.app_page.width and self.app_page.width < 768) or
+            self.app_page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+        )
+        if self._last_is_mobile_layout == is_mobile:
+            return
 
-        if is_mobile:
-            self.content.content = self.mobile_layout
-            self.btn_menu_toggle.visible = False
-            self.user_name_text.visible = False
-            self.time_location_container.visible = False 
-        else:
-            self.content.content = self.desktop_layout
-            self.btn_menu_toggle.visible = True
-            self.user_name_text.visible = True
-            self.time_location_container.visible = True 
+        saved_content = self.content_area.content
+        self.content = self.build_layout()
+        if saved_content is not None:
+            self.content_area.content = saved_content
 
         if getattr(self, "page", None):
             self.update()

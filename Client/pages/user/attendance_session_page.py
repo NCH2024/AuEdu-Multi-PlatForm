@@ -4,6 +4,7 @@ import json
 import websockets
 import base64
 import traceback
+import time
 from datetime import datetime
 from core.theme import current_theme, get_flat_container
 from core.device_manager import DeviceManager
@@ -89,6 +90,8 @@ class AttendanceSessionPage(ft.Container):
 
         # UI TOAST TRÊN CAMERA (thay thế cho show_top_notification)
         self._toast_seq = 0
+        self._last_toast_msg = ""
+        self._last_toast_at = 0.0
         self.toast_icon = ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=18)
         self.camera_toast_text = ft.Text("", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)
         self.toast_pill = ft.Container(
@@ -133,6 +136,14 @@ class AttendanceSessionPage(ft.Container):
                     self.camera_toast_wrapper.update()
                 except Exception:
                     pass
+
+    def queue_camera_toast(self, msg, is_success=True, min_interval=1.5):
+        now = time.monotonic()
+        if msg == self._last_toast_msg and now - self._last_toast_at < min_interval:
+            return
+        self._last_toast_msg = msg
+        self._last_toast_at = now
+        self.app_page.run_task(self.show_camera_toast, msg, is_success)
 
     def did_mount(self):
         self.list_grid_container.content = self.build_scanned_list()
@@ -260,10 +271,10 @@ class AttendanceSessionPage(ft.Container):
         # 2. LOGIC ƯU TIÊN THÔNG BÁO (Toast)
         if too_many_faces:
             # Ưu tiên cảnh báo vi phạm quy trình (nhiều người)
-            self.app_page.run_task(self.show_camera_toast, "⚠️ Phát hiện quá nhiều người!", False)
+            self.queue_camera_toast("⚠️ Phát hiện quá nhiều người!", False)
         elif spoof_detected:
             # Cảnh báo giả mạo
-            self.app_page.run_task(self.show_camera_toast, "⚠️ Phát hiện khuôn mặt giả mạo!", False)
+            self.queue_camera_toast("⚠️ Phát hiện khuôn mặt giả mạo!", False)
         elif new_names:
             # Thông báo ghi nhận thành công
             if len(new_names) == 1:
@@ -273,16 +284,7 @@ class AttendanceSessionPage(ft.Container):
             else:
                 msg = f"Đã ghi nhận: {new_names[0]}, {new_names[1]} và {len(new_names)-2} người khác"
             
-            self.app_page.run_task(self.show_camera_toast, msg, True)
-            # Hiển thị Toast gộp (Batched)
-            if len(new_names) == 1:
-                msg = f"Đã ghi nhận: {new_names[0]}"
-            elif len(new_names) <= 3:
-                msg = f"Đã ghi nhận: {', '.join(new_names)}"
-            else:
-                msg = f"Đã ghi nhận: {new_names[0]}, {new_names[1]} và {len(new_names)-2} người khác"
-            
-            self.app_page.run_task(self.show_camera_toast, msg, True)
+            self.queue_camera_toast(msg, True, min_interval=0.2)
         # Không báo gì nếu tất cả sinh viên trong frame đều đã được quét trước đó để tránh spam UI
         
         if updated:

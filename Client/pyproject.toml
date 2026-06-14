@@ -16,7 +16,7 @@ version_name = "0.2.0"
 
 # CẤU HÌNH GIAO DIỆN KHI TẢI APP
 icon = "icon.png"
-splash_image = "icon-2.png"
+splash_image = "splash.png"
 splash_color = "#ffffff" 
 
 # CẤU TRÚC QUYỀN MỚI CỦA FLET 0.84.0 (Rất quan trọng cho Camera và GPS)

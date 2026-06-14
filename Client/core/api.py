@@ -51,18 +51,4 @@ async def api_get(endpoint: str, params: dict = None, use_prefix: bool = False):
     # response.raise_for_status() # Bỏ comment dòng này nếu muốn tự động văng lỗi khi API tạch (mã >= 400)
     return response
 
-async def api_post(endpoint: str, json_data: dict = None, use_prefix: bool = False):
-    """Tự động gắn Token và gọi HTTP POST"""
-    client = await get_supabase_client()
-    token = await get_auth_token()
-    
-    headers = client.headers.copy()
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-        
-    url = f"{API_PREFIX}{endpoint}" if use_prefix and not endpoint.startswith(API_PREFIX) else endpoint
-        
-    response = await client.post(url, json=json_data, headers=headers)
-    return response
-
 # Có thể viết thêm api_put, api_delete tương tự nếu CSDL có chức năng chỉnh sửa/xoá.

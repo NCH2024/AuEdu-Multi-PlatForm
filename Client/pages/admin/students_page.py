@@ -5,6 +5,7 @@ lọc theo Lớp và Khóa, phân trang qua AdminDataGrid.
 """
 
 import flet as ft
+import asyncio
 from core.theme import current_theme
 from components.options.top_notification import show_top_notification
 from components.options.confirm_dialog import show_confirm_dialog
@@ -26,6 +27,8 @@ class StudentsPage(ft.Container):
         self.all_data: list = []
         self.filtered_data: list = []
         self.classes_list: list = []
+        self.class_by_id: dict = {}
+        self._filter_seq: int = 0
         self.current_page: int = 1
         self.page_size: int = 10
         self.is_edit: bool = False
@@ -54,7 +57,7 @@ class StudentsPage(ft.Container):
             width=250, height=38, border_radius=8,
             content_padding=ft.Padding.only(left=10, right=10), text_size=13
         )
-        self.search_field.on_change = self.filter_data
+        self.search_field.on_change = self.debounce_filter_data
 
         self.class_filter = ft.Dropdown(
             label="Lớp", width=180, height=38,
@@ -289,6 +292,7 @@ class StudentsPage(ft.Container):
         """Tải danh sách lớp phục vụ bộ lọc và form nhập liệu."""
         try:
             self.classes_list = await self.svc.get_classes()
+            self.class_by_id = {str(c["id"]): c for c in self.classes_list}
             self.class_filter.options = [ft.dropdown.Option("all", "Tất cả lớp")]
             self.form_lop.options = []
             courses = set()
@@ -343,7 +347,7 @@ class StudentsPage(ft.Container):
             # Lọc theo khóa
             match_course = True
             if course != "all":
-                class_info = next((c for c in self.classes_list if str(c["id"]) == item_class_id), None)
+                class_info = self.class_by_id.get(item_class_id)
                 match_course = str(class_info.get("khoahoc")) == course if class_info else False
 
             if match_search and match_class and match_course:
@@ -352,7 +356,7 @@ class StudentsPage(ft.Container):
         # --- Logic Sắp xếp Thông minh ---
         def get_class_name(item):
             class_id = str(item.get("class_id"))
-            c = next((c for c in self.classes_list if str(c["id"]) == class_id), None)
+            c = self.class_by_id.get(class_id)
             return c["tenlop"] if c else "zzz"
 
         if c_id == "all":
@@ -364,6 +368,15 @@ class StudentsPage(ft.Container):
 
         self.current_page = 1
         self.render_table()
+
+    def debounce_filter_data(self, e):
+        self._filter_seq += 1
+        self.app_page.run_task(self._debounced_filter_data, self._filter_seq)
+
+    async def _debounced_filter_data(self, seq: int):
+        await asyncio.sleep(0.3)
+        if seq == self._filter_seq and getattr(self, "page", None):
+            self.filter_data(None)
 
     def change_page_size(self, e):
         """Thay đổi số dòng mỗi trang."""
@@ -383,10 +396,8 @@ class StudentsPage(ft.Container):
         display_data = []
         for item in self.filtered_data:
             d = item.copy()
-            d["tenlop"] = next(
-                (c["tenlop"] for c in self.classes_list if str(c["id"]) == str(item.get("class_id"))),
-                "N/A"
-            )
+            class_info = self.class_by_id.get(str(item.get("class_id")))
+            d["tenlop"] = class_info["tenlop"] if class_info else "N/A"
             d["student_id"] = str(item.get("id", "N/A")) # Hiển thị ID chính là MSSV
             # Auto-gen full_name từ họ đệm + tên (không dùng trường riêng)
             d["full_name"] = f"{item.get('hodem', '')} {item.get('ten', '')}".strip()
@@ -397,7 +408,6 @@ class StudentsPage(ft.Container):
             display_data.sort(key=lambda x: x.get("ten", "").lower())
 
         self.grid.set_data(display_data)
-        self.update()
 
     # ─── Dialog CRUD ──────────────────────────────────────────────
 

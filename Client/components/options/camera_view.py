@@ -58,14 +58,6 @@ class CameraView(ft.Container):
                     min_detection_confidence=0.6
                 )
         
-        if mp_face_mesh:
-            self.face_mesh = mp_face_mesh.FaceMesh(
-                max_num_faces=1,
-                refine_landmarks=True, # điểm viền mắt (nhắm/mở) và môi
-                min_detection_confidence=0.6,
-                min_tracking_confidence=0.6
-            )
-        
         if self.is_mobile:
             self.camera_module = flet_camera.Camera()
             if is_visible:
@@ -195,6 +187,14 @@ class CameraView(ft.Container):
         else:
             if getattr(self, 'cap', None) and self.cap.isOpened():
                 self.cap.release()
+            if self.read_thread and self.read_thread.is_alive():
+                await asyncio.to_thread(self.read_thread.join, 0.5)
+            self.read_thread = None
+            while not self.frame_queue.empty():
+                try:
+                    self.frame_queue.get_nowait()
+                except queue.Empty:
+                    break
                 
     async def set_pause(self, paused: bool):
         self.is_paused = paused
@@ -295,7 +295,7 @@ class CameraView(ft.Container):
                 continue
             
             try:
-                frame = self.frame_queue.get(timeout=0.05)
+                frame = self.frame_queue.get_nowait()
             except queue.Empty:
                 await asyncio.sleep(0.01)
                 continue

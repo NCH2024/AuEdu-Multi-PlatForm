@@ -140,9 +140,9 @@ class AdminDataGrid(ft.Container):
                     content=ft.ResponsiveRow(spacing=0, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                     padding=ft.Padding(12, 6, 12, 6),
                     bgcolor=ft.Colors.with_opacity(0.02, current_theme.primary) if is_zebra else None,
+                    data=is_zebra,
                     on_hover=lambda e: self.on_row_hover(e),
-                    on_click=lambda e, d=item: self.on_row_click(d) if self.on_row_click else None,
-                    animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT)
+                    on_click=lambda e, d=item: self.on_row_click(d) if self.on_row_click else None
                 )
                 
                 for col in self.grid_columns:
@@ -166,7 +166,7 @@ class AdminDataGrid(ft.Container):
 
     def on_row_hover(self, e):
         e.control.bgcolor = ft.Colors.with_opacity(0.08, current_theme.primary) if e.data == "true" else \
-                            (ft.Colors.with_opacity(0.02, current_theme.primary) if self.rows_container.controls.index(e.control) % 2 != 0 else None)
+                            (ft.Colors.with_opacity(0.02, current_theme.primary) if e.control.data else None)
         e.control.update()
 
     def prev_page(self, e):

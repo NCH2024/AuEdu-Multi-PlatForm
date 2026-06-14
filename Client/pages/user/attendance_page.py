@@ -127,7 +127,6 @@ class AttendancePage(ft.Container):
 
         self.schedule_dialog.bgcolor = current_theme.surface_color
         self.student_detail_dialog.bgcolor = current_theme.surface_color
-        self.attendance_bottom_sheet.content.bgcolor = current_theme.surface_color
 
         self.content = self.build_main_layout()
         self.render_table()
