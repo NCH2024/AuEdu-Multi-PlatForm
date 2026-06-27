@@ -45,6 +45,9 @@ class AttendanceSessionPage(ft.Container):
         
         self.ws = None
         self.ws_connected = False
+        self._reconnecting = False
+        self._reconnect_attempt = 0
+        self._max_reconnect = 5
 
         self.dd_camera = CustomDropdown(label="Chọn nguồn Camera", options=[], on_change=self.handle_camera_change)
         
@@ -108,6 +111,24 @@ class AttendanceSessionPage(ft.Container):
             animate_opacity=200
         )
 
+        # BANNER CẢNH BÁO MẤT KẾT NỐI (hiển thị trên camera khi mất mạng)
+        self._disconnect_text = ft.Text(
+            "Mất kết nối mạng! Đang thử kết nối lại...",
+            color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=12, expand=True
+        )
+        self.disconnect_banner = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.WIFI_OFF_ROUNDED, color=ft.Colors.WHITE, size=18),
+                self._disconnect_text,
+            ], spacing=8),
+            bgcolor=ft.Colors.RED_700,
+            padding=ft.Padding(12, 8, 12, 8),
+            border_radius=8,
+            top=10, left=10, right=10,
+            visible=False,
+            animate_opacity=300,
+        )
+
     async def show_camera_toast(self, msg, is_success=True):
         self.toast_icon.name = ft.Icons.CHECK_CIRCLE if is_success else ft.Icons.INFO
         self.toast_pill.bgcolor = ft.Colors.GREEN_600 if is_success else ft.Colors.ORANGE_500
@@ -166,6 +187,7 @@ class AttendanceSessionPage(ft.Container):
         self.app_page.run_task(delayed_init)
 
     def will_unmount(self):
+        self._reconnecting = False  # Dừng reconnect nếu đang chạy
         self.app_page.run_task(self.camera_view.stop_camera)
         if self.ws and self.ws_connected:
             self.app_page.run_task(self.ws.close)
@@ -222,6 +244,121 @@ class AttendanceSessionPage(ft.Container):
         except Exception as e:
             print(f"[Client] Lỗi kết nối WebSocket: {e}")
             self.ws_connected = False
+            show_top_notification(self.app_page, "Lỗi kết nối", "Không thể kết nối tới máy chủ điểm danh.", ft.Colors.RED_500, sound="E")
+
+    async def _auto_reconnect(self):
+        """Tự động kết nối lại WebSocket với exponential backoff khi mất kết nối mạng."""
+        if self._reconnecting:
+            return  # Tránh chạy song song nhiều reconnect cùng lúc
+        
+        self._reconnecting = True
+        self._reconnect_attempt = 0
+
+        # Hiện banner cảnh báo mất kết nối trên camera
+        self.disconnect_banner.visible = True
+        self.disconnect_banner.opacity = 1
+        self._disconnect_text.value = "Mất kết nối mạng! Đang thử kết nối lại..."
+        self._disconnect_text.color = ft.Colors.WHITE
+        try:
+            self.disconnect_banner.update()
+        except Exception:
+            pass
+
+        # Phát âm thanh cảnh báo
+        show_top_notification(
+            self.app_page, "Mất kết nối",
+            "Đã mất kết nối WebSocket. Đang thử kết nối lại...",
+            ft.Colors.RED_500, sound="E"
+        )
+
+        while self._reconnect_attempt < self._max_reconnect and self._reconnecting:
+            self._reconnect_attempt += 1
+            delay = min(2 ** self._reconnect_attempt, 32)  # 2, 4, 8, 16, 32 giây
+
+            # Cập nhật banner hiển thị lần thử hiện tại
+            self._disconnect_text.value = (
+                f"Mất kết nối! Thử lại lần {self._reconnect_attempt}/{self._max_reconnect} "
+                f"sau {delay}s..."
+            )
+            try:
+                self.disconnect_banner.update()
+            except Exception:
+                pass
+
+            await asyncio.sleep(delay)
+
+            # Nếu trang đã unmount hoặc bị hủy, dừng vòng lặp
+            if not getattr(self, "page", None) or not self._reconnecting:
+                break
+
+            # Đóng WebSocket cũ nếu còn tồn tại
+            if self.ws:
+                try:
+                    await self.ws.close()
+                except Exception:
+                    pass
+                self.ws = None
+
+            # Thử kết nối lại
+            try:
+                from core.config import get_ws_url
+                prefs = ft.SharedPreferences()
+                user_session_str = await prefs.get("user_session")
+                token = ""
+                if user_session_str:
+                    try:
+                        session_data = json.loads(user_session_str)
+                        token = session_data.get("access_token", "")
+                    except Exception:
+                        pass
+
+                ws_url = get_ws_url(self.tkb_tiet_id, token)
+                self.ws = await websockets.connect(ws_url)
+                self.ws_connected = True
+                print(f"[Client] ✓ Reconnect thành công sau {self._reconnect_attempt} lần thử")
+
+                # Ẩn banner, hiện thông báo thành công
+                self.disconnect_banner.visible = False
+                try:
+                    self.disconnect_banner.update()
+                except Exception:
+                    pass
+
+                show_top_notification(
+                    self.app_page, "Đã kết nối lại",
+                    "Kết nối WebSocket đã được khôi phục. Tiếp tục điểm danh!",
+                    ft.Colors.GREEN_600, sound="S"
+                )
+
+                # Khởi động lại vòng lặp nhận tin nhắn
+                self.app_page.run_task(self.receive_ws_messages)
+
+                # Khởi động lại vòng lặp gửi ảnh cho mobile
+                if not self.is_desktop:
+                    self.app_page.run_task(self.mobile_streaming_loop)
+
+                self._reconnecting = False
+                self._reconnect_attempt = 0
+                return  # Kết nối thành công, thoát
+
+            except Exception as e:
+                print(f"[Client] Reconnect lần {self._reconnect_attempt} thất bại: {e}")
+
+        # Đã hết số lần thử → thông báo thất bại
+        self._disconnect_text.value = "Không thể kết nối lại! Vui lòng kiểm tra mạng và thử lại."
+        self._disconnect_text.color = ft.Colors.YELLOW
+        try:
+            self.disconnect_banner.update()
+        except Exception:
+            pass
+
+        show_top_notification(
+            self.app_page, "Lỗi kết nối",
+            "Không thể kết nối lại sau 5 lần thử. Vui lòng thoát và bắt đầu phiên mới.",
+            ft.Colors.RED_500, sound="E", duration_ms=6000
+        )
+
+        self._reconnecting = False
 
     async def receive_ws_messages(self):
         try:
@@ -241,9 +378,12 @@ class AttendanceSessionPage(ft.Container):
             print(f"[Client] WS Đóng kết nối: {e.code} - {e.reason}")
             if e.code == 1008:
                 show_top_notification(self.app_page, "Lỗi xác thực", "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại!", ft.Colors.RED_500, sound="E")
+            elif e.code != 1000:  # 1000 = đóng bình thường (do user chủ động thoát)
+                self.app_page.run_task(self._auto_reconnect)
         except Exception as e:
             print(f"[Client] WS Nhận tin nhắn bị lỗi: {e}")
             self.ws_connected = False
+            self.app_page.run_task(self._auto_reconnect)
 
     async def update_scanned_ui(self, recognized_students, spoof_detected=False, too_many_faces=False):
         updated = False
@@ -425,7 +565,8 @@ class AttendanceSessionPage(ft.Container):
             controls=[
                 self.camera_view, 
                 self.pause_overlay,
-                self.camera_toast_wrapper
+                self.camera_toast_wrapper,
+                self.disconnect_banner,
             ]
         )
 
@@ -537,3 +678,4 @@ class AttendanceSessionPage(ft.Container):
             except Exception as e:
                 print(f"[Client] Lỗi khi gửi frame: {e}")
                 self.ws_connected = False
+                self.app_page.run_task(self._auto_reconnect)

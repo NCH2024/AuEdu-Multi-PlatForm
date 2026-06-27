@@ -71,6 +71,8 @@ Server/assets/anti_spoof_models/
 # ── Logs ──
 *.log
 logs/
+geo_out.txt
+test_geo.txt
 
 # ── Misc ──
 *.tmp
