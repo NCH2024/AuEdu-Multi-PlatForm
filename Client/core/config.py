@@ -14,7 +14,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "public")
 API_PREFIX = "/v1"
 
-SERVER_API_URL = "http://127.0.0.1:8000/"
+SERVER_API_URL = "http://100.64.0.10:8000/"
 
 import flet as ft
 import json

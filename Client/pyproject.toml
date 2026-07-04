@@ -1,6 +1,6 @@
 [project]
 name = "auedu"
-version = "0.2.9"
+version = "0.2.12"
 description = "AuEdu attendance client"
 dependencies = [
     "flet==0.85.0",
@@ -8,6 +8,7 @@ dependencies = [
     "flet-camera==0.85.0",
     "flet-webview==0.85.0",
     "flet-geolocator==0.85.0",
+    "flet-charts==0.85.0",
     "httpx",
     "requests",
     "websockets",
@@ -38,8 +39,8 @@ color = "#ffffff"
 org = "com.nch2024"
 bundle_id = "com.nch2024.auedu"
 package_name = "com.nch2024.auedu"
-version_code = 9
-version_name = "0.2.9"
+version_code = 12
+version_name = "0.2.12"
 icon = "icon.png"
 splash_image = "splash.png"
 splash_color = "#ffffff"

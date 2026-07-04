@@ -256,18 +256,16 @@ class AttendanceSchedulePage(ft.Container):
             self.semester_dropdown.options = [ft.dropdown.Option(str(s["id"]), f"{s['tenhocky']} ({s['namhoc']})") for s in self.semesters]
             self.class_dropdown.options = [ft.dropdown.Option(str(c["id"]), c["tenlop"]) for c in self.classes]
             self.teacher_dropdown.options = [ft.dropdown.Option(str(t["id"]), f"{t.get('hodem','')} {t['ten']}") for t in self.all_teachers]
+            # Initialize Grid first
+            self.grid = ScheduleGrid(self.periods, on_slot_click=self.on_slot_click)
+            self.grid_container.content = self.grid
 
             if self.semesters:
                 self.semester_dropdown.value = str(self.semesters[-1]["id"])
                 await self.load_weeks(self.semester_dropdown.value)
                 self.update_week_display()
 
-            # Initialize Grid
-            self.grid = ScheduleGrid(self.periods, on_slot_click=self.on_slot_click)
-            self.grid_container.content = self.grid
-            
             await self.fetch_busy_slots()
-
         except Exception as e:
             show_top_notification(self.app_page, "Lỗi", f"Khởi tạo dữ liệu thất bại: {e}", ft.Colors.RED)
         finally:
@@ -275,22 +273,70 @@ class AttendanceSchedulePage(ft.Container):
             self.update()
 
     async def load_weeks(self, semester_id):
-        self.weeks = await self.svc.get_weeks(semester_id)
-        self.week_dropdown.options = [
-            ft.dropdown.Option(str(w["id"]), f"Tuần {w['ten_tuan']}") for w in self.weeks
-        ]
-        if self.weeks:
-            self.week_dropdown.value = str(self.weeks[0]["id"])
+        try:
+            self.weeks = await self.svc.get_weeks(semester_id, force=True)
+            if self.weeks:
+                # Sắp xếp tuần theo thứ tự ngày bắt đầu
+                self.weeks.sort(key=lambda x: x.get("ngay_bat_dau", ""))
+                self.week_dropdown.options = [
+                    ft.dropdown.Option(str(w["id"]), f"Tuần {w['ten_tuan']}") for w in self.weeks
+                ]
+                self.week_dropdown.value = str(self.weeks[0]["id"])
+            else:
+                self.week_dropdown.options = [
+                    ft.dropdown.Option("", "Chưa có tuần học")
+                ]
+                self.week_dropdown.value = ""
+                show_top_notification(
+                    self.app_page, 
+                    "Thông báo", 
+                    "Học kỳ này chưa được tạo tuần học! Hãy vào trang Quản lý Học kỳ để tạo tuần học.", 
+                    ft.Colors.ORANGE, 
+                    sound="E"
+                )
+            
+            # Cập nhật trực tiếp control dropdown để Flet vẽ lại options
+            self.week_dropdown.update()
             self.update_week_display()
+        except Exception as e:
+            show_top_notification(self.app_page, "Lỗi", f"Không thể tải tuần học: {e}", ft.Colors.RED, sound="E")
         self.update()
 
     def update_week_display(self):
-        if not self.week_dropdown.value or not self.weeks: return
+        if not self.weeks:
+            self.week_label.value = "Chưa có tuần học"
+            self.week_info_text.value = "Vui lòng tạo tuần học cho học kỳ này"
+            if hasattr(self, "grid") and self.grid:
+                self.grid.set_selected_week(None)
+            self.week_label.update()
+            self.week_info_text.update()
+            self.update()
+            return
+        if not self.week_dropdown.value:
+            self.week_label.value = "Tuần --"
+            self.week_info_text.value = "Chọn tuần để xem"
+            if hasattr(self, "grid") and self.grid:
+                self.grid.set_selected_week(None)
+            self.week_label.update()
+            self.week_info_text.update()
+            self.update()
+            return
         w = next((w for w in self.weeks if str(w["id"]) == self.week_dropdown.value), None)
         if w:
             self.week_label.value = f"Tuần {w['ten_tuan']}"
             self.week_info_text.value = f"{w['ngay_bat_dau']} -> {w['ngay_ket_thuc']}"
-            self.update()
+            if hasattr(self, "grid") and self.grid:
+                self.grid.set_selected_week(w)
+        else:
+            self.week_label.value = "Tuần --"
+            self.week_info_text.value = "Chọn tuần để xem"
+            if hasattr(self, "grid") and self.grid:
+                self.grid.set_selected_week(None)
+        
+        # Cập nhật trực tiếp các control nhãn
+        self.week_label.update()
+        self.week_info_text.update()
+        self.update()
 
     async def prev_week(self, e):
         if not self.week_dropdown.value or not self.weeks: return
@@ -418,10 +464,13 @@ class AttendanceSchedulePage(ft.Container):
 
     async def on_context_change(self, e):
         """Khi đổi Học kỳ / Giảng viên -> Cần load lại các slot bận."""
-        if e and e.control == self.semester_dropdown:
-            await self.load_weeks(self.semester_dropdown.value)
-            
-        await self.fetch_busy_slots()
+        try:
+            if e and e.control == self.semester_dropdown:
+                await self.load_weeks(self.semester_dropdown.value)
+                
+            await self.fetch_busy_slots()
+        except Exception as ex:
+            show_top_notification(self.app_page, "Lỗi", f"Đã xảy ra lỗi: {ex}", ft.Colors.RED, sound="E")
 
     def on_dept_change(self, e):
         """Lọc danh sách giảng viên theo khoa."""

@@ -209,6 +209,11 @@ class BaseDashboard(ft.Container):
         # 2. Kiểm tra hạn sử dụng của Cache
         if cached_location and (current_time - last_sync < TTL):
             self.location_text.value = cached_location
+            try:
+                from core.device_manager import DeviceManager
+                DeviceManager.get_instance().update_location(cached_location)
+            except Exception as e_dm:
+                print(f"Lỗi cập nhật DeviceManager location từ cache: {e_dm}")
             try: 
                 if getattr(self.location_text, "page", None):
                     self.location_text.update()
@@ -227,34 +232,34 @@ class BaseDashboard(ft.Container):
 
         try:
             from core.device_manager import DeviceManager
-            is_mobile = DeviceManager.get_instance().is_mobile
             
             pos = None
-            # Chỉ dùng GPS thiết bị nếu là Mobile (Android/iOS)
-            if is_mobile:
-                try:
-                    if await self.geo.is_location_service_enabled():
-                        p = await self.geo.get_permission_status()
-                        if p != GeolocatorPermissionStatus.ALWAYS and p != GeolocatorPermissionStatus.WHILE_IN_USE:
-                            p = await self.geo.request_permission()
-                        
-                        if p in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
-                            pos = await self.geo.get_current_position()
-                except Exception as e:
-                    print(f"Lỗi đọc GPS trên mobile: {e}")
+            # Thử sử dụng định vị phần cứng/hệ điều hành trên mọi nền tảng (Mobile & Desktop)
+            try:
+                if await self.geo.is_location_service_enabled():
+                    p = await self.geo.get_permission_status()
+                    if p not in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
+                        p = await self.geo.request_permission()
+                    
+                    if p in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
+                        pos = await self.geo.get_current_position()
+            except Exception as e:
+                print(f"Lỗi đọc dịch vụ định vị hệ thống: {e}")
 
             async with httpx.AsyncClient(timeout=10.0) as client:
-                # Nếu có tọa độ GPS (từ điện thoại)
+                # Nếu có tọa độ GPS (từ điện thoại hoặc định vị PC)
                 if pos:
                     res = await client.get(NOMINATIM_URL.format(lat=pos.latitude, lon=pos.longitude), headers=headers)
                     if res.status_code == 200:
                         addr = res.json().get("address", {})
                         
-                        ward = addr.get("village") or addr.get("suburb") or addr.get("quarter") or addr.get("hamlet") or addr.get("road")
-                        district = addr.get("county") or addr.get("district") or addr.get("town") or addr.get("city_district")
+                        road = addr.get("road") or addr.get("street")
+                        ward = addr.get("ward") or addr.get("village") or addr.get("suburb") or addr.get("quarter") or addr.get("hamlet")
+                        district = addr.get("district") or addr.get("city_district") or addr.get("town") or addr.get("county")
                         province = addr.get("city") or addr.get("state") or addr.get("province")
                         
                         parts = []
+                        if road: parts.append(road)
                         if ward and ward not in parts: parts.append(ward)
                         if district and district not in parts: parts.append(district)
                         if province and province not in parts: parts.append(province)
@@ -327,6 +332,20 @@ class BaseDashboard(ft.Container):
                     from flet import UrlLauncher
                 await UrlLauncher().launch_url(f"https://www.google.com/maps/search/?api=1&query={lat},{lon}")
 
+        async def refresh_location(e):
+            dialog.open = False
+            if getattr(self.app_page, "page", None):
+                self.app_page.update()
+            
+            # Xóa cache để ép buộc lấy vị trí mới
+            await prefs.remove("app_location")
+            await prefs.remove("last_sync_app_location")
+            await prefs.remove("app_lat")
+            await prefs.remove("app_lon")
+            
+            # Chạy lại tác vụ cập nhật vị trí
+            self.app_page.run_task(self._update_location)
+
         dialog = ft.AlertDialog(
             title=ft.Row([ft.Icon(ft.Icons.LOCATION_ON, color=theme_module.current_theme.primary), ft.Text("Chi tiết Vị trí", weight=ft.FontWeight.BOLD)]),
             content=ft.Column([
@@ -339,7 +358,10 @@ class BaseDashboard(ft.Container):
                     on_click=open_map
                 )
             ], tight=True),
-            actions=[ft.TextButton("Đóng", on_click=lambda _: self._close_dialog(dialog))],
+            actions=[
+                ft.TextButton("Làm mới", icon=ft.Icons.REFRESH_ROUNDED, on_click=refresh_location),
+                ft.TextButton("Đóng", on_click=lambda _: self._close_dialog(dialog))
+            ],
             shape=ft.RoundedRectangleBorder(radius=12)
         )
         self.app_page.overlay.append(dialog)

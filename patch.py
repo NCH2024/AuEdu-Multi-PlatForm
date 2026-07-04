@@ -11,34 +11,34 @@ replacement = '''        headers = {"User-Agent": "AuEdu_PC_App (chanhhiep.vn@gm
 
         try:
             from core.device_manager import DeviceManager
-            is_mobile = DeviceManager.get_instance().is_mobile
             
             pos = None
-            # Chỉ dùng GPS thiết bị nếu là Mobile (Android/iOS)
-            if is_mobile:
-                try:
-                    if await self.geo.is_location_service_enabled():
-                        p = await self.geo.get_permission_status()
-                        if p != GeolocatorPermissionStatus.ALWAYS and p != GeolocatorPermissionStatus.WHILE_IN_USE:
-                            p = await self.geo.request_permission()
-                        
-                        if p in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
-                            pos = await self.geo.get_current_position()
-                except Exception as e:
-                    print(f"Lỗi đọc GPS trên mobile: {e}")
+            # Thử sử dụng định vị phần cứng/hệ điều hành trên mọi nền tảng (Mobile & Desktop)
+            try:
+                if await self.geo.is_location_service_enabled():
+                    p = await self.geo.get_permission_status()
+                    if p not in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
+                        p = await self.geo.request_permission()
+                    
+                    if p in [GeolocatorPermissionStatus.ALWAYS, GeolocatorPermissionStatus.WHILE_IN_USE]:
+                        pos = await self.geo.get_current_position()
+            except Exception as e:
+                print(f"Lỗi đọc dịch vụ định vị hệ thống: {e}")
 
             async with httpx.AsyncClient(timeout=10.0) as client:
-                # Nếu có tọa độ GPS (từ điện thoại)
+                # Nếu có tọa độ GPS (từ điện thoại hoặc định vị PC)
                 if pos:
                     res = await client.get(NOMINATIM_URL.format(lat=pos.latitude, lon=pos.longitude), headers=headers)
                     if res.status_code == 200:
                         addr = res.json().get("address", {})
                         
-                        ward = addr.get("village") or addr.get("suburb") or addr.get("quarter") or addr.get("hamlet") or addr.get("road")
-                        district = addr.get("county") or addr.get("district") or addr.get("town") or addr.get("city_district")
+                        road = addr.get("road") or addr.get("street")
+                        ward = addr.get("ward") or addr.get("village") or addr.get("suburb") or addr.get("quarter") or addr.get("hamlet")
+                        district = addr.get("district") or addr.get("city_district") or addr.get("town") or addr.get("county")
                         province = addr.get("city") or addr.get("state") or addr.get("province")
                         
                         parts = []
+                        if road: parts.append(road)
                         if ward and ward not in parts: parts.append(ward)
                         if district and district not in parts: parts.append(district)
                         if province and province not in parts: parts.append(province)

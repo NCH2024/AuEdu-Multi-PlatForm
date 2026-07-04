@@ -95,7 +95,7 @@ class NotificationsPage(ft.Container):
             client = await get_supabase_client()
             res = await client.get("/api/admin/notifications/")
             if res.status_code == 200: self.all_data = res.json(); self.filter_data(None)
-            else: show_top_notification(self.app_page, f"Lỗi: {res.text}", ft.Colors.RED)
+            else: show_top_notification(self.app_page, "Lỗi", f"{res.text}", ft.Colors.RED, sound="E")
         except Exception as e:
             show_top_notification(self.app_page, "Lỗi", f"Không thể tải dữ liệu thông báo: {e}", ft.Colors.RED, sound="E")
         finally:
@@ -168,9 +168,9 @@ class NotificationsPage(ft.Container):
                 self.close_dialog()
                 show_top_notification(self.app_page, "Thông báo", "Đã gửi thông báo thành công tới tất cả thiết bị!", ft.Colors.GREEN, sound="S")
                 await self.load_data()
-            else: show_top_notification(self.app_page, f"Lỗi: {res.text}", ft.Colors.RED)
+            else: show_top_notification(self.app_page, "Lỗi", f"{res.text}", ft.Colors.RED, sound="E")
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"{e}", ft.Colors.RED, sound="E")
             
     def delete_data(self, d):
         def on_confirm(): self.app_page.run_task(self._delete_data_async, d["id"])
@@ -183,8 +183,8 @@ class NotificationsPage(ft.Container):
             if res.status_code == 200:
                 show_top_notification(self.app_page, "Thông báo", "Đã xóa thông báo thành công!", ft.Colors.GREEN, sound="S")
                 await self.load_data()
-            else: show_top_notification(self.app_page, f"Lỗi: {res.text}", ft.Colors.RED)
+            else: show_top_notification(self.app_page, "Lỗi", f"{res.text}", ft.Colors.RED, sound="E")
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"{e}", ft.Colors.RED, sound="E")
 
     def apply_theme(self): self.update()

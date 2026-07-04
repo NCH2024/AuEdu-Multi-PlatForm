@@ -136,7 +136,7 @@ class SinhVien(Base):
 
 class HocPhan(Base):
     __tablename__ = 'hocphan'
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, Identity(always=True), primary_key=True)
     tenhocphan = Column(Text)
     sotinchi = Column(Integer)
     loaihp_id = Column(Integer, ForeignKey('loaihocphan.id'))

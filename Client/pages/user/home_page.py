@@ -91,6 +91,69 @@ class UserHomePage(ft.Container):
                 print(f"[LỖI CRITICAL - HomePage] {ex}")
         return on_click
 
+    def _group_consecutive_classes(self, classes: list) -> list:
+        """
+        Gộp các tiết liên tiếp có cùng (ten_hp, ten_lop, phong_hoc)
+        thành 1 group duy nhất.
+        """
+        if not classes:
+            return []
+
+        groups = []
+        current_group = {
+            "ids": [classes[0]["id"]],
+            "ten_hp": classes[0]["ten_hp"],
+            "ten_lop": classes[0]["ten_lop"],
+            "phong_hoc": classes[0]["phong_hoc"],
+            "thoigianbd": classes[0]["thoigianbd"],  # Giờ bắt đầu tiết đầu
+            "thoigiankt": classes[0]["thoigiankt"],  # Giờ kết thúc tiết cuối
+            "so_tiet": 1,
+            "da_diem_danh_list": [classes[0].get("da_diem_danh", False)],
+        }
+
+        for c in classes[1:]:
+            same_subject = (
+                c["ten_hp"] == current_group["ten_hp"]
+                and c["ten_lop"] == current_group["ten_lop"]
+                and c["phong_hoc"] == current_group["phong_hoc"]
+            )
+            is_consecutive = False
+            if same_subject and current_group["thoigiankt"] and c.get("thoigianbd"):
+                try:
+                    end_prev = datetime.datetime.strptime(
+                        current_group["thoigiankt"], "%H:%M:%S"
+                    )
+                    start_next = datetime.datetime.strptime(
+                        c["thoigianbd"], "%H:%M:%S"
+                    )
+                    diff = (start_next - end_prev).total_seconds()
+                    is_consecutive = 0 <= diff <= 900  # <= 15 phút (giải lao)
+                except Exception:
+                    pass
+
+            if is_consecutive:
+                current_group["ids"].append(c["id"])
+                current_group["thoigiankt"] = c["thoigiankt"]
+                current_group["so_tiet"] += 1
+                current_group["da_diem_danh_list"].append(
+                    c.get("da_diem_danh", False)
+                )
+            else:
+                groups.append(current_group)
+                current_group = {
+                    "ids": [c["id"]],
+                    "ten_hp": c["ten_hp"],
+                    "ten_lop": c["ten_lop"],
+                    "phong_hoc": c["phong_hoc"],
+                    "thoigianbd": c["thoigianbd"],
+                    "thoigiankt": c["thoigiankt"],
+                    "so_tiet": 1,
+                    "da_diem_danh_list": [c.get("da_diem_danh", False)],
+                }
+
+        groups.append(current_group)
+        return groups
+
     def _build_timeline_controls(self):
         controls = []
         if self.is_loading:
@@ -119,31 +182,48 @@ class UserHomePage(ft.Container):
 
         now_time = datetime.datetime.now().time()
         classes = self.today_data["classes"]
-        for idx, c in enumerate(classes):
-            is_done = c.get("da_diem_danh", False)
+        groups = self._group_consecutive_classes(classes)
+
+        for idx, g in enumerate(groups):
+            da_diem_danh_list = g["da_diem_danh_list"]
             status_color = current_theme.divider_color
             status_text = "Sắp diễn ra"
             badge_bg = current_theme.surface_variant
             badge_text_color = current_theme.text_muted
 
-            if c.get("thoigianbd") and c.get("thoigiankt"):
+            if g.get("thoigianbd") and g.get("thoigiankt"):
                 try:
-                    start_t = datetime.datetime.strptime(c["thoigianbd"], "%H:%M:%S").time()
-                    end_t = datetime.datetime.strptime(c["thoigiankt"], "%H:%M:%S").time()
+                    start_t = datetime.datetime.strptime(g["thoigianbd"], "%H:%M:%S").time()
+                    end_t = datetime.datetime.strptime(g["thoigiankt"], "%H:%M:%S").time()
                     if start_t <= now_time <= end_t:
                         status_color = current_theme.accent
                         status_text = "Đang diễn ra"
                         badge_bg = ft.Colors.with_opacity(0.1, current_theme.accent)
                         badge_text_color = current_theme.accent
                     elif now_time > end_t:
-                        status_color = ft.Colors.GREEN_600 if is_done else ft.Colors.RED_500
-                        status_text = "Hoàn thành" if is_done else "Chưa điểm danh!"
+                        if all(da_diem_danh_list):
+                            status_color = ft.Colors.GREEN_600
+                            status_text = "Hoàn thành"
+                        elif any(da_diem_danh_list):
+                            status_color = ft.Colors.ORANGE_500
+                            status_text = "Điểm danh chưa đủ"
+                        else:
+                            status_color = ft.Colors.RED_500
+                            status_text = "Chưa điểm danh!"
                         badge_bg = ft.Colors.with_opacity(0.1, status_color)
                         badge_text_color = status_color
                 except Exception:
                     pass
 
-            is_last = (idx == len(classes) - 1)
+            is_last = (idx == len(groups) - 1)
+            
+            # Tiêu đề môn học và Trạng thái badge
+            hp_title_row = ft.Row([
+                ft.Text(g["ten_hp"], weight=ft.FontWeight.BOLD, size=14, color=current_theme.text_main, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                ft.Container(padding=ft.Padding(8, 2, 8, 2), border_radius=10, bgcolor=badge_bg,
+                             content=ft.Text(status_text, size=10, weight=ft.FontWeight.BOLD, color=badge_text_color))
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
             timeline_card_content = ft.Container(
                 expand=True, padding=15, margin=ft.Margin(0, 0, 0, 15), border_radius=12,
                 bgcolor=current_theme.surface_variant,
@@ -151,26 +231,37 @@ class UserHomePage(ft.Container):
                 ink=True,
                 on_click=lambda e: self.app_page.run_task(self.app_page.push_route, "/user/attendance"),
                 content=ft.Column([
+                    hp_title_row,
                     ft.Row([
-                        ft.Text(c["ten_hp"], weight=ft.FontWeight.BOLD, size=14, color=current_theme.text_main, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                        ft.Container(padding=ft.Padding(8, 2, 8, 2), border_radius=10, bgcolor=badge_bg,
-                                     content=ft.Text(status_text, size=10, weight=ft.FontWeight.BOLD, color=badge_text_color))
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ft.Row([
-                        ft.Icon(ft.Icons.CLASS_, size=14, color=current_theme.text_muted),
-                        ft.Text(f"Lớp: {c['ten_lop']}", size=12, color=current_theme.text_muted),
-                        ft.Container(width=10),
-                        ft.Icon(ft.Icons.ROOM, size=14, color=current_theme.text_muted),
-                        ft.Text(f"Phòng: P.{c['phong_hoc']}", size=12, color=current_theme.text_muted)
-                    ], spacing=4)
+                        ft.Row([
+                            ft.Icon(ft.Icons.CLASS_, size=13, color=current_theme.text_muted),
+                            ft.Text(f"Lớp: {g['ten_lop']}", size=11, color=current_theme.text_muted),
+                        ], spacing=3, tight=True),
+                        ft.Row([
+                            ft.Icon(ft.Icons.ROOM, size=13, color=current_theme.text_muted),
+                            ft.Text(f"Phòng: P.{g['phong_hoc']}", size=11, color=current_theme.text_muted),
+                        ], spacing=3, tight=True),
+                        ft.Row([
+                            ft.Icon(ft.Icons.ACCESS_TIME_ROUNDED, size=13, color=current_theme.text_muted),
+                            ft.Text(f"{g['so_tiet']} tiết", size=11, color=current_theme.text_muted),
+                        ], spacing=3, tight=True),
+                    ], spacing=10, wrap=True)
                 ], spacing=6)
             )
+
+            # Cột mốc thời gian: hiển thị thoigianbd và thoigiankt
+            time_display = ft.Column([
+                ft.Text(g.get("thoigianbd", "N/A")[:5], size=12, weight=ft.FontWeight.W_800, color=current_theme.text_main),
+                ft.Text(g.get("thoigiankt", "N/A")[:5], size=10, weight=ft.FontWeight.W_600, color=current_theme.text_muted),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1, width=48)
+
             timeline_item = ft.Row([
                 ft.Column([
-                    ft.Text(c.get("thoigianbd", "N/A")[:5], size=13, weight=ft.FontWeight.W_800, color=current_theme.text_main),
-                    ft.Container(width=12, height=12, border_radius=6, border=ft.Border.all(3, status_color), bgcolor=current_theme.surface_color),
+                    time_display,
+                    ft.Container(height=4),
+                    ft.Container(width=10, height=10, border_radius=5, border=ft.Border.all(2.5, status_color), bgcolor=current_theme.surface_color),
                     ft.Container(width=2, height=40, bgcolor=status_color if not is_last else ft.Colors.TRANSPARENT, margin=ft.Margin(0, -2, 0, -2))
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4, width=50),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4, width=48),
                 timeline_card_content
             ], vertical_alignment=ft.CrossAxisAlignment.START, spacing=10)
             controls.append(timeline_item)
@@ -340,8 +431,12 @@ class UserHomePage(ft.Container):
         greeting = "Chào buổi sáng" if now.hour < 12 else "Chào buổi chiều" if now.hour < 18 else "Chào buổi tối"
 
         total_classes = len(self.tkb_data) if self.tkb_data else 0
-        today_total = len(self.today_data["classes"]) if self.today_data and "classes" in self.today_data else 0
-        today_done = sum(1 for c in self.today_data["classes"] if c.get("da_diem_danh")) if today_total > 0 else 0
+        
+        today_classes = self.today_data["classes"] if self.today_data and "classes" in self.today_data else []
+        today_groups = self._group_consecutive_classes(today_classes)
+        today_total = len(today_groups)
+        today_done = sum(1 for g in today_groups if any(g["da_diem_danh_list"])) if today_total > 0 else 0
+        
         news_count = len(self.thongbao_data) if self.thongbao_data else 0
         progress_val = (today_done / today_total) if today_total > 0 else 1.0
         progress_text = f"Hoàn thành {today_done}/{today_total} ca dạy" if today_total > 0 else "Hôm nay bạn được nghỉ ngơi!"

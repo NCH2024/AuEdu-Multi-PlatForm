@@ -243,7 +243,7 @@ class SubjectsPage(ft.Container):
             show_top_notification(self.app_page, "Thông báo", "Lưu thông tin học phần thành công!", ft.Colors.GREEN, sound="S")
             await self.load_data()
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"{e}", ft.Colors.RED, sound="E")
 
     # ─── Delete ───────────────────────────────────────────────────
 
@@ -261,7 +261,7 @@ class SubjectsPage(ft.Container):
             show_top_notification(self.app_page, "Thông báo", "Đã xóa học phần thành công!", ft.Colors.GREEN, sound="S")
             await self.load_data()
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"{e}", ft.Colors.RED, sound="E")
 
     def apply_theme(self):
         """Cập nhật giao diện khi đổi theme."""

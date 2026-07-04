@@ -223,7 +223,7 @@ class DepartmentsPage(ft.Container):
             show_top_notification(self.app_page, "Thông báo", "Lưu thông tin khoa thành công!", ft.Colors.GREEN, sound="S")
             await self.load_data()
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"{e}", ft.Colors.RED, sound="E")
 
     # ─── Delete ───────────────────────────────────────────────────
 
@@ -241,7 +241,7 @@ class DepartmentsPage(ft.Container):
             show_top_notification(self.app_page, "Thông báo", "Đã xóa khoa thành công!", ft.Colors.GREEN, sound="S")
             await self.load_data()
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"{e}", ft.Colors.RED, sound="E")
 
     def apply_theme(self):
         """Cập nhật giao diện khi đổi theme."""

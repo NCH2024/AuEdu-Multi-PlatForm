@@ -32,16 +32,43 @@ class ScheduleGrid(ft.Container):
             self.update()
         except: pass
 
+    def set_selected_week(self, week):
+        self.selected_week = week
+        self.content = self.build_grid()
+        try:
+            self.update()
+        except: pass
+
     def build_grid(self):
+        import datetime
         # Header Row: Buổi | Tiết | Thứ 2 | Thứ 3 | ... | CN
         days = ["BUỔI", "TIẾT", "THỨ 2", "THỨ 3", "THỨ 4", "THỨ 5", "THỨ 6", "THỨ 7", "CHỦ NHẬT"]
+        
+        # Calculate specific dates for the selected week if available
+        if hasattr(self, "selected_week") and self.selected_week and self.selected_week.get("ngay_bat_dau"):
+            try:
+                start_date_val = self.selected_week["ngay_bat_dau"]
+                if isinstance(start_date_val, str):
+                    start_date = datetime.datetime.strptime(start_date_val, "%Y-%m-%d").date()
+                else:
+                    start_date = start_date_val
+                
+                for idx in range(2, 9): # 2=Monday (offset 0), ..., 8=Sunday (offset 6)
+                    offset = idx - 2
+                    day_date = start_date + datetime.timedelta(days=offset)
+                    date_str = day_date.strftime("%d/%m")
+                    day_name = "CHỦ NHẬT" if idx == 8 else f"THỨ {idx}"
+                    days[idx] = f"{day_name}\n({date_str})"
+            except Exception as e:
+                print(f"Error formatting grid dates: {e}")
+
         header = ft.Row([
             ft.Container(
-                content=ft.Text(day, weight=ft.FontWeight.W_800, size=11, color=current_theme.text_muted),
+                content=ft.Text(day, weight=ft.FontWeight.W_800, size=11, color=current_theme.text_muted, text_align=ft.TextAlign.CENTER),
                 expand=1 if i > 1 else False,
                 width=65 if i == 0 else (60 if i == 1 else None),
                 alignment=ft.Alignment(0, 0),
-                padding=10,
+                padding=5,
                 bgcolor=current_theme.surface_variant
             ) for i, day in enumerate(days)
         ], spacing=0)
@@ -54,17 +81,18 @@ class ScheduleGrid(ft.Container):
             pid = int(p['id'])
             
             # BUỔI Cell
+            # BUỔI Cell
             buoi_text = ""
             buoi_color = ft.Colors.TRANSPARENT
-            if 1 <= pid <= 5:
+            if 1 <= pid <= 6:
                 buoi_text = "Sáng"
-                buoi_color = ft.Colors.with_opacity(0.05, ft.Colors.AMBER_100)
+                buoi_color = ft.Colors.with_opacity(0.05, ft.Colors.AMBER_500)
             elif 7 <= pid <= 12:
                 buoi_text = "Chiều"
-                buoi_color = ft.Colors.with_opacity(0.05, ft.Colors.BLUE_100)
+                buoi_color = ft.Colors.with_opacity(0.05, ft.Colors.BLUE_500)
             elif 13 <= pid <= 16:
                 buoi_text = "Tối"
-                buoi_color = ft.Colors.with_opacity(0.05, ft.Colors.PURPLE_100)
+                buoi_color = ft.Colors.with_opacity(0.05, ft.Colors.PURPLE_500)
 
             row_controls.append(ft.Container(
                 width=65, height=60,
@@ -122,6 +150,14 @@ class ScheduleGrid(ft.Container):
                         border_radius=4,
                         content=ft.Text(draft["subject"], size=9, weight=ft.FontWeight.W_700, text_align=ft.TextAlign.CENTER, color=color)
                     )
+                else:
+                    # Assign a very soft background tint to empty cells depending on the session
+                    if 1 <= pid <= 6:
+                        cell_bgcolor = ft.Colors.with_opacity(0.015, ft.Colors.AMBER_500)
+                    elif 7 <= pid <= 12:
+                        cell_bgcolor = ft.Colors.with_opacity(0.015, ft.Colors.BLUE_500)
+                    else:
+                        cell_bgcolor = ft.Colors.with_opacity(0.015, ft.Colors.PURPLE_500)
                 
                 row_controls.append(ft.Container(
                     expand=1, height=60,

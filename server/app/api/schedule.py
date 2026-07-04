@@ -19,7 +19,7 @@ router = APIRouter()
 # --------- Tuần học (Compatibility) ----------
 @router.get("/tuan_hoc")
 async def get_tuan_hoc(hocky_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
-    stmt = select(TuanHoc)
+    stmt = select(TuanHoc).where(TuanHoc.deleted_at.is_(None))
     if hocky_id:
         if hocky_id.startswith("eq."):
             stmt = stmt.where(TuanHoc.hocky_id == int(hocky_id.replace("eq.", "")))

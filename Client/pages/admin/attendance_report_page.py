@@ -62,13 +62,14 @@ class AdminAttendanceReportPage(ft.Container):
 
         self.grid = AdminDataGrid(
             columns=[
-                {"label": "NGÀY", "key": "ngay", "col": {"xs": 4, "sm": 1.2}},
-                {"label": "MSSV", "key": "mssv", "col": {"xs": 4, "sm": 1.2}, "sortable": True},
-                {"label": "HỌ TÊN", "key": "full_name", "col": {"xs": 8, "sm": 2.5}, "sortable": True},
-                {"label": "LỚP", "key": "tenlop", "col": {"xs": 6, "sm": 1.5}},
-                {"label": "MÔN HỌC", "key": "mon_hoc", "col": {"xs": 6, "sm": 2.5}},
+                {"label": "NGÀY", "key": "ngay", "col": {"xs": 4, "sm": 1.1}},
+                {"label": "MSSV", "key": "mssv", "col": {"xs": 4, "sm": 1.1}, "sortable": True},
+                {"label": "HỌ TÊN", "key": "full_name", "col": {"xs": 8, "sm": 2.2}, "sortable": True},
+                {"label": "LỚP", "key": "tenlop", "col": {"xs": 6, "sm": 1.2}},
+                {"label": "MÔN HỌC", "key": "mon_hoc", "col": {"xs": 6, "sm": 2.3}},
                 {"label": "T.THÁI", "key": "trang_thai", "col": {"xs": 6, "sm": 1.2}, "render": self.render_status},
                 {"label": "TIN CẬY", "key": "confidence", "col": {"xs": 6, "sm": 0.9}},
+                {"label": "THAO TÁC", "key": "action", "col": {"xs": 6, "sm": 1.0}, "render": self.render_actions},
             ],
             rows_per_page=30
         )
@@ -122,6 +123,61 @@ class AdminAttendanceReportPage(ft.Container):
             bgcolor=ft.Colors.with_opacity(0.1, color),
             content=ft.Text(st.upper(), size=9, weight=ft.FontWeight.BOLD, color=color)
         )
+
+    def render_actions(self, item):
+        return ft.IconButton(
+            icon=ft.Icons.DELETE_OUTLINED,
+            icon_color=ft.Colors.RED_500,
+            icon_size=18,
+            tooltip="Xóa điểm danh",
+            on_click=lambda e: self.confirm_delete_record(item)
+        )
+
+    def confirm_delete_record(self, item):
+        record_id = item.get("id")
+        mssv = item.get("mssv")
+        name = item.get("full_name")
+        mon = item.get("mon_hoc")
+        ngay = item.get("ngay")
+
+        def close_dialog(e):
+            dialog.open = False
+            self.app_page.update()
+
+        async def delete_record(e=None):
+            dialog.open = False
+            self.app_page.update()
+            try:
+                await self.svc.delete(f"/api/admin/attendance/{record_id}")
+                show_top_notification(self.app_page, "Thành công", "Đã xóa bản ghi điểm danh", ft.Colors.GREEN)
+                await self.load_stats()
+                await self.load_data()
+            except Exception as ex:
+                show_top_notification(self.app_page, "Lỗi", f"Không thể xóa: {ex}", ft.Colors.RED)
+
+        dialog = ft.AlertDialog(
+            title=ft.Row([
+                ft.Icon(ft.Icons.WARNING_ROUNDED, color=ft.Colors.RED_500),
+                ft.Text("Xác nhận xóa", weight=ft.FontWeight.BOLD)
+            ], spacing=10),
+            content=ft.Text(
+                f"Bạn có chắc chắn muốn xóa bản ghi điểm danh của sinh viên:\n"
+                f"- {name} ({mssv})\n"
+                f"- Môn học: {mon}\n"
+                f"- Ngày: {ngay}?",
+                size=13
+            ),
+            actions=[
+                ft.TextButton("Hủy", on_click=close_dialog),
+                ft.ElevatedButton("Xóa", bgcolor=ft.Colors.RED_500, color=ft.Colors.WHITE, on_click=lambda e: self.app_page.run_task(delete_record))
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12)
+        )
+
+        self.app_page.overlay.append(dialog)
+        dialog.open = True
+        self.app_page.update()
 
     def did_mount(self):
         self.app_page.run_task(self.initialize_page)

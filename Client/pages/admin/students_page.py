@@ -319,7 +319,7 @@ class StudentsPage(ft.Container):
             self.all_data = await self.svc.get_students()
             self.filter_data(None)
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"{e}", ft.Colors.RED, sound="E")
 
     # ─── Filter & Table ───────────────────────────────────────────
 
@@ -575,7 +575,7 @@ class StudentsPage(ft.Container):
             show_top_notification(self.app_page, "Thông báo", "Lưu thông tin sinh viên thành công!", ft.Colors.GREEN, sound="S")
             await self.load_data()
         except Exception as e:
-            show_top_notification(self.app_page, f"Lỗi: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi", f"{e}", ft.Colors.RED, sound="E")
 
     def save_batch_data(self, e):
         """Xử lý dữ liệu từ text area và gọi API batch."""
@@ -693,7 +693,7 @@ class StudentsPage(ft.Container):
             await self.load_data()
         except Exception as e:
             print(f"BATCH ERROR: {e}")
-            show_top_notification(self.app_page, f"Lỗi hệ thống: {e}", ft.Colors.RED)
+            show_top_notification(self.app_page, "Lỗi hệ thống", f"{e}", ft.Colors.RED, sound="E")
         finally:
             self.progress_bar.visible = False
             self.update()
